@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2020 Ian Ottoway <ian@ottoway.dev>
+# Copyright (c) 2021 Ian Ottoway <ian@ottoway.dev>
 # Copyright (c) 2014 Agostino Ruscito <ruscito@gmail.com>
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,6 +21,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 #
+
 
 EXTERNAL_ACCESS = {
     0: 'Read/Write',
@@ -221,7 +222,7 @@ PCCC_ERROR_CODE = {
 }
 
 
-PRODUCT_TYPES = {
+_PRODUCT_TYPES = {
     0x00: 'Generic Device (deprecated)',
     0x02: 'AC Drive',
     0x03: 'Motor Overload',
@@ -260,9 +261,15 @@ PRODUCT_TYPES = {
     0x32: 'ControlNet Physical Layer Component'
 }
 
+
+PRODUCT_TYPES = {
+    **_PRODUCT_TYPES,
+    **{v: k for k, v in _PRODUCT_TYPES.items()},
+}
+
 #  Taken from PyLogix
 # List originally came from Wireshark /epan/dissectors/packet-cip.c
-VENDORS = {
+_VENDORS = {
     0: 'Reserved',
     1: 'Rockwell Automation/Allen-Bradley',
     2: 'Namco Controls Corp.',
@@ -1479,4 +1486,9 @@ VENDORS = {
     1238: 'Global Engineering Solutions Co., Ltd.',
     1239: 'ALTE Transportation, S.L.',
     1240: 'Penko Engineering B.V.'
+}
+
+VENDORS = {
+    **_VENDORS,
+    **{v: k for k, v in _VENDORS.items()},
 }
