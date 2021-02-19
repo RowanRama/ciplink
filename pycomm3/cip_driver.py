@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2020 Ian Ottoway <ian@ottoway.dev>
+# Copyright (c) 2021 Ian Ottoway <ian@ottoway.dev>
 # Copyright (c) 2014 Agostino Ruscito <ruscito@gmail.com>
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -24,21 +24,23 @@
 
 __all__ = ['CIPDriver', 'with_forward_open', 'parse_connection_path', ]
 
-import logging
 import ipaddress
+import logging
 import socket
 from functools import wraps
 from os import urandom
-from typing import Union, Optional
+from typing import Union, Optional, Tuple, List, Sequence, Type, Any
 
-from .exceptions import DataError, CommError, RequestError
-from .tag import Tag
-from .bytes_ import Pack, Unpack
-from .const import (PATH_SEGMENTS, ConnectionManagerInstances, PRIORITY, ClassCode, TIMEOUT_MULTIPLIER, TIMEOUT_TICKS,
-                    TRANSPORT_CLASS, PRODUCT_TYPES, VENDORS, STATES, MSG_ROUTER_PATH,
-                    ConnectionManagerServices, Services)
-from .packets import DataFormatType, RequestTypes
+from .cip import (ConnectionManagerInstances, ClassCode, CIPSegment,
+                  MSG_ROUTER_PATH, ConnectionManagerServices, Services,
+                  PortSegment, PADDED_EPATH, DataType, UDINT, UINT)
+from .const import PRIORITY, TIMEOUT_MULTIPLIER, TIMEOUT_TICKS, TRANSPORT_CLASS
+from .custom_types import ModuleIdentityObject
+from .exceptions import ResponseError, CommError, RequestError
+from .packets import RequestPacket, ResponsePacket, RequestTypes, PacketLazyFormatter
 from .socket_ import Socket
+from .tag import Tag
+from .util import cycle
 
 
 def with_forward_open(func):
@@ -49,7 +51,7 @@ def with_forward_open(func):
         opened = False
         if not self._forward_open():
             if self._cfg['extended forward open']:
-                logger = logging.getLogger('pycomm3.clx.LogixDriver')
+                logger = logging.getLogger('pycomm3.cip_driver')
                 logger.info('Extended Forward Open failed, attempting standard Forward Open.')
                 self._cfg['extended forward open'] = False
                 if self._forward_open():
@@ -59,7 +61,7 @@ def with_forward_open(func):
 
         if not opened:
             msg = f'Target did not connected. {func.__name__} will not be executed.'
-            raise DataError(msg)
+            raise ResponseError(msg)
         return func(self, *args, **kwargs)
 
     return wrapped
@@ -98,9 +100,9 @@ class CIPDriver:
                 as of 0.5.1, since it will automatically try a standard Forward Open if the extended one fails**
         """
 
-        self._sequence_number = 1
+        self._sequence = cycle(65535, start=1)
         self._sock = kwargs.get('socket', None)
-        self._session = kwargs.get('session', None)
+        self._session = 0
         self._connection_opened = False
         self._target_cid = None
         self._target_is_connected = False
@@ -111,11 +113,11 @@ class CIPDriver:
             'context': b'_pycomm_',
             'protocol version': b'\x01\x00',
             'rpi': 5000,
-            'port': 0xAF12,  # 44818
+            'port': 44818,
             'timeout': 10,
             'ip address': ip,
-            # is cip_path the right term?  or request_path? or something else?
-            'cip_path': _path[1:],  # leave out the len, we sometimes add to the path later
+            # is cip_path the right term?  or something else?
+            'cip_path': _path,
             'option': 0,
             'cid': b'\x27\x04\x19\x71',
             'csn': b'\x27\x04',
@@ -136,9 +138,8 @@ class CIPDriver:
         else:
             if not exc_type:
                 return True
-            else:
-                self.__log.exception('Unhandled Client Error', exc_info=(exc_type, exc_val, exc_tb))
-                return False
+            self.__log.exception('Unhandled Client Error', exc_info=(exc_type, exc_val, exc_tb))
+            return False
 
     def __repr__(self):
         _ = self._info
@@ -157,20 +158,6 @@ class CIPDriver:
     def connection_size(self):
         """CIP connection size, ``4000`` if using Extended Forward Open else ``500``"""
         return 4000 if self._cfg['extended forward open'] else 500
-
-    @property
-    def _sequence(self) -> int:
-        """
-        Increment and return the sequence id used with connected messages
-
-        :return: The next sequence number
-        """
-        self._sequence_number += 1
-
-        if self._sequence_number >= 65535:
-            self._sequence_number = 1
-
-        return self._sequence_number
 
     @classmethod
     def list_identity(cls, path) -> Optional[str]:
@@ -197,8 +184,9 @@ class CIPDriver:
         driver = CIPDriver('0.0.0.0')  # dumby driver for creating the list_identity request
         driver._session = 0
         context = driver._cfg['context']
-        request = RequestTypes.list_identity(driver)
-        message = request._build_request()
+        option = driver._cfg['option']
+        request = RequestTypes.list_identity()
+        message = request.build_request(None, driver._session, context, option)
         devices = []
 
         for ip in ip_addrs:
@@ -223,7 +211,7 @@ class CIPDriver:
         while True:
             try:
                 resp = sock.recv(4096)
-                response = request._response_class(resp)
+                response = request.response_class(request, resp)
                 if response and response.raw[12:20] == context:
                     devices.append(response.identity)
             except Exception:
@@ -232,8 +220,8 @@ class CIPDriver:
         return devices
 
     def _list_identity(self):
-        request = RequestTypes.list_identity(self)
-        response = request.send()
+        request = RequestTypes.list_identity()
+        response = self.send(request)
         return response.identity
 
     def get_module_info(self, slot: int) -> dict:
@@ -245,16 +233,17 @@ class CIPDriver:
                 service=Services.get_attributes_all,
                 class_code=ClassCode.identity_object, instance=b'\x01',
                 connected=False, unconnected_send=True,
-                route_path=Pack.epath(Pack.usint(PATH_SEGMENTS['bp']) + Pack.usint(slot), pad_len=True)
+                route_path=PADDED_EPATH.encode((PortSegment('bp', slot), ), length=True, pad_length=True),
+                name='__module_identity__'
             )
 
             if response:
-                return _parse_identity_object(response.value)
+                return ModuleIdentityObject.decode(response.value)
             else:
-                raise DataError(f'generic_message did not return valid data - {response.error}')
+                raise ResponseError(f'generic_message did not return valid data - {response.error}')
 
         except Exception as err:
-            raise DataError('error getting module info') from err
+            raise ResponseError('error getting module info') from err
 
     def open(self):
         """
@@ -288,14 +277,9 @@ class CIPDriver:
         if self._session:
             return self._session
 
-        self._session = 0
-        request = RequestTypes.register_session(self)
-        request.add(
-            self._cfg['protocol version'],
-            b'\x00\x00'
-        )
+        request = RequestTypes.register_session(self._cfg['protocol version'])
 
-        response = request.send()
+        response = self.send(request)
         if response:
             self._session = response.session
             self.__log.info(f"Session = {response.session} has been registered.")
@@ -320,11 +304,11 @@ class CIPDriver:
         init_net_params = 0b_0100_0010_0000_0000  # CIP Vol 1 - 3-5.5.1.1
 
         if self._cfg['extended forward open']:
-            net_params = Pack.udint((self.connection_size & 0xFFFF) | init_net_params << 16)
+            net_params = UDINT.encode((self.connection_size & 0xFFFF) | init_net_params << 16)
         else:
-            net_params = Pack.uint((self.connection_size & 0x01FF) | init_net_params)
+            net_params = UINT.encode((self.connection_size & 0x01FF) | init_net_params)
 
-        route_path = Pack.epath(self._cfg['cip_path'] + MSG_ROUTER_PATH)
+        route_path = PADDED_EPATH.encode(self._cfg['cip_path'] + MSG_ROUTER_PATH, length=True)
         service = (ConnectionManagerServices.forward_open
                    if not self._cfg['extended forward open']
                    else ConnectionManagerServices.large_forward_open)
@@ -398,8 +382,8 @@ class CIPDriver:
         """
         Un-registers the current session with the target.
         """
-        request = RequestTypes.unregister_session(self)
-        request.send()
+        request = RequestTypes.unregister_session()
+        self.send(request)
         self._session = None
         self.__log.info('Session Unregistered')
 
@@ -415,7 +399,7 @@ class CIPDriver:
         if self._session == 0:
             raise CommError("A session need to be registered before to call forward_close.")
 
-        route_path = Pack.epath(self._cfg['cip_path'] + MSG_ROUTER_PATH, pad_len=True)
+        route_path = PADDED_EPATH.encode(self._cfg['cip_path'] + MSG_ROUTER_PATH, length=True, pad_length=True)
 
         forward_close_msg = [
             PRIORITY,
@@ -447,12 +431,12 @@ class CIPDriver:
                         class_code: Union[int, bytes],
                         instance: Union[int, bytes],
                         attribute: Union[int, bytes] = b'',
-                        request_data: bytes = b'',
-                        data_format: Optional[DataFormatType] = None,
+                        request_data: Any = b'',
+                        data_type: Optional[Union[Type[DataType], DataType]] = None,
                         name: str = 'generic',
                         connected: bool = True,
                         unconnected_send: bool = False,
-                        route_path: Union[bool, bytes] = True) -> Tag:
+                        route_path: Union[bool, Sequence[CIPSegment], bytes] = True) -> Tag:
         """
         Perform a generic CIP message.  Similar to how MSG instructions work in Logix.
 
@@ -460,17 +444,13 @@ class CIPDriver:
         :param class_code: request object class ID
         :param instance: instance ID of the class
         :param attribute: (optional) attribute ID for the service/class/instance
-        :param request_data: (optional) any additional data required for the request
-        :param data_format: (reads only) If provided, a read response will automatically be unpacked into the attributes
-                            defined, must be a sequence of tuples, (attribute name, data_type).
-                            If name is ``None`` or an empty string, it will be ignored. If data-type is an ``int`` it will
-                            not be unpacked, but left as ``bytes``.  Data will be returned as a ``dict``.
-                            If ``None``, response data will be returned as just ``bytes``.
+        :param request_data: (optional) any additional data required for the request.
+        :param data_type: a ``DataType`` class that will be used to decode the response, None to return just bytes
         :param name:  return ``Tag.tag`` value, arbitrary but can be used for tracking returned Tags
         :param connected: ``True`` if service required a CIP connection (forward open), ``False`` to use UCMM
         :param unconnected_send: (Unconnected Only) wrap service in an UnconnectedSend service
         :param route_path: (Unconnected Only) ``True`` to use current connection route to destination, ``False`` to ignore,
-                           Or provide a packed EPATH (``bytes``) route to use.
+                           Or provide list of segments to be encoded as a PADDED_EPATH.
         :return: a Tag with the result of the request. (Tag.value for writes will be the request_data)
         """
 
@@ -483,27 +463,69 @@ class CIPDriver:
             'instance': instance,
             'attribute': attribute,
             'request_data': request_data,
-            'data_format': data_format,
+            'data_type': data_type,
         }
 
         if not connected:
             if route_path is True:
-                _kwargs['route_path'] = Pack.epath(self._cfg['cip_path'], pad_len=True)
-            elif route_path:
+                _kwargs['route_path'] = PADDED_EPATH.encode(self._cfg['cip_path'], length=True, pad_length=True)
+            elif isinstance(route_path, bytes):
                 _kwargs['route_path'] = route_path
+            elif route_path:
+                _kwargs['route_path'] = PADDED_EPATH.encode(route_path, length=True, pad_length=True)
 
             _kwargs['unconnected_send'] = unconnected_send
 
         req_class = RequestTypes.generic_connected if connected else RequestTypes.generic_unconnected
-        request = req_class(self)
-        request.build(**_kwargs)
+        request = req_class(**_kwargs)
 
-        response = request.send()
+        response = self.send(request)
 
         return Tag(name, response.value, None, error=response.error)
 
+    def send(self, request: RequestPacket) -> ResponsePacket:
+        if not request.error:
+            request_kwargs = {
+                'target_cid': self._target_cid,
+                'session_id': self._session,
+                'context': self._cfg['context'],
+                'option': self._cfg['option'],
+                'sequence': self._sequence
+            }
 
-def parse_connection_path(path):
+            self._send(request.build_request(**request_kwargs))
+            self.__log.debug(f'Sent: %r', request)
+            reply = None if request.no_response else self._receive()
+        else:
+            reply = None
+
+        response = request.response_class(request, reply)
+        self.__log.debug(f'Received: %r', response)
+        return response
+
+    def _send(self, message):
+        try:
+            self.__log.verbose('>>> SEND >>> \n%s', PacketLazyFormatter(message))
+            self._sock.send(message)
+        except Exception as err:
+            raise CommError('failed to send message') from err
+
+    def _receive(self):
+        try:
+            reply = self._sock.receive()
+        except Exception as err:
+            raise CommError('failed to receive reply') from err
+        else:
+            self.__log.verbose('<<< RECEIVE <<< \n%s', PacketLazyFormatter(reply))
+            return reply
+
+
+def parse_connection_path(path: str) -> Tuple[str, List[PortSegment]]:
+    """
+    Parses and validates the CIP path into the destination IP and
+    sequence of port/link segments.
+    Returns the IP and a list of PortSegments
+    """
     try:
         path = path.replace('\\', '/')
         ip, *segments = path.split('/')
@@ -511,73 +533,15 @@ def parse_connection_path(path):
             ipaddress.ip_address(ip)
         except ValueError as err:
             raise RequestError(f'Invalid IP Address: {ip}') from err
-        segments = [_parse_cip_path_segment(s) for s in segments]
 
         if not segments:
-            _path = [Pack.usint(PATH_SEGMENTS['backplane']), b'\x00']
+            _path = [PortSegment('bp', 0), ]
         elif len(segments) == 1:
-            _path = [Pack.usint(PATH_SEGMENTS['backplane']), Pack.usint(segments[0])]
+            _path = [PortSegment('bp', segments[0])]
         else:
             pairs = (segments[i:i + 2] for i in range(0, len(segments), 2))
-            _path = []
-            for port, dest in pairs:
-                if isinstance(dest, bytes):
-                    port |= 1 << 4  # set Extended Link Address bit, CIP Vol 1 C-1.3
-                    dest_len = len(dest)
-                    if dest_len % 2:
-                        dest += b'\x00'
-                    _path.extend([Pack.usint(port), Pack.usint(dest_len), dest])
-                else:
-                    _path.extend([Pack.usint(port), Pack.usint(dest)])
-
+            _path = [PortSegment(port, link) for port, link in pairs]
     except Exception as err:
         raise RequestError(f'Failed to parse connection path: {path}') from err
     else:
-        return ip, Pack.epath(b''.join(_path))
-
-
-def _parse_cip_path_segment(segment: str):
-    try:
-        if segment.isnumeric():
-            return int(segment)
-        else:
-            tmp = PATH_SEGMENTS.get(segment.lower())
-            if tmp:
-                return tmp
-            else:
-                try:
-                    ipaddress.ip_address(segment)
-                    return b''.join(Pack.usint(ord(c)) for c in segment)
-                except ValueError as err:
-                    raise RequestError(f'Invalid IP Address Segment: {segment}') from err
-    except Exception as err:
-        raise RequestError(f'Failed to parse path segment: {segment}') from err
-
-
-def _parse_identity_object(reply):
-    vendor = Unpack.uint(reply[:2])
-    product_type = Unpack.uint(reply[2:4])
-    product_code = Unpack.uint(reply[4:6])
-    major_fw = int(reply[6])
-    minor_fw = int(reply[7])
-    status = f'{Unpack.uint(reply[8:10]):0{16}b}'
-    serial_number = f'{Unpack.udint(reply[10:14]):0{8}x}'
-    product_name_len = int(reply[14])
-    tmp = 15 + product_name_len
-    device_type = reply[15:tmp].decode()
-
-    state = Unpack.uint(reply[tmp:tmp + 4]) if reply[tmp:] else -1  # some modules don't return a state
-
-    return {
-        'vendor': VENDORS.get(vendor, 'UNKNOWN'),
-        'product_type': PRODUCT_TYPES.get(product_type, 'UNKNOWN'),
-        'product_code': product_code,
-        'version_major': major_fw,
-        'version_minor': minor_fw,
-        'revision': f'{major_fw}.{minor_fw}',
-        'serial': serial_number,
-        'device_type': device_type,
-        'status': status,
-        'state': STATES.get(state, 'UNKNOWN'),
-    }
-
+        return ip, _path

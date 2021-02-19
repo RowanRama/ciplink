@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2020 Ian Ottoway <ian@ottoway.dev>
+# Copyright (c) 2021 Ian Ottoway <ian@ottoway.dev>
 # Copyright (c) 2014 Agostino Ruscito <ruscito@gmail.com>
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -23,7 +23,10 @@
 #
 
 from ..map import EnumMap
-from ..bytes_ import Pack, Unpack
+from .data_types import USINT
+
+__all__ = ['EncapsulationCommands', 'ConnectionManagerServices', 'Services', 'MULTI_PACKET_SERVICES',
+           'FileObjectServices']
 
 
 class EncapsulationCommands(EnumMap):
@@ -88,7 +91,7 @@ class Services(EnumMap):
         """
         Get service from reply service code
         """
-        val = cls.get(Pack.usint(Unpack.usint(reply_service) - 128))
+        val = cls.get(USINT.encode(USINT.decode(reply_service) - 128))
         return val
 
 

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2020 Ian Ottoway <ian@ottoway.dev>
+# Copyright (c) 2021 Ian Ottoway <ian@ottoway.dev>
 # Copyright (c) 2014 Agostino Ruscito <ruscito@gmail.com>
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -22,9 +22,32 @@
 # SOFTWARE.
 #
 
-from .cip_path import *
-from .datatypes import *
-from .misc import *
-from .object_library import *
-from .services import *
-from .status_info import *
+import logging
+import sys
+
+__all__ = ['configure_default_logger', 'LOG_VERBOSE']
+
+LOG_VERBOSE = 5
+
+_root = logging.getLogger()
+_root.addHandler(logging.NullHandler())
+
+logger = logging.getLogger('pycomm3')
+
+
+def _verbose(self: logging.Logger, msg, *args, **kwargs):
+    if self.isEnabledFor(LOG_VERBOSE):
+        self._log(LOG_VERBOSE, msg, *args, **kwargs)
+
+
+logging.addLevelName(LOG_VERBOSE, 'VERBOSE')
+logging.verbose = _verbose
+logging.Logger.verbose = _verbose
+
+
+def configure_default_logger(level: int = logging.INFO):
+    logger.setLevel(level)
+    formatter = logging.Formatter(fmt='{asctime} [{levelname}] {name}.{funcName}(): {message}', style='{')
+    handler = logging.StreamHandler(stream=sys.stdout)
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
