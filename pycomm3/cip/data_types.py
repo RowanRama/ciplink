@@ -53,6 +53,9 @@ __all__ = [
     "DATE",
     "TIME_OF_DAY",
     "DATE_AND_TIME",
+    "DT",
+    "LDT",
+    "TIME32",
     "StringDataType",
     "LOGIX_STRING",
     "STRING",
@@ -382,6 +385,30 @@ class DATE_AND_TIME(ElementaryDataType):
     @classmethod
     def _decode(cls, stream: BytesIO) -> Tuple[int, int]:
         return UDINT.decode(stream), UINT.decode(stream)
+
+
+class DT(ULINT):
+    """
+    Date and time in microseconds
+    """
+
+    code = 0xC0  #: 0xC0
+
+
+class LDT(ULINT):
+    """
+    Long date and time in nanoseconds
+    """
+
+    code = 0xCC  #: 0xCC
+
+
+class TIME32(UDINT):
+    """
+    Duration of time in microseconds
+    """
+
+    code = 0xD6  #: 0xD6
 
 
 class StringDataType(ElementaryDataType):
@@ -1164,6 +1191,9 @@ class DataTypes(EnumMap):
     date = DATE
     time_of_day = TIME_OF_DAY
     date_and_time = DATE_AND_TIME
+    dt = DT
+    ldt = LDT
+    time32 = TIME32
 
     logix_string = LOGIX_STRING
     string = STRING
