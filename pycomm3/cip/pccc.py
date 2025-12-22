@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2021 Ian Ottoway <ian@ottoway.dev>
 # Copyright (c) 2014 Agostino Ruscito <ruscito@gmail.com>
@@ -22,7 +21,6 @@
 # SOFTWARE.
 #
 
-from itertools import chain
 from io import BytesIO
 
 from .data_types import INT, DINT, REAL, StringDataType, UINT
@@ -33,17 +31,43 @@ from ..map import EnumMap
 class PCCCStringType(StringDataType):
     @classmethod
     def _slc_string_swap(cls, data):
-        pairs = [
-            (x2, x1) for x1, x2 in (data[i : i + 2] for i in range(0, len(data), 2))
-        ]
-        return bytes(chain.from_iterable(pairs))
+        """
+        Swaps bytes within 16-bit words.
+
+        SLC processors store strings as arrays of 16-bit integers.
+        To read/write them correctly as ASCII, the bytes in each word must be swapped.
+        e.g., 'AB' (0x4142) is stored as 0x4241 on the PLC.
+        """
+        # Create a mutable working copy
+        ba = bytearray(data)
+
+        # Defensive check: Ensure even length to prevent swap crashes
+        # (Though _encode now handles this, it protects _decode against malformed packets)
+        if len(ba) % 2:
+            ba.append(0)
+
+        ba[0::2], ba[1::2] = ba[1::2], ba[0::2]
+
+        return bytes(ba)
 
 
 class PCCC_ASCII(PCCCStringType):
+    """
+    SLC ASCII file type (A).
+    Represents exactly 2 characters packed into a single 16-bit integer.
+    """
     @classmethod
     def _encode(cls, value: str, *args, **kwargs) -> bytes:
-        char1, char2 = value[:2]
-        return (char2 or " ").encode(cls.encoding) + (char1 or " ").encode(cls.encoding)
+        # PCCC ASCII is fixed at 2 bytes.
+        # We truncate longer strings and pad shorter ones with spaces.
+        b_value = (value or "").encode(cls.encoding, "ignore")[:2]
+
+        if len(b_value) == 0:
+            b_value = b"  "
+        elif len(b_value) == 1:
+            b_value = b_value + b" "
+
+        return cls._slc_string_swap(b_value)
 
     @classmethod
     def _decode(cls, stream: BytesIO) -> str:
@@ -51,16 +75,33 @@ class PCCC_ASCII(PCCCStringType):
 
 
 class PCCC_STRING(PCCCStringType):
+    """
+    SLC String file type (ST).
+    Structure: [Length (UINT)] + [Data (82 bytes)]
+    """
     @classmethod
     def _encode(cls, value: str) -> bytes:
-        _len = UINT.encode(len(value))
-        _data = cls._slc_string_swap(value.encode(cls.encoding))
-        return _len + _data
+        # Encode first to handle characters dropped by "ignore"
+        data = (value or "").encode(cls.encoding, "ignore")
+        true_len = len(data)
+
+        # Pad with null byte if length is odd so it aligns to 16-bit words.
+        # This padding is NOT included in the length field.
+        if true_len & 1:
+            data += b'\x00'
+
+        # Return unpadded length + swapped padded data
+        return UINT.encode(true_len) + cls._slc_string_swap(data)
 
     @classmethod
     def _decode(cls, stream: BytesIO) -> str:
+        # Read the explicit length, then the fixed 82-byte buffer
         _len = UINT.decode(stream)
-        return cls._slc_string_swap(stream.read(82)).decode(cls.encoding)
+        raw = stream.read(82)
+
+        # Swap bytes to correct order, then slice to the actual length
+        swapped = cls._slc_string_swap(raw)
+        return swapped[:_len].decode(cls.encoding, "ignore")
 
 
 class PCCCDataTypes(EnumMap):
