@@ -213,9 +213,9 @@ or reading and writing a single element.
 Reading Tags
 ------------
 
-:meth:`LogixDriver.read` accepts any number of tags, all that is required is the tag names.Reading of entire structures
-is support as long as none of the attributes have an external access of *None*.
-To read a structure, just request the base name and the ``value`` for the ``Tag`` object will a a dict of ``{attribute: value}``
+:meth:`LogixDriver.read` accepts any number of tags, all that is required is the tag names. Reading of entire structures
+is supported as long as none of the attributes have an external access of *None*.
+To read a structure, just request the base name and the ``value`` for the ``Tag`` object will be a dict of ``{attribute: value}``
 
 Read an atomic tag
 
