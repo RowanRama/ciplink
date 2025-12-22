@@ -36,13 +36,7 @@ pycomm3
 
 |
 
-.. image:: https://readthedocs.org/projects/pycomm3/badge/?version=latest&style=for-the-badge
-   :target: https://pycomm3.readthedocs.io/en/latest/
-   :alt: Read the Docs
-
-.. image:: https://img.shields.io/badge/gitmoji-%20%F0%9F%98%9C%20%F0%9F%98%8D-FFDD67.svg?style=for-the-badge
-    :target: https://gitmoji.dev
-    :alt: Gitmoji
+**⚠️ NOTE:** ``pycomm3`` is no longer actively developed
 
 
 Introduction
