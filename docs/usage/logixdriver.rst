@@ -19,16 +19,22 @@ tags are uploaded as well.  By default, ``init_program_tags`` is ``True``, set t
 controller-scoped tags.
 
 Below shows how the init tag options are equivalent to calling the :meth:`~LogixDriver.get_tag_list` method.
+:meth:`~LogixDriver.get_tag_list` replaces :attr:`~LogixDriver.tags` unless ``cache=False``.  Each upload creates new
+``type_class`` objects, so compare uploads with :attr:`~LogixDriver.tags_json`, which leaves them out.
 
 >>> plc1 = LogixDriver('10.20.30.100')
+>>> plc1.open()  # uploads controller and program tags
 >>> plc2 = LogixDriver('10.20.30.100', init_tags=False)
->>> plc2.get_tag_list()
->>> plc1.tags == plc2.tags
+>>> plc2.open()
+>>> plc2.get_tag_list(program='*')  # '*' = controller and all program tags
+>>> plc1.tags_json == plc2.tags_json
 True
->>> plc3 = LogixDriver('10.20.30.100', init_program_tags=True)
->>> plc4 = LogixDriver('10.20.30.100')
->>> plc4.get_tag_list(program='*')  # '*' means all programs
->>> plc3.tags == plc4.tags
+>>> plc3 = LogixDriver('10.20.30.100', init_program_tags=False)
+>>> plc3.open()  # uploads controller-scoped tags only
+>>> plc4 = LogixDriver('10.20.30.100', init_tags=False)
+>>> plc4.open()
+>>> plc4.get_tag_list()  # controller-scoped only
+>>> plc3.tags_json == plc4.tags_json
 True
 
 
@@ -254,7 +260,8 @@ Writing Tags
 :meth:`LogixDriver.write` method accepts any number of tag-value pairs of the tag name and value to be written.
 For writing a single tag, you can do ``write(<tag name>, <value>)``, but for multiple tags a sequence of tag-value tuples
 is required (``write((<tag1>, <value1>), (<tag2>, <value2>))``). For arrays, the value should be a list of the values to write.
-A ``RequestError`` will be raised if the value list is too short, else it will be truncated if too long.  Writing a
+If the value list is shorter than the requested element count, that tag is not written and its returned Tag has its error
+set (the Tag is falsy); extra values in a list that is too long are ignored.  Writing a
 structure is supported as long as all attributes have Read/Write external access.  The value for a struct should be a
 ``dict`` of ``{<attribute name>: <value>}``, nesting as needed.  It is not recommended to write full structures for builtin types,
 like ``TIMER``, ``PID``, etc.
@@ -296,8 +303,8 @@ String Tags
 Strings are technically structures within the PLC, but are treated as atomic types in this library.  There is no need
 to handle the ``LEN`` and ``DATA`` attributes, the structure is converted to/from Python ``str`` objects transparently.
 Any structures that contain only a DINT-``LEN`` and a SINT[]-``DATA`` attributes will be automatically treated as string tags.
-This allows the builtin STRING types plus custom strings to be handled automatically.  Strings that are longer than the
-plc tag will be truncated when writing.
+This allows the builtin STRING types plus custom strings to be handled automatically.  Writing a string that is longer
+than the plc tag returns an error (the tag is not written).
 
 >>> plc.read('string_tag')
 Tag(tag='string_tag', value='Hello World!', type='STRING', error=None)
