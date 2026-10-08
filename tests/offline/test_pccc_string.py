@@ -3,12 +3,12 @@ from pycomm3.cip.pccc import PCCC_STRING, PCCC_ASCII
 
 def test_pccc_string_odd_length_padding():
     """
-    Verifies that odd-length strings are padded with a null byte in the payload
+    Verifies that the payload is padded with nulls to the full 82 data bytes
     but the length header remains the original (unpadded) length.
     Fixes Issue #314.
     """
-    # Case 1: Odd length string "123" (3 bytes)
-    # Expected: Length=3 (0x0300), Data="12" (0x3231) + "3\x00" (0x0033)
+    # Odd length string "123" (3 bytes)
+    # Expected: Length=3 (0x0300), Data="12" (0x3231) + "3\x00" (0x0033) + nulls up to 82 bytes
     # Note: SLC swaps bytes, so "12" -> 0x3231, "3\0" -> 0x0033
 
     target_value = "123"
@@ -17,9 +17,9 @@ def test_pccc_string_odd_length_padding():
     # Header: UINT length of 3 (unpadded) -> b'\x03\x00'
     assert encoded[0:2] == b'\x03\x00'
 
-    # Payload: "123" + pad "\x00" -> "123\x00"
-    # Swapped: "12" (0x32 0x31) -> 0x31 0x32 -> b'\x31\x32'
-    # "3\0" (0x33 0x00) -> 0x00 0x33 -> b'\x00\x33'
+    # Payload: "123" + nulls -> "123\x00..." (82 bytes), check the first 4
+    # Swapped: "12" (0x31 0x32) -> b'\x32\x31'
+    # "3\0" (0x33 0x00) -> b'\x00\x33'
     # Result: b'\x32\x31\x00\x33'
 
     expected_payload = b'\x32\x31\x00\x33'
