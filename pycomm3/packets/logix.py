@@ -32,7 +32,7 @@ from .ethernetip import SendUnitDataRequestPacket, SendUnitDataResponsePacket
 from .util import parse_read_reply, request_path, tag_request_path
 
 from ..cip import ClassCode, Services, DataTypes, UINT, UDINT, ULINT
-from ..const import STRUCTURE_READ_REPLY
+from ..const import STRUCTURE_READ_REPLY, SUCCESS
 from ..exceptions import RequestError
 
 
@@ -106,8 +106,6 @@ class ReadTagRequestPacket(TagServiceRequestPacket):
         super()._setup_message()
         if self.request_path is None:
             self.request_path = tag_request_path(self.tag, self.tag_info, self._use_instance_id)
-        if self.request_path is None:
-            self._error = "Failed to build request path for tag"
         self._msg.append(self.tag_only_message())
 
 
@@ -123,6 +121,8 @@ class ReadTagFragmentedResponsePacket(ReadTagResponsePacket):
 
     def _parse_reply(self):
         super()._parse_reply(dont_parse=True)
+        if self.data is None:
+            return
         if self.data[:2] == STRUCTURE_READ_REPLY:
             self.value_bytes = self.data[4:]
             self._data_type = self.data[:4]
@@ -153,7 +153,6 @@ class ReadTagFragmentedResponsePacket(ReadTagResponsePacket):
 
 class ReadTagFragmentedRequestPacket(ReadTagRequestPacket):
     __log = logging.getLogger(f"{__module__}.{__qualname__}")
-    type_ = "read"
     response_class = ReadTagFragmentedResponsePacket
     tag_service = Services.read_tag_fragmented
 
@@ -244,8 +243,6 @@ class WriteTagRequestPacket(TagServiceRequestPacket):
         super()._setup_message()
         if self.request_path is None:
             self.request_path = tag_request_path(self.tag, self.tag_info, self._use_instance_id)
-        if self.request_path is None:
-            self.error = f"Failed to build request path for tag"
         self._msg.append(self.tag_only_message())
 
     def tag_only_message(self):
@@ -269,7 +266,6 @@ class WriteTagFragmentedResponsePacket(WriteTagResponsePacket):
 
 class WriteTagFragmentedRequestPacket(WriteTagRequestPacket):
     __log = logging.getLogger(f"{__module__}.{__qualname__}")
-    type_ = "write"
     response_class = WriteTagFragmentedResponsePacket
     tag_service = Services.write_tag_fragmented
 
@@ -351,17 +347,10 @@ class ReadModifyWriteRequestPacket(SendUnitDataRequestPacket):
         self._use_instance_id = use_instance_id
         self.data_type = tag_info["data_type_name"]
         self.request_path = tag_request_path(tag, tag_info, use_instance_id)
-        self.bits = []
         self._request_ids = []
         self._and_mask = 0xFFFF_FFFF_FFFF_FFFF
         self._or_mask = 0x0000_0000_0000_0000
         self._mask_size = DataTypes.get(self.data_type).size
-
-        if self._mask_size is None:
-            raise RequestError(f'Invalid data type {tag_info["data_type"]} for writing bits')
-
-        if self.request_path is None:
-            self.error = "Failed to create request path for tag"
 
     def set_bit(self, bit: int, value: bool, request_id: int):
         if self.data_type == "DWORD":
@@ -374,7 +363,6 @@ class ReadModifyWriteRequestPacket(SendUnitDataRequestPacket):
             self._or_mask &= ~(1 << bit)
             self._and_mask &= ~(1 << bit)
 
-        self.bits.append(bit)
         self._request_ids.append(request_id)
 
     def _setup_message(self):
@@ -384,7 +372,7 @@ class ReadModifyWriteRequestPacket(SendUnitDataRequestPacket):
             self.request_path,
             UINT.encode(self._mask_size),
             ULINT.encode(self._or_mask)[: self._mask_size],
-            ULINT.encode(self._and_mask)[: self._and_mask],
+            ULINT.encode(self._and_mask)[: self._mask_size],
         ]
 
 
@@ -393,13 +381,13 @@ class MultiServiceResponsePacket(SendUnitDataResponsePacket):
 
     def __init__(self, request: "MultiServiceRequestPacket", raw_data: bytes = None):
         self.request = request
-        self.values = None
-        self.request_statuses = None
         self.responses = []
         super().__init__(request, raw_data)
 
     def _parse_reply(self):
         super()._parse_reply()
+        if self.service_status not in (SUCCESS, 0x1E):
+            return  # sub-replies only follow success or 0x1E (embedded service error)
         num_replies = UINT.decode(self.data)
         offset_data = self.data[2 : 2 + 2 * num_replies]
         offsets = (UINT.decode(offset_data[i : i + 2]) for i in range(0, len(offset_data), 2))
@@ -413,9 +401,6 @@ class MultiServiceResponsePacket(SendUnitDataResponsePacket):
         for data, request in zip(reply_data, self.request.requests):
             response = request.response_class(request, padding + data)
             self.responses.append(response)
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}(values={_r(self.values)}, error={self.error!r})"
 
 
 class MultiServiceRequestPacket(SendUnitDataRequestPacket):

@@ -160,8 +160,9 @@ def test_logix_context_manager_calls_open_and_close():
 
 
 def test__exit__returns_false_on_commerror():
-    ld = LogixDriver(CONNECT_PATH, init_info=False, init_tags=False)
-    assert ld.__exit__(None, None, None) is True  # Exit with no exception
+    ld = LogixDriver(CONNECT_PATH, init_tags=False)
+    with mock.patch.object(LogixDriver, 'close', side_effect=CommError):
+        assert ld.__exit__(None, None, None) is False
 
 
 def test__exit__returns_true_on_no_error_and_no_exc_type():
@@ -179,7 +180,7 @@ def test__exit__returns_false_on_no_error_and_exc_type():
 def test__repr___ret_str():
     ld = LogixDriver(CONNECT_PATH, init_info=False, init_tags=False)
     _repr = repr(ld)
-    assert repr
+    assert _repr
     assert isinstance(_repr, str)
 
 

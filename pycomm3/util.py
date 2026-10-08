@@ -27,6 +27,7 @@
 Various utility functions.
 """
 
+import itertools
 from typing import Tuple
 
 
@@ -58,10 +59,4 @@ def get_array_index(tag: str) -> Tuple[str, int]:
 
 
 def cycle(stop, start=0):
-    val = start
-    while True:
-        if val > stop:
-            val = start
-
-        yield val
-        val += 1
+    return map(lambda i: i % (stop - start + 1) + start, itertools.count())  # C-level next(), safe to share between threads
