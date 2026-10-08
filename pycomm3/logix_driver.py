@@ -30,6 +30,7 @@ import datetime
 import logging
 import operator
 import time
+from contextlib import suppress
 from functools import reduce
 from io import BytesIO
 from typing import List, Tuple, Optional, Union, Dict, Type, Sequence
@@ -59,7 +60,6 @@ from .cip import (
 )
 from .cip_driver import CIPDriver, with_forward_open, parse_connection_path
 from .const import (
-    EXTENDED_SYMBOL,
     MICRO800_PREFIX,
     MULTISERVICE_READ_OVERHEAD,
     SUCCESS,
@@ -76,7 +76,7 @@ from .custom_types import (
     FixedSizeString,
     ModuleIdentityObject,
 )
-from .exceptions import ResponseError, RequestError
+from .exceptions import CommError, ResponseError, RequestError
 from .packets import (
     RequestPacket,
     ReadTagFragmentedRequestPacket,
@@ -88,6 +88,7 @@ from .packets import (
     WriteTagRequestPacket,
     MultiServiceRequestPacket,
     ReadModifyWriteRequestPacket,
+    tag_request_path,
 )
 from .tag import Tag
 
@@ -128,9 +129,12 @@ class LogixDriver(CIPDriver):
                 CIP path automatically.  The ``enet`` / ``backplane`` (or ``bp``) segments are symbols for the CIP routing
                 port numbers and will be replaced with the correct value.
 
-        :param init_tags: if True (default), uploads all controller-scoped tag definitions on connect
+        :param init_tags: if True (default), uploads tag definitions on connect: controller-scoped, plus program-scoped
+                unless ``init_program_tags=False``
         :param init_program_tags: if False, bypasses uploading program-scoped tags. set to False if there are a lot of program tags and you aren't
                 using any of them to decrease tag upload times.
+        :param tag_namespace_filter: only upload tags whose name starts with this prefix, prefix match on the tag name
+                (without the ``Program:X.`` part); program, task and module discovery is not filtered
 
         .. tip::
 
@@ -138,6 +142,8 @@ class LogixDriver(CIPDriver):
             they require information about the data type and structure of the tags inside the controller.  If opening
             multiple connections to the same controller, you may disable tag initialization in all but the first connection
             and set ``plc2._tags = plc1.tags`` to prevent needing to upload the tag definitions multiple times.
+            Tag lists are controller-specific: on v21+ tags are addressed by instance_id, which differs between
+            controllers even with identical programs, so only share a tag list between connections to the same controller.
 
         """
 
@@ -155,7 +161,7 @@ class LogixDriver(CIPDriver):
 
     def __str__(self):
         _rev = self._info.get("revision", {"major": -1, "minor": -1})
-        return f'Program Name: {self._info.get("name")}, Revision: {_rev}'
+        return f"Program Name: {self._info.get('name')}, Device: {self._info.get('product_name')}, Revision: {_rev['major']}.{_rev['minor']}"
 
     def __repr__(self):
         init_args = ", ".join(f"{k}={v}" for k, v in self._init_args.items())
@@ -164,7 +170,12 @@ class LogixDriver(CIPDriver):
     def open(self):
         ret = super().open()
         if ret:
-            self._initialize_driver(**self._init_args)
+            try:
+                self._initialize_driver(**self._init_args)
+            except Exception:
+                with suppress(CommError):
+                    self.close()  # drop the connection so the next open() reconnects
+                raise
         return ret
 
     def _initialize_driver(self, init_tags, init_program_tags, tag_namespace_filter=''):
@@ -244,15 +255,6 @@ class LogixDriver(CIPDriver):
         return self._data_types
 
     @property
-    def connected(self) -> bool:
-        """
-        Read-Only Property to check whether or not a connection is open.
-
-        :return: True if a connection is open, False otherwise
-        """
-        return self._connection_opened
-
-    @property
     def info(self) -> dict:
         """
         Property containing a dict of all the information collected about the connected PLC.
@@ -265,6 +267,7 @@ class LogixDriver(CIPDriver):
         - *revision* - dict of {'major': <major rev (int)>, 'minor': <minor rev (int)>}
         - *serial* - hex string of PLC serial number, e.g. ``'FFFFFFFF'``
         - *product_name* - string value for PLC device type, e.g. ``'1756-L83E/B'``
+        - *status* - raw 2-byte CIP Identity Object status word (attribute 5), e.g. ``b'p0'``; *keyswitch* is decoded from it
         - *keyswitch* - string value representing the current keyswitch position, e.g. ``'REMOTE RUN'``
         - *name* - string value of the current PLC program name, e.g. ``'PLCA'``
 
@@ -272,7 +275,7 @@ class LogixDriver(CIPDriver):
 
         - *programs* - dict of all Programs in the PLC and their routines, ``{program: {'routines': [routine, ...}...}``
         - *tasks* - dict of all Tasks in the PLC, ``{task: {'instance_id': ...}...}``
-        - *modules* - dict of I/O modules in the PLC, ``{module: {'slots': {1: {'types': ['O,' 'I', 'C']}, ...}, 'types':[...]}...}``
+        - *modules* - dict of I/O modules in the PLC, ``{module: {'slots': {1: {'types': ['O', 'I', 'C']}, ...}, 'types':[...]}...}``
 
         """
         return self._info
@@ -307,6 +310,8 @@ class LogixDriver(CIPDriver):
 
             self._info["name"] = response.value
             return self._info["name"]
+        except CommError:
+            raise
         except Exception as err:
             raise ResponseError("failed to get the plc name") from err
 
@@ -333,18 +338,23 @@ class LogixDriver(CIPDriver):
             info["keyswitch"] = KEYSWITCH.get(info["status"][0], {}).get(
                 info["status"][1], "UNKNOWN"
             )
+            self._info.update(info)
             return info
+        except CommError:
+            raise
         except Exception as err:
             raise ResponseError("Failed to get PLC info") from err
 
     def get_plc_time(self, fmt: str = "%A, %B %d, %Y %I:%M:%S%p", tz: datetime.timezone = None) -> Tag:
         """
-        Gets the current time of the PLC system clock. UTC is returned unless ``tz`` is specified. The ``value`` attribute will
+        Gets the current time of the PLC system clock. The ``value`` attribute will
         be a dict containing the time in 3 different forms, *datetime* is a Python datetime.datetime object, *microseconds*
         is the integer value epoch time, and *string* is the *datetime* formatted using ``strftime`` and the ``fmt`` parameter.
+        The time is in the client PC's local timezone unless ``tz`` is given (pass ``datetime.timezone.utc`` for UTC);
+        *microseconds* is always UTC epoch time and *string* uses the same timezone as *datetime*.
 
         :param fmt: format string for converting the time to a string
-        :param tz: specific datetime.timezone, local system time if omitted or None
+        :param tz: timezone for *datetime*/*string*, the client PC's local timezone if omitted or None
         :return: a Tag object with the current time
         """
         tag = self.generic_message(
@@ -406,21 +416,20 @@ class LogixDriver(CIPDriver):
         :param cache: store the retrieved list in the :attr:`.tags` property.  Disable if you wish to get tags retrieved
                       to not overwrite the currently cached definition. For instance if you're checking tags in a single
                       program but currently reading controller-scoped tags.
+        :param tag_namespace_filter: prefix match on the tag name (without the ``Program:X.`` part), only matching tags
+                      are returned; program, task and module discovery is not filtered
 
         :return: a list containing dicts for each tag definition collected
         """
 
-        self._cache = {
-            "tag_name:id": {},
-            "id:struct": {},
-            "handle:id": {},
-            "id:udt": {},
-        }
+        if program and program.startswith("Program:"):
+            program = program[len("Program:"):]
 
-        if program in {"*", None}:
-            self._info["programs"] = {}
-            self._info["tasks"] = {}
-            self._info["modules"] = {}
+        self._cache = {"id:struct": {}, "id:udt": {}}
+
+        for key in ("programs", "tasks", "modules"):
+            if program in {"*", None} or key not in self._info:
+                self._info[key] = {}
         
         self.__log.info("Starting tag list upload...")
         if program == "*":
@@ -462,16 +471,9 @@ class LogixDriver(CIPDriver):
                 if program:
                     if not program.startswith("Program:"):
                         program = f"Program:{program}"
-                    path = [
-                        EXTENDED_SYMBOL,
-                        USINT.encode(len(program)),
-                        program.encode("utf-8"),
-                    ]
                     segments = [
                         DataSegment(program),
                     ]
-                    if len(program) % 2:
-                        path.append(b"\x00")
 
                 segments += [
                     LogicalSegment(ClassCode.symbol_object, "class_id"),
@@ -512,6 +514,8 @@ class LogixDriver(CIPDriver):
 
             return tag_list
 
+        except CommError:
+            raise
         except Exception as err:
             raise ResponseError("failed to get attribute list") from err
 
@@ -571,73 +575,75 @@ class LogixDriver(CIPDriver):
             for tag in all_tags:
                 io_tag = False
                 name = tag["tag_name"]
-                #breakpoint()
-                if name.startswith(tag_namespace_filter):
-                    if name.startswith("Program:"):
-                        prog_name = name.replace("Program:", "")
-                        self._info["programs"][prog_name] = {
-                            "instance_id": tag["instance_id"],
-                            "routines": [],
-                        }
-                        continue
+                if name.startswith("Program:"):
+                    prog_name = name.replace("Program:", "")
+                    self._info["programs"][prog_name] = {
+                        "instance_id": tag["instance_id"],
+                        "routines": [],
+                    }
+                    continue
 
-                    if name.startswith("Routine:"):
-                        rtn_name = name.replace("Routine:", "")
-                        _program = self._info["programs"].get(program)
-                        if _program is None:
-                            self.__log.error(f"Program {program} not defined in tag list")
-                        else:
-                            _program["routines"].append(rtn_name)
-                        continue
+                if name.startswith("Routine:"):
+                    rtn_name = name.replace("Routine:", "")
+                    _program = self._info["programs"].get(program)
+                    if _program is None:
+                        self.__log.error(f"Program {program} not defined in tag list")
+                    else:
+                        _program["routines"].append(rtn_name)
+                    continue
 
-                    if name.startswith("Task:"):
-                        self._info["tasks"][name.replace("Task:", "")] = {
-                            "instance_id": tag["instance_id"]
-                        }
-                        continue
+                if name.startswith("Task:"):
+                    self._info["tasks"][name.replace("Task:", "")] = {
+                        "instance_id": tag["instance_id"]
+                    }
+                    continue
 
-                    # system tags that may interfere w/ finding I/O modules
-                    if "Map:" in name or "Cxn:" in name:
-                        continue
+                # system tags that may interfere w/ finding I/O modules
+                if "Map:" in name or "Cxn:" in name:
+                    continue
 
-                    # I/O module tags
-                    # Logix 5000 Controllers I/O and Tag Data, page 17  (1756-pm004_-en-p.pdf)
-                    if any(x in name for x in (":I", ":O", ":C", ":S")):
-                        io_tag = True
-                        mod = name.split(":")
-                        mod_name = mod[0]
-                        if mod_name not in self._info["modules"]:
-                            self._info["modules"][mod_name] = {"slots": {}}
-                        if len(mod) == 3 and mod[1].isdigit():
-                            mod_slot = int(mod[1])
-                            if mod_slot not in self._info["modules"][mod_name]:
-                                self._info["modules"][mod_name]["slots"][mod_slot] = {"types": []}
-                            self._info["modules"][mod_name]["slots"][mod_slot]["types"].append(mod[2])
-                        elif len(mod) == 2:
-                            if "types" not in self._info["modules"][mod_name]:
-                                self._info["modules"][mod_name]["types"] = []
-                            self._info["modules"][mod_name]["types"].append(mod[1])
-                        # Not sure if this branch will ever be hit, but added to see if above branches may need additional work
-                        else:
-                            if "__UNKNOWN__" not in self._info["modules"][mod_name]:
-                                self._info["modules"][mod_name]["__UNKNOWN__"] = []
-                            self._info["modules"][mod_name]["__UNKNOWN__"].append(":".join(mod[1:]))
+                # I/O module tags
+                # Logix 5000 Controllers I/O and Tag Data, page 17  (1756-pm004_-en-p.pdf)
+                if any(x in name for x in (":I", ":O", ":C", ":S")):
+                    io_tag = True
+                    mod = name.split(":")
+                    mod_name = mod[0]
+                    if mod_name not in self._info["modules"]:
+                        self._info["modules"][mod_name] = {"slots": {}}
+                    if len(mod) == 3 and mod[1].isdigit():
+                        mod_slot = int(mod[1])
+                        if mod_slot not in self._info["modules"][mod_name]["slots"]:
+                            self._info["modules"][mod_name]["slots"][mod_slot] = {"types": []}
+                        self._info["modules"][mod_name]["slots"][mod_slot]["types"].append(mod[2])
+                    elif len(mod) == 2:
+                        if "types" not in self._info["modules"][mod_name]:
+                            self._info["modules"][mod_name]["types"] = []
+                        self._info["modules"][mod_name]["types"].append(mod[1])
+                    # Not sure if this branch will ever be hit, but added to see if above branches may need additional work
+                    else:
+                        if "__UNKNOWN__" not in self._info["modules"][mod_name]:
+                            self._info["modules"][mod_name]["__UNKNOWN__"] = []
+                        self._info["modules"][mod_name]["__UNKNOWN__"].append(":".join(mod[1:]))
 
-                    # other system or junk tags
-                    if (not io_tag and ":" in name) or name.startswith("__"):
-                        continue
-                    if tag["symbol_type"] & 0b0001_0000_0000_0000:
-                        continue
+                # other system or junk tags
+                if (not io_tag and ":" in name) or name.startswith("__"):
+                    continue
+                if tag["symbol_type"] & 0b0001_0000_0000_0000:
+                    continue
 
-                    if program is not None:
-                        name = f"Program:{program}.{name}"
+                # only user tags are filtered, by name without the Program:X. part
+                if not name.startswith(tag_namespace_filter):
+                    continue
 
-                    self._cache["tag_name:id"][name] = tag["instance_id"]
+                if program is not None:
+                    name = f"Program:{program}.{name}"
 
-                    user_tags.append(self._create_tag(name, tag))
+                user_tags.append(self._create_tag(name, tag))
 
             self.__log.debug(f'Finished isolating tags for {program or "controller"}')
             return user_tags
+        except CommError:
+            raise
         except Exception as err:
             raise ResponseError("failed isolating user tags") from err
 
@@ -664,20 +670,15 @@ class LogixDriver(CIPDriver):
             new_tag["template_instance_id"] = template_instance_id
             new_tag["data_type"] = self._get_data_type(template_instance_id, raw_tag["symbol_type"])
             new_tag["data_type_name"] = new_tag["data_type"]["name"]
+            _type_class = new_tag["data_type"]["type_class"]
         else:
             tag_type = "atomic"
             datatype = raw_tag["symbol_type"] & 0b_0000_0000_1111_1111
             new_tag["data_type"] = DataTypes.get(datatype)
             new_tag["data_type_name"] = new_tag["data_type"]
-            new_tag["type_class"] = DataTypes.get(new_tag["data_type"])
+            _type_class = DataTypes.get(new_tag["data_type"])
             if datatype == DataTypes.bool.code:  # TODO: make sure this is right
                 new_tag["bit_position"] = (raw_tag["symbol_type"] & 0b_0000_0111_0000_0000) >> 8
-
-        _type_class = (
-            new_tag["data_type"]["type_class"]
-            if tag_type == "struct"
-            else DataTypes.get(new_tag["data_type"])
-        )
 
         if new_tag["dim"]:
             total_elements = reduce(operator.mul, new_tag["dimensions"][: new_tag["dim"]], 1)
@@ -716,7 +717,6 @@ class LogixDriver(CIPDriver):
                 raise ResponseError("send_unit_data returned not valid data", response.error)
             _struct = _parse_structure_makeup_attributes(response)
             self._cache["id:struct"][instance_id] = _struct
-            self._cache["handle:id"][_struct["structure_handle"]] = instance_id
 
         return self._cache["id:struct"][instance_id]
 
@@ -751,6 +751,8 @@ class LogixDriver(CIPDriver):
 
                 offset += len(response_pkt.data)
 
+        except CommError:
+            raise
         except Exception as err:
             raise ResponseError("Failed to read template") from err
         else:
@@ -770,16 +772,11 @@ class LogixDriver(CIPDriver):
 
         member_names = []
         template_name = None
-        try:
-            for name in (
-                x.decode(errors="replace") for x in data[info_len:].split(b"\x00")
-            ):
-                if template_name is None and ";" in name:
-                    template_name, _ = name.split(";", maxsplit=1)
-                else:
-                    member_names.append(name)
-        except ValueError as err:
-            raise ResponseError("Unable to decode template or member names") from err
+        for name in (x.decode(errors="replace") for x in data[info_len:].split(b"\x00")):
+            if template_name is None and ";" in name:
+                template_name, _ = name.split(";", maxsplit=1)
+            else:
+                member_names.append(name)
 
         _type = symbol_type & 0b_0000_1111_1111_1111
 
@@ -831,7 +828,7 @@ class LogixDriver(CIPDriver):
         ):
             data_type["string"] = data_type["internal_tags"]["DATA"]["array"]
 
-            data_type["type_class"] = FixedSizeString(template["structure_size"] - 4)
+            data_type["type_class"] = FixedSizeString(template["structure_size"] - 4, max_len_=data_type["string"])
         else:
             data_type["_struct_members"] = (_struct_members, _bit_members)
             data_type["type_class"] = StructTag(
@@ -885,12 +882,13 @@ class LogixDriver(CIPDriver):
             try:
                 self.__log.debug(f"Getting data type for id {instance_id}")
                 template = self._get_structure_makeup(instance_id)  # instance id from type
-                if not template.get("error"):
-                    _data = self._read_template(instance_id, template["object_definition_size"])
-                    data_type = self._parse_template_data(_data, template, symbol_type)
-                    self._cache["id:udt"][instance_id] = data_type
-                    self._data_types[data_type["name"]] = data_type
-                    self.__log.debug(f'Got data type {data_type["name"]} for id {instance_id}')
+                _data = self._read_template(instance_id, template["object_definition_size"])
+                data_type = self._parse_template_data(_data, template, symbol_type)
+                self._cache["id:udt"][instance_id] = data_type
+                self._data_types[data_type["name"]] = data_type
+                self.__log.debug(f'Got data type {data_type["name"]} for id {instance_id}')
+            except CommError:
+                raise
             except Exception as err:
                 raise ResponseError(
                     f"Failed to get data type information for {instance_id}"
@@ -972,7 +970,6 @@ class LogixDriver(CIPDriver):
         """
         creates a list of multi-request packets
         """
-        multi_requests = []
         fragmented_requests = []
         read_requests = []  # [ (request, response_size), ...]
         for request_id, tag_data in parsed_tags.items():
@@ -996,7 +993,7 @@ class LogixDriver(CIPDriver):
             return_size = (
                 _tag_return_size(tag_data) + len(request.message) + 2
             )  # response overhead  # TODO make const
-            if return_size > self.connection_size:
+            if return_size + MULTISERVICE_READ_OVERHEAD > self.connection_size:
                 request = ReadTagFragmentedRequestPacket.from_request(self._sequence, request)
                 fragmented_requests.append(request)
             else:
@@ -1015,11 +1012,9 @@ class LogixDriver(CIPDriver):
             current_group.append(req)
             current_response_size += resp_size
 
-        # test if the first list is empty
-        if grouped_requests[0]:
-            multi_requests = [
-                MultiServiceRequestPacket(self._sequence, group) for group in grouped_requests
-            ]
+        multi_requests = [
+            MultiServiceRequestPacket(self._sequence, group) for group in grouped_requests if group
+        ]
 
         return multi_requests + fragmented_requests
 
@@ -1038,7 +1033,7 @@ class LogixDriver(CIPDriver):
                 self._cfg["use_instance_ids"],
             )
 
-            return_size = _tag_return_size(parsed_tag) + len(request.message)
+            return_size = _tag_return_size(parsed_tag) + 10  # sequence count + reply header + type code
             if return_size > self.connection_size:
                 request = ReadTagFragmentedRequestPacket.from_request(self._sequence, request)
 
@@ -1054,11 +1049,12 @@ class LogixDriver(CIPDriver):
         """
         Write to tag(s). Automatically will split tags into multiple requests by tracking the request and
         response size.  Will use the multi-service request to group many tags into a single packet and also will automatically
-        use fragmented read requests if the response size will not fit in a single packet.  Supports arrays (specify element
+        use fragmented write requests if the request size will not fit in a single packet.  Supports arrays (specify element
         count in using curly braces (array{10}).  Also supports full structure writing (when possible), value must be a
         sequence of values or a dict of {attribute: value} matching the exact structure of the destination tag.
 
-        :param tags_values: (tag, value) tuple or sequence of tag and value tuples [(tag, value), ...]
+        :param tags_values: a tag name and value as two arguments, ``write('tag', value)``, or one or more (tag, value)
+                            tuples, ``write(('tag1', 1), ('tag2', 2))``. To write a list of pairs, unpack it: ``write(*pairs)``.
         :return: a single or list of ``Tag`` objects.
         """
 
@@ -1070,15 +1066,16 @@ class LogixDriver(CIPDriver):
 
         for i, (tag, value) in enumerate(tags_values):
             parsed_requests[i]["value"] = value
+            # bit writes only check truthiness, so a string like 'False' would set the bit
+            if (
+                parsed_requests[i].get("bit") is not None
+                and parsed_requests[i]["bool_elements"] is None
+                and (value is None or isinstance(value, (str, bytes)))
+            ):
+                parsed_requests[i]["error"] = f"Invalid value for BOOL - {value!r}"
 
         requests = self._write_build_requests(parsed_requests)
         write_results = self._send_requests(requests)
-
-        for r in requests:
-            if isinstance(r, ReadModifyWriteRequestPacket):
-                result = write_results.pop(r.request_id)
-                for req_id in r._request_ids:
-                    write_results[req_id] = result
 
         results = []
         for i, (tag, value) in enumerate(tags_values):
@@ -1121,30 +1118,22 @@ class LogixDriver(CIPDriver):
         return [r for r in requests if r is not None]
 
     def _write_build_multi_requests(self, parsed_tags):
-        fragmented_requests = []
-        write_requests = []
-        bit_writes = {}
+        write_requests = []  # [ (request, request_size or None to send it alone), ...] in call order
 
         for request_id, tag_data in parsed_tags.items():
             if tag_data.get("error") is None:
 
                 bit = tag_data.get("bit")
-                data_type = tag_data["tag_info"]["data_type_name"]
                 if bit is not None and tag_data["bool_elements"] is None:
-                    if tag_data["plc_tag"] not in bit_writes:
-
-                        request = ReadModifyWriteRequestPacket(
-                            self._sequence,
-                            tag_data["plc_tag"],
-                            tag_data["tag_info"],
-                            -1 * (1 + len(bit_writes)),
-                            self._cfg["use_instance_ids"],
-                        )
-                        bit_writes[tag_data["plc_tag"]] = request
-                    else:
-                        request = bit_writes[tag_data["plc_tag"]]
-
-                    request.set_bit(bit, tag_data["value"], tag_data["request_id"])
+                    request = ReadModifyWriteRequestPacket(
+                        self._sequence,
+                        tag_data["plc_tag"],
+                        tag_data["tag_info"],
+                        request_id,
+                        self._cfg["use_instance_ids"],
+                    )
+                    request.set_bit(bit, tag_data["value"], request_id)
+                    write_requests.append((request, None))
                     continue
 
                 try:
@@ -1162,40 +1151,34 @@ class LogixDriver(CIPDriver):
                     self._cfg["use_instance_ids"],
                     tag_data["write_value"],
                 )
-                request.build_message()
-                request._msg_setup = False
-
-                req_size = len(request.message)
+                req_size = len(request.build_message())
                 if req_size > self.connection_size:
                     request = WriteTagFragmentedRequestPacket.from_request(self._sequence, request)
-                    fragmented_requests.append(request)
-                else:
-                    write_requests.append(request)
+                if req_size + MULTISERVICE_READ_OVERHEAD > self.connection_size:
+                    req_size = None  # does not fit in a multi-service packet
+                write_requests.append((request, req_size))
 
-        grouped_requests = [
-            [],
-        ]
-        current_group = grouped_requests[0]
+        # group consecutive writes into multi-service packets, the rest are sent alone in their place
+        requests = []
+        current_group = []
         current_response_size = MULTISERVICE_READ_OVERHEAD
-        for req in write_requests:
-            if current_response_size + len(req.message) > self.connection_size:
+        for req, req_size in write_requests:
+            if req_size is None or current_response_size + req_size > self.connection_size:
+                if current_group:
+                    requests.append(MultiServiceRequestPacket(self._sequence, current_group))
                 current_group = []
-                grouped_requests.append(current_group)
                 current_response_size = MULTISERVICE_READ_OVERHEAD
 
-            current_group.append(req)
-            current_response_size += len(req.message)
+            if req_size is None:
+                requests.append(req)
+            else:
+                current_group.append(req)
+                current_response_size += req_size
 
-        multi_requests = [
-            MultiServiceRequestPacket(
-                self._sequence,
-                group,
-            )
-            for group in grouped_requests
-            if group
-        ]
+        if current_group:
+            requests.append(MultiServiceRequestPacket(self._sequence, current_group))
 
-        return multi_requests + fragmented_requests + [request for request in bit_writes.values()]
+        return requests
 
     def _write_build_single_request(self, parsed_tag):
         if parsed_tag.get("error"):
@@ -1204,13 +1187,12 @@ class LogixDriver(CIPDriver):
 
         try:
             bit = parsed_tag.get("bit")
-            data_type = parsed_tag["tag_info"]["data_type_name"]
             if bit is not None and parsed_tag["bool_elements"] is None:
                 request = ReadModifyWriteRequestPacket(
                     self._sequence,
                     parsed_tag["plc_tag"],
                     parsed_tag["tag_info"],
-                    -1,
+                    parsed_tag["request_id"],
                     self._cfg["use_instance_ids"],
                 )
 
@@ -1228,9 +1210,8 @@ class LogixDriver(CIPDriver):
                     parsed_tag["write_value"],
                 )
                 request.build_message()
-                request._msg_setup = False
 
-                req_size = len(parsed_tag["write_value"]) + len(request.message)
+                req_size = len(request.message)
                 if req_size > self.connection_size:
                     request = WriteTagFragmentedRequestPacket.from_request(self._sequence, request)
 
@@ -1248,25 +1229,28 @@ class LogixDriver(CIPDriver):
         :return: a dict of the tag's definition
 
         """
+        if tag_name[:8].lower() == "program:":
+            tag_name = "Program:" + tag_name[8:]
         base, *attrs = tag_name.split(".")
         if base.startswith("Program:"):
             base = f"{base}.{attrs.pop(0)}"
         return self._get_tag_info(base, attrs)
 
     def _get_tag_info(self, base, attrs) -> Optional[dict]:
+        def _key(data, name):
+            # Logix names are case-insensitive: exact key first, else a case-insensitive match
+            name = util.strip_array(name)
+            if name in data:
+                return name
+            return next((k for k in data if k.lower() == name.lower()), name)
+
         def _recurse_attrs(attrs, data):
             cur, *remain = attrs
-            curr_tag = util.strip_array(cur)
-            if not len(remain):
-                return data[curr_tag]
-            else:
-                if curr_tag in data:
-                    return _recurse_attrs(remain, data[curr_tag]["data_type"]["internal_tags"])
-                else:
-                    return None
+            info = data[_key(data, cur)]
+            return _recurse_attrs(remain, info["data_type"]["internal_tags"]) if remain else info
 
         try:
-            data = self._tags[util.strip_array(base)]
+            data = self._tags[_key(self._tags, base)]
             if not len(attrs):
                 return data
             else:
@@ -1312,6 +1296,8 @@ class LogixDriver(CIPDriver):
                 implicit_element = True
 
             request_tag = tag
+            if tag[:8].lower() == "program:":
+                tag = "Program:" + tag[8:]
             bit = None
             bool_elements = None
 
@@ -1334,6 +1320,12 @@ class LogixDriver(CIPDriver):
                 total_size = (bit or 0) + elements
                 elements = (total_size // 32) + (1 if total_size % 32 else 0)
 
+            if bit is not None and tag_info["tag_type"] != "atomic":
+                raise RequestError(f"Bit access is not supported on {tag_info['data_type_name']}")
+            if elements > 0xFFFF:
+                raise RequestError("Element count above 65535 is not supported in one request")
+            tag_request_path(tag, tag_info, self._cfg["use_instance_ids"])  # a bad array index fails here, per tag
+
             return {
                 "user_tag": request_tag,  # tag name from user, without element request
                 "plc_tag": tag,  # parsed tag name, the name of the tag in the plc the request will be using
@@ -1345,7 +1337,7 @@ class LogixDriver(CIPDriver):
         except RequestError:
             raise
         except Exception as err:
-            raise RequestError("Failed to parse tag request", tag) from err
+            raise RequestError(f"Failed to parse tag request {tag!r}: {err}") from err
 
     def _send_requests(self, requests):
         results = {}
@@ -1358,8 +1350,8 @@ class LogixDriver(CIPDriver):
                 if request.type_ != "multi":
                     results[request.request_id] = Tag(request.tag, None, None, str(err))
                 else:
-                    for tag in request.tags:
-                        results[tag["request_id"]] = Tag(tag["tag"], None, None, str(err))
+                    for tag in request.requests:
+                        results[tag.request_id] = Tag(tag.tag, None, None, str(err))
             else:
                 if request.type_ != "multi":
                     if response:
@@ -1382,6 +1374,10 @@ class LogixDriver(CIPDriver):
                             results[req.request_id] = Tag(
                                 req.tag, None, None, req.error or resp.error
                             )
+                    for req in request.requests:
+                        results.setdefault(
+                            req.request_id, Tag(req.tag, None, None, response.error or "No reply")
+                        )
         return results
 
     def send(self, request: RequestPacket):
@@ -1395,66 +1391,51 @@ class LogixDriver(CIPDriver):
     def _send_read_fragmented(
         self, request: ReadTagFragmentedRequestPacket
     ) -> ReadTagFragmentedResponsePacket:
-        if not request.error:
-            offset = 0
-            responses = []
-            while offset is not None:
-                response: ReadTagFragmentedResponsePacket = super().send(request)
-                responses.append(response)
-                if response.service_status == INSUFFICIENT_PACKETS:
-                    offset += len(response.value_bytes)
-                    request = ReadTagFragmentedRequestPacket.from_request(
-                        self._sequence, request, offset
-                    )
-                else:
-                    if response.error:
-                        self.__log.error(f"Fragment failed with error: {response.error}")
+        offset = 0
+        responses = []
+        while offset is not None:
+            response: ReadTagFragmentedResponsePacket = super().send(request)
+            if not response:
+                self.__log.error(f"Fragment failed with error: {response.error}")
+                return response  # keeps the PLC's error
+            responses.append(response)
+            if response.service_status == INSUFFICIENT_PACKETS:
+                offset += len(response.value_bytes)
+                request = ReadTagFragmentedRequestPacket.from_request(
+                    self._sequence, request, offset
+                )
+            else:
+                offset = None
 
-                    offset = None
+        final_response = responses[-1]
+        final_response.value_bytes = b"".join(resp.value_bytes for resp in responses)
+        final_response.parse_value()
 
-            if all(responses):
-                final_response = responses[-1]
-                final_response.value_bytes = b"".join(resp.value_bytes for resp in responses)
-                final_response.parse_value()
-
-                self.__log.debug(f"Reassembled Response: {final_response!r}")
-                return final_response
-
-        failed_response = ReadTagFragmentedResponsePacket(request, None)
-        failed_response._error = request.error or "One or more fragment responses failed"
-        self.__log.debug(f"Reassembled Response: {failed_response!r}")
-        return failed_response
+        self.__log.debug(f"Reassembled Response: {final_response!r}")
+        return final_response
 
     def _send_write_fragmented(
         self, request: WriteTagFragmentedRequestPacket
     ) -> WriteTagFragmentedResponsePacket:
-        if not request.error:
-            responses = []
-            request.build_message()
-            segment_size = self.connection_size - (len(request.message) - len(request.value))
-            segments = (
-                request.value[i : i + segment_size]
-                for i in range(0, len(request.value), segment_size)
+        request.build_message()
+        segment_size = self.connection_size - (len(request.message) - len(request.value))
+        segments = (
+            request.value[i : i + segment_size]
+            for i in range(0, len(request.value), segment_size)
+        )
+
+        offset = 0
+        for segment in segments:
+            _request = WriteTagFragmentedRequestPacket.from_request(
+                self._sequence, request, offset, segment
             )
+            _response = super().send(_request)
+            if not _response:
+                return _response  # stop at the first failed segment, keeps the PLC's error
+            offset += len(segment)
 
-            offset = 0
-            for segment in segments:
-                _request = WriteTagFragmentedRequestPacket.from_request(
-                    self._sequence, request, offset, segment
-                )
-                _response = super().send(_request)
-                offset += len(segment)
-                responses.append(_response)
-
-            if all(responses):
-                final_response = responses[-1]
-                self.__log.debug(f"Final Response: {final_response!r}")
-                return final_response
-
-        failed_response = WriteTagFragmentedResponsePacket(request, None)
-        failed_response._error = request.error or "One or more fragment responses failed"
-        self.__log.debug(f"Reassembled Response: {failed_response!r}")
-        return failed_response
+        self.__log.debug(f"Final Response: {_response!r}")
+        return _response
 
 
 def _parse_structure_makeup_attributes(response):
@@ -1462,10 +1443,6 @@ def _parse_structure_makeup_attributes(response):
     extract the tags list from the message received
     """
     structure = {}
-
-    if not response:
-        structure["error"] = response.error
-        return
 
     try:
         _struct = response.value
@@ -1517,7 +1494,7 @@ def encode_value(parsed_tag: dict) -> bytes:
         return _type.encode(value)
 
     except Exception as err:
-        raise RequestError("Unable to create a writable value") from err
+        raise RequestError(f"Unable to create a writable value - {err}") from err
 
 
 def _tag_return_size(tag_data):
