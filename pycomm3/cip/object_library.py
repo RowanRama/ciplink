@@ -57,6 +57,7 @@ class Attribute(NamedTuple):
 
 
 class ConnectionManagerInstances(EnumMap):
+    # instance attribute IDs of Connection Manager instance 1, not instance numbers
     open_request = b"\x01"
     open_format_rejected = b"\x02"
     open_resource_rejected = b"\x03"

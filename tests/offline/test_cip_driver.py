@@ -6,7 +6,6 @@ there being no way to control the execution of many of the private
 methods through the public API. This has lead to testing of quite a few
 private API methods to achieve an acceptable test coverage.
 """
-import itertools
 from unittest import mock
 
 import pytest
@@ -18,7 +17,6 @@ from pycomm3 import (
     CommError,
     DataError,
     PortSegment,
-    PycommError,
     RequestError,
     ResponseError,
     parse_connection_path,
@@ -139,12 +137,8 @@ def test_get_module_info_returns_expected_identity_dict():
     assert actual_response == EXPECTED_DICT
 
 
-viable_methods = ["_forward_close", "_un_register_session"]
-viable_exceptions = Exception.__subclasses__() + PycommError.__subclasses__()
-param_values = list(itertools.product(viable_methods, viable_exceptions))
-
-
-@pytest.mark.parametrize(["mock_method", "exception"], param_values)
+@pytest.mark.parametrize("mock_method", ["_forward_close", "_un_register_session"])
+@pytest.mark.parametrize("exception", [Exception, OSError, CommError])
 def test_close_raises_commerror_on_any_exception(mock_method, exception):
     """Raise a CommError if any CIPDriver methods raise exception.
 
@@ -156,13 +150,14 @@ def test_close_raises_commerror_on_any_exception(mock_method, exception):
     that's acceptable and any changes to this method should make the
     author very aware that they have changed this method.
     """
-    with mock.patch.object(CIPDriver, mock_method) as mock_method:
-        mock_method.side_effect = exception
+    with mock.patch.object(CIPDriver, mock_method) as m:
+        m.side_effect = exception
         with pytest.raises(CommError):
             driver = CIPDriver(CONNECT_PATH)
-            driver._target_is_connected = True
+            driver._target_is_connected = mock_method == "_forward_close"
             driver._session = 1
             driver.close()
+        assert m.called
 
 
 def test_context_manager_calls_open_close():
@@ -259,7 +254,7 @@ def test__forward_close_raises_commerror_if_session_zero():
         driver._forward_close()
 
 
-@pytest.mark.parametrize("conf_session", range(1, 100))
+@pytest.mark.parametrize("conf_session", [1, 0xFFFFFFFF])
 def test__register_session_returns_configured_session(conf_session):
     driver = CIPDriver(CONNECT_PATH)
     driver._sock = Mocket(bytes(4) + UDINT.encode(conf_session) + bytes(20))

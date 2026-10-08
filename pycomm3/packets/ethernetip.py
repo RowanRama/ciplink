@@ -24,7 +24,7 @@
 
 import logging
 from itertools import cycle
-from typing import Generator
+from typing import Iterator
 
 from .base import RequestPacket, ResponsePacket
 from .util import get_extended_status, get_service_status
@@ -56,12 +56,11 @@ class AddressItem(EnumMap):
 class SendUnitDataResponsePacket(ResponsePacket):
     __log = logging.getLogger(f"{__module__}.{__qualname__}")
 
-    def __init__(self, request: "SendUnitDataRequestPacket", raw_data: bytes = None):
-        super().__init__(request, raw_data)
-
     def _parse_reply(self):
         try:
             super()._parse_reply()
+            if self.command_status != SUCCESS:
+                return  # encapsulation error (or unparseable header): no CIP body
             self.service = Services.get(Services.from_reply(self.raw[46:47]))
             self.service_status = USINT.decode(self.raw[48:49])
             self.data = self.raw[50:]
@@ -75,14 +74,6 @@ class SendUnitDataResponsePacket(ResponsePacket):
             and self.service in MULTI_PACKET_SERVICES
         )
         return all((super().is_valid(), valid))
-
-    def command_extended_status(self) -> str:
-        status = get_service_status(self.command_status)
-        ext_status = get_extended_status(self.raw, 48)
-        if ext_status:
-            return f"{status} - {ext_status}"
-
-        return status
 
     def service_extended_status(self) -> str:
         status = get_service_status(self.service_status)
@@ -102,28 +93,21 @@ class SendUnitDataRequestPacket(RequestPacket):
 
     def __init__(self, sequence: cycle):
         super().__init__()
-        self._sequence = next(sequence) if isinstance(sequence, Generator) else sequence
+        self._sequence = next(sequence) if isinstance(sequence, Iterator) else sequence
 
     def _setup_message(self):
         super()._setup_message()
         self._msg.append(UINT.encode(self._sequence))
 
-    def build_request(
-        self, target_cid: bytes, session_id: int, context: bytes, option: int, **kwargs
-    ):
-
-        return super().build_request(target_cid, session_id, context, option, **kwargs)
-
 
 class SendRRDataResponsePacket(ResponsePacket):
     __log = logging.getLogger(f"{__module__}.{__qualname__}")
 
-    def __init__(self, request, raw_data: bytes = None, *args, **kwargs):
-        super().__init__(request, raw_data)
-
     def _parse_reply(self):
         try:
             super()._parse_reply()
+            if self.command_status != SUCCESS:
+                return  # encapsulation error (or unparseable header): no CIP body
             self.service = Services.get(Services.from_reply(self.raw[40:41]))
             self.service_status = USINT.decode(self.raw[42:43])
             self.data = self.raw[44:]
@@ -133,14 +117,6 @@ class SendRRDataResponsePacket(ResponsePacket):
 
     def is_valid(self) -> bool:
         return all((super().is_valid(), self.service_status == SUCCESS))
-
-    def command_extended_status(self) -> str:
-        status = get_service_status(self.command_status)
-        ext_status = get_extended_status(self.raw, 42)
-        if ext_status:
-            return f"{status} - {ext_status}"
-
-        return status
 
     def service_extended_status(self) -> str:
         status = get_service_status(self.service_status)
@@ -230,6 +206,8 @@ class ListIdentityResponsePacket(ResponsePacket):
     def _parse_reply(self):
         try:
             super()._parse_reply()
+            if self.command_status != SUCCESS:
+                return  # encapsulation error (or unparseable header): no identity
             self.data = self.raw[26:]
             self.identity = ListIdentityObject.decode(self.data)
         except Exception as err:

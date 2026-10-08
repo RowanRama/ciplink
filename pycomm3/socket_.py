@@ -41,8 +41,8 @@ class Socket:
     def connect(self, host, port):
         try:
             self.sock.connect((socket.gethostbyname(host), port))
-        except socket.error:
-            raise CommError(f"Failed to open socket to {host}:{port}")
+        except socket.error as err:
+            raise CommError(f"Failed to open socket to {host}:{port}") from err
 
     def send(self, msg, timeout=0):
         if timeout != 0:
@@ -65,7 +65,10 @@ class Socket:
             data = self.sock.recv(256)
             data_len = struct.unpack_from("<H", data, 2)[0]
             while len(data) - HEADER_SIZE < data_len:
-                data += self.sock.recv(256)
+                chunk = self.sock.recv(256)
+                if not chunk:
+                    raise CommError("socket connection closed by peer")
+                data += chunk
 
             return data
         except socket.error as err:

@@ -26,7 +26,7 @@ import logging
 from reprlib import repr as _r
 from typing import Optional
 
-from ..cip import DINT, UINT, UDINT
+from ..cip import DINT, UINT, UDINT, STATUS
 from ..const import SUCCESS
 from ..exceptions import CommError
 
@@ -93,7 +93,7 @@ class ResponsePacket(Packet):
             self._error = f"Failed to parse reply - {err}"
 
     def command_extended_status(self) -> str:
-        return "Unknown Error"
+        return STATUS.get(self.command_status, f"Unknown encapsulation status ({self.command_status:#06x})")
 
     def service_extended_status(self) -> str:
         return "Unknown Error"

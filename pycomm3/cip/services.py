@@ -23,7 +23,6 @@
 #
 
 from ..map import EnumMap
-from .data_types import USINT
 
 __all__ = [
     "EncapsulationCommands",
@@ -96,8 +95,7 @@ class Services(EnumMap):
         """
         Get service from reply service code
         """
-        val = cls.get(USINT.encode(USINT.decode(reply_service) - 128))
-        return val
+        return cls.get(bytes([reply_service[0] & 0x7F])) if reply_service else None
 
 
 MULTI_PACKET_SERVICES = {
