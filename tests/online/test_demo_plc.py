@@ -14,7 +14,16 @@ def test_demo_plc(plc):
     assert 'pycomm3' in plc.info['programs']
     del plc.info['programs']
 
-    assert plc.info == DEMO_PLC_INFO
+    # slot types were recorded when only the last type per slot was kept, so check they are a subset
+    modules = plc.info.pop('modules')
+    assert modules.keys() == {'Local'} and modules['Local'].keys() == {'slots'}
+    slots = modules['Local']['slots']
+    expected_slots = DEMO_PLC_INFO['modules']['Local']['slots']
+    assert slots.keys() == expected_slots.keys()
+    for slot, info in expected_slots.items():
+        assert set(info['types']) <= set(slots[slot]['types'])
+
+    assert plc.info == {k: v for k, v in DEMO_PLC_INFO.items() if k != 'modules'}
 
 
 def test_get_time(plc):

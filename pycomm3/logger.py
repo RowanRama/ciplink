@@ -22,6 +22,7 @@
 # SOFTWARE.
 #
 
+import functools
 import logging
 import sys
 
@@ -34,14 +35,10 @@ _logger = logging.getLogger("pycomm3")
 _logger.addHandler(logging.NullHandler())
 
 
-def _verbose(self: logging.Logger, msg, *args, **kwargs):
-    if self.isEnabledFor(LOG_VERBOSE):
-        self._log(LOG_VERBOSE, msg, *args, **kwargs)
-
-
 logging.addLevelName(LOG_VERBOSE, "VERBOSE")
-logging.verbose = _verbose
-logging.Logger.verbose = _verbose
+logging.Logger.verbose = functools.partialmethod(logging.Logger.log, LOG_VERBOSE)  # keeps the caller's funcName
+
+_handlers = []  # (logger, handler) pairs added by the last configure_default_logger call
 
 
 def configure_default_logger(level: int = logging.INFO, filename: str = None, logger: str = None):
@@ -55,7 +52,14 @@ def configure_default_logger(level: int = logging.INFO, filename: str = None, lo
     By default this method only configures the 'pycomm3' logger, to also configure your own logger,
     set the `logger` argument to the name of the logger you wish to also configure.  For the root logger
     use an empty string (``''``).
+
+    Each call replaces the handlers set up by the previous call.
     """
+    for _log, _handler in _handlers:
+        _log.removeHandler(_handler)
+        _handler.close()
+    _handlers.clear()
+
     loggers = [logging.getLogger('pycomm3'), ]
     if logger == '':
         loggers.append(logging.getLogger())
@@ -67,14 +71,20 @@ def configure_default_logger(level: int = logging.INFO, filename: str = None, lo
     )
     handler = logging.StreamHandler(stream=sys.stdout)
     handler.setFormatter(formatter)
+    handlers = [handler]
 
     if filename:
         file_handler = logging.FileHandler(filename, encoding="utf-8")
         file_handler.setFormatter(formatter)
+        handlers.append(file_handler)
 
     for _log in loggers:
         _log.setLevel(level)
-        _log.addHandler(handler)
 
-        if filename:
-            _log.addHandler(file_handler)
+    if logger == '':
+        loggers = loggers[1:]  # pycomm3 propagates to the root logger, so only root gets the handlers
+
+    for _log in loggers:
+        for _handler in handlers:
+            _log.addHandler(_handler)
+            _handlers.append((_log, _handler))

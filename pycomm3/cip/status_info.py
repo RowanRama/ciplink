@@ -148,11 +148,11 @@ EXTEND_CODES = {
         0x0317: "Connection not scheduled",
     },
     0x04: {
-        0x0000: "Extended status out of memory",
+        0x0000: "Syntax error decoding the request path",
         0x0001: "Extended status out of instances",
     },
     0x05: {
-        0x0000: "Extended status out of memory",
+        0x0000: "Request path destination unknown, probably instance number is not present",
         0x0001: "Extended status out of instances",
     },
     0x1F: {0x0203: "Connection timeout"},

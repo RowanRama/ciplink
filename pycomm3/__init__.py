@@ -32,3 +32,8 @@ from .custom_types import *
 from .cip_driver import *
 from .logix_driver import *
 from .slc_driver import *
+
+from types import ModuleType as _ModuleType
+
+# export everything above except the submodules, so `from pycomm3 import *` does not shadow map, logger, etc.
+__all__ = [n for n, v in list(globals().items()) if not n.startswith('_') and not isinstance(v, _ModuleType)]
