@@ -61,7 +61,7 @@ def enbt_ok_led_status():
             64: 'flashing red',
             96: 'solid green'
         }
-        print(statuses.get(data.value), 'unknown')
+        print(statuses.get(data.value, 'unknown'))
 
 
 # Read Link Status of any Logix Ethernet Module

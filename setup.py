@@ -2,12 +2,12 @@ from setuptools import setup
 import os
 
 __version__ = "0.0.0"
-with open("pycomm3/_version.py") as f:
+with open("pycomm3/_version.py", encoding="utf-8") as f:
     exec(f.read())
 
 
 def read(file_name):
-    return open(os.path.join(os.path.dirname(__file__), file_name)).read()
+    return open(os.path.join(os.path.dirname(__file__), file_name), encoding="utf-8").read()
 
 
 setup(

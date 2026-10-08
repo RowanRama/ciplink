@@ -11,14 +11,15 @@ def find_attributes():
 
 def tag_list_equal():
     with LogixDriver('10.61.50.4/10') as plc:
-        tag_list = plc.get_tag_list()
-        if {tag['tag_name']: tag for tag in tag_list} == plc.tags:
+        tag_list = plc.get_tag_list(program='*', cache=False)
+        if {tag['tag_name'] for tag in tag_list} == plc.tags.keys():
             print('They are the same!')
 
     with LogixDriver('10.61.50.4/10', init_tags=False) as plc2:
-        plc2.get_tag_list()
+        plc2.get_tag_list(program='*')
 
-    if plc.tags == plc2.tags:
+    # tags_json leaves out the type classes, which are new objects for every upload
+    if plc.tags_json == plc2.tags_json:
         print('Calling get_tag_list() does the same thing.')
     else:
         print('Calling get_tag_list() does NOT do the same.')

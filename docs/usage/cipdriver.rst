@@ -6,6 +6,28 @@ Using CIPDriver
 
 The :class:`CIPDriver` is the base class for the other drivers, so everything
 on this page also applies to the other drivers as well.
+``pycomm3`` is a client for explicit messaging only (unconnected/UCMM and class 3 connected over TCP 44818);
+implicit class 0/1 I/O (UDP 2222), produced/consumed tags and acting as a CIP server/adapter are not supported.
+
+
+Connection Settings
+-------------------
+
+All drivers accept ``socket_timeout`` and ``connection_size`` keyword arguments::
+
+    with LogixDriver('10.20.30.100', socket_timeout=2.0, connection_size=500) as plc:
+        result = plc.read('Speed')
+
+The defaults are five seconds and 4,000 bytes. Connection sizes up to 511 bytes
+use a standard Forward Open; larger sizes use an Extended Forward Open, with a
+500-byte fallback if the extended request is rejected. Batching bounds both
+outgoing messages and expected replies.
+
+Set ``connection_size`` before the connected CIP session is opened; close the
+driver before changing an established connection's size. Updating
+``socket_timeout`` also updates an existing socket. A transport failure discards
+the broken session; reopen the driver to establish a new one. Failed operations
+are not automatically replayed.
 
 
 Discovery and Identification
@@ -75,6 +97,7 @@ implement features not included in one of the drivers.  In fact, many features a
 are implemented using the :meth:`~CIPDriver.generic_message` method.  This method operates in a similar
 way to *CIP Generic* messages in Logix with the ``MSG`` instruction.  For more examples see the
 :ref:`examples/generic_messaging_examples:Generic Messaging` section.
+``route_path`` is only used with ``unconnected_send=True``, it is the route for the *Unconnected Send* wrapper.
 
 To demonstrate how a generic message can be used, below is the process that was used to implement the
 :meth:`~LogixDriver.get_plc_name` feature for the :class:`LogixDriver`.
@@ -99,7 +122,8 @@ we need: CIP service, class, instance, etc.
 
 5. Since we're not in the PLC, we're not storing the response in a tag.  If we set the ``data_type``
    parameter to a :class:`DataType`, that type will be used to decode the response.  Else, the
-   raw response ``bytes`` will be returned.
+   raw response ``bytes`` will be returned.  ``data_type`` decodes only what the type needs; for an assembly
+   or other multi-value reply use an array (``INT[n]``, ``INT[None]``), a ``Struct``, or ``None`` for raw bytes.
 
 Next, the screenshot below contains enough information for us to determine the data type that can be
 used to decode the response.

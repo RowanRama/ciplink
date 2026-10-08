@@ -18,6 +18,14 @@ responsibility to maintain the connection, the drivers do not implement any peri
 is fairly long, but a long lived connection will need to issue a request usually at least once a minute or the PLC
 may close the connection.
 
+Each ``open()`` (or ``with`` block) connects and registers a session, and a :class:`LogixDriver` also reads the
+controller info and uploads the tag list, so for repeated reads keep one driver open and read several tags per call.
+Requests on one driver are sent one at a time, so a driver can be shared between threads if ``open()`` is called before
+starting them; for parallel requests use one driver per thread and share the tag list as shown in `Creating a LogixDriver`_.
+
+If a request fails with a ``CommError`` (timeout, connection reset) the driver closes the connection; call ``open()``
+again to reconnect.
+
 Each driver requires a ``path`` argument, this is a CIP path to the destination device. The paths used in ``pycomm3`` are
 similar to how they appear in Logix.
 
@@ -47,9 +55,10 @@ There are three possible forms:
         To use a custom port, provide it following a colon with the IP address, e.g. ``10.20.30.100:4444``.
 
 >>> from pycomm3 import CIPDriver
->>> with CIPDriver('10.20.30.100') as drive:
->>>     print(drive)
-Device: AC Drive, Revision: 1.2
+>>> CIPDriver.list_identity('10.20.30.100')
+{'encap_protocol_version': 1, 'ip_address': '10.20.30.100', 'vendor': 'Rockwell Automation/Allen-Bradley',
+'product_type': 'AC Drive', 'product_code': 150, 'revision': {'major': 1, 'minor': 2}, 'status': b'0\x00',
+'serial': 'aabbccdd', 'product_name': 'PowerFlex 525', 'state': 3}
 
 The default behavior is to use the *Extended Forward Open* service when opening a connection.  This allows the use of ~4KB of
 data for each request, the standard is only ~500 bytes.  Although this requires the communications module to be an EN2T or newer
@@ -84,6 +93,8 @@ could take some time to upload.  A very large tag list on an old processor with 
 while a small tag list or a new processor might take <1 second.  If you are setting up multiple drivers on the same PLC,
 startup time can be saved by uploading the tag list in the first driver and disabling ``init_tags`` in the others.
 Then you can pass the uploaded tag list from the first driver to the other drivers, shown below.
+A tag list is only valid for the controller it was uploaded from: on v21+ firmware tags are addressed by ``instance_id``,
+which differs between controllers even with identical programs.
 
 ::
 

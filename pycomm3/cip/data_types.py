@@ -102,17 +102,16 @@ def _repr(buffer: _BufferType) -> str:
         return repr(buffer)
 
 
-def _get_bytes(buffer: _BufferType, length: int) -> bytes:
-    if isinstance(buffer, bytes):
-        return buffer[:length]
-
-    return buffer.read(length)
-
-
 def _as_stream(buffer: _BufferType):
     if isinstance(buffer, bytes):
         return BytesIO(buffer)
     return buffer
+
+
+def _bool(value) -> bool:
+    if value is None or isinstance(value, (str, bytes)):
+        raise TypeError(f"expected a bool, got {value!r}")
+    return bool(value)
 
 
 class _DataTypeMeta(type):
@@ -197,6 +196,8 @@ class DataType(metaclass=_DataTypeMeta):
         data = stream.read(size)
         if not data:
             raise BufferEmptyError()
+        if len(data) < size:  # size -1 (read all) never trips this
+            raise DataError(f"expected {size} bytes, got {len(data)}")
         return data
 
     def __repr__(self) -> str:
@@ -235,7 +236,7 @@ class BOOL(ElementaryDataType):
 
     @classmethod
     def _encode(cls, value: Any) -> bytes:
-        return b"\xFF" if value else b"\x00"
+        return b"\xFF" if _bool(value) else b"\x00"
 
     @classmethod
     def _decode(cls, stream: BytesIO) -> bool:
@@ -373,14 +374,17 @@ class DATE_AND_TIME(ElementaryDataType):
     """
 
     code = 0xCF  #: 0xCF
-    size = 8
+    size = 6
 
     @classmethod
-    def encode(cls, time: int, date: int, *args, **kwargs) -> bytes:
-        try:
-            return UDINT.encode(time) + UINT.encode(date)
-        except Exception as err:
-            raise DataError(f"Error packing {time!r} as {cls.__name__}") from err
+    def encode(cls, value, date=None, *args, **kwargs) -> bytes:
+        # value is a (time_ms, date_days) tuple; the old encode(time, date) call still works
+        return super().encode(value if date is None else (value, date))
+
+    @classmethod
+    def _encode(cls, value):
+        time, date = value
+        return UDINT.encode(time) + UINT.encode(date)
 
     @classmethod
     def _decode(cls, stream: BytesIO) -> Tuple[int, int]:
@@ -403,7 +407,7 @@ class LDT(ULINT):
     code = 0xCC  #: 0xCC
 
 
-class TIME32(UDINT):
+class TIME32(DINT):
     """
     Duration of time in microseconds
     """
@@ -418,17 +422,19 @@ class StringDataType(ElementaryDataType):
 
     len_type = None  #: data type of the string length
     encoding = "iso-8859-1"  #: encoding of string data
+    char_size = 1  #: bytes per character; the length counts characters
 
     @classmethod
     def _encode(cls, value: str, *args, **kwargs) -> bytes:
-        return cls.len_type.encode(len(value)) + value.encode(cls.encoding)
+        data = value.encode(cls.encoding)
+        return cls.len_type.encode(len(data) // cls.char_size) + data
 
     @classmethod
     def _decode(cls, stream: BytesIO) -> str:
         str_len = cls.len_type.decode(stream)
         if str_len == 0:
             return ""
-        str_data = cls._stream_read(stream, str_len)
+        str_data = cls._stream_read(stream, str_len * cls.char_size)
 
         return str_data.decode(cls.encoding)
 
@@ -487,18 +493,15 @@ class BitArrayType(ElementaryDataType):
     @classmethod
     def _decode(cls, stream: BytesIO) -> Any:
         val = cls.host_type.decode(stream)
-        bits = [x == "1" for x in bin(val)[2:]]
-        bools = [False for _ in range((cls.size * 8) - len(bits))] + bits
-        bools.reverse()
-        return bools
+        return [bool(val >> i & 1) for i in range(cls.size * 8)]
 
     @classmethod
     def _encode(cls, value: Any) -> bytes:
         if len(value) != (8 * cls.size):
-            raise DataError(f"boolean arrays must be multiple of 8: not {len(value)}")
+            raise DataError(f"{cls.__name__} needs exactly {8 * cls.size} values, got {len(value)}")
         _value = 0
         for i, val in enumerate(value):
-            if val:
+            if _bool(val):
                 _value |= 1 << i
         return cls.host_type._encode(_value)
 
@@ -551,6 +554,7 @@ class STRING2(StringDataType):
     code = 0xD5  #: 0xD5
     len_type = UINT
     encoding = "utf-16-le"
+    char_size = 2
 
 
 class FTIME(DINT):
@@ -589,11 +593,8 @@ class STRINGN(StringDataType):
     def encode(cls, value: str, char_size: int = 1) -> bytes:
         try:
             encoding = cls.ENCODINGS[char_size]
-            return (
-                UINT.encode(char_size)
-                + UINT.encode(len(value))
-                + value.encode(encoding)
-            )
+            data = value.encode(encoding)
+            return UINT.encode(char_size) + UINT.encode(len(data) // char_size) + data
         except Exception as err:
             raise DataError(
                 f"Error encoding {value!r} as STRINGN using char. size {char_size}"
@@ -609,6 +610,8 @@ class STRINGN(StringDataType):
         except KeyError as err:
             raise DataError(f"Unsupported character size: {char_size}") from err
         else:
+            if not char_count:
+                return ""
             data = cls._stream_read(stream, char_count * char_size)
 
             return data.decode(encoding)
@@ -750,32 +753,21 @@ class STRINGI(StringDataType):
             ) from err
 
     @classmethod
-    def decode(
-        cls, buffer: _BufferType
-    ) -> Tuple[Sequence[str], Sequence[str], Sequence[int]]:
-        stream = _as_stream(buffer)
-        try:
-            count = USINT.decode(stream)
-            strings = []
-            langs = []
-            char_sets = []
-            for _ in range(count):
-                lang = SHORT_STRING.decode(b"\x03" + stream.read(3))
-                langs.append(lang)
-                _str_type = cls.STRING_TYPES[stream.read(1)[0]]
-                char_set = UINT.decode(stream)
-                char_sets.append(char_set)
-                string = _str_type.decode(stream)
-                strings.append(string)
+    def _decode(cls, stream: BytesIO) -> Tuple[List[str], List[str], List[int]]:
+        count = USINT.decode(stream)
+        strings = []
+        langs = []
+        char_sets = []
+        for _ in range(count):
+            lang = SHORT_STRING.decode(b"\x03" + stream.read(3))
+            langs.append(lang)
+            _str_type = cls.STRING_TYPES[stream.read(1)[0]]
+            char_set = UINT.decode(stream)
+            char_sets.append(char_set)
+            string = _str_type.decode(stream)
+            strings.append(string)
 
-            return strings, langs, char_sets
-        except Exception as err:
-            if isinstance(err, BufferEmptyError):
-                raise
-            else:
-                raise DataError(
-                    f"Error unpacking {_repr(buffer)} as {cls.__name__}"
-                ) from err
+        return strings, langs, char_sets
 
 
 class DerivedDataType(DataType):
@@ -813,6 +805,8 @@ def Array(
         - ``DataType`` - length read from beginning of buffer as type
         - ``None`` - unbound array, consumes entire buffer on decode
     """
+    if not isinstance(element_type_, type):
+        element_type_ = type(element_type_)  # an element instance only carries a name; arrays need the class
 
     class Array(ArrayType):
         length: Union[USINT, UINT, UDINT, ULINT, int, None] = length_
@@ -834,6 +828,8 @@ def Array(
             try:
                 if issubclass(cls.element_type, BitArrayType):
                     chunk_size = cls.element_type.size * 8
+                    if len(values) % chunk_size:
+                        raise DataError(f"BOOL array values must be a multiple of {chunk_size}")
                     _len = len(values) // chunk_size
                     values = [
                         values[i : i + chunk_size]
@@ -862,14 +858,10 @@ def Array(
             try:
                 stream = _as_stream(buffer)
                 if _length is None:
-                    return cls._decode_all(stream)
-
-                if isinstance(_length, DataType):
-                    _len = _length.decode(stream)
+                    _val = cls._decode_all(stream)
                 else:
-                    _len = _length
-
-                _val = [cls.element_type.decode(stream) for _ in range(_length)]
+                    _len = _length if isinstance(_length, int) else _length.decode(stream)  # class or instance length type
+                    _val = [cls.element_type.decode(stream) for _ in range(_len)]
 
                 if issubclass(cls.element_type, BitArrayType):
                     return list(chain.from_iterable(_val))
@@ -964,6 +956,10 @@ class CIPSegment(DataType):
             ) from err
 
     @classmethod
+    def _encode(cls, segment: "CIPSegment", padded: bool = False) -> bytes:
+        raise NotImplementedError(f"Encoding {cls.__name__} not supported")
+
+    @classmethod
     def decode(cls, buffer: _BufferType) -> Any:
         """
         .. attention:: Not Implemented
@@ -1026,13 +1022,17 @@ class PortSegment(CIPSegment):
         else:
             link = segment.link_address
 
+        ext_port = b""
+        if port > 14:
+            ext_port, port = UINT.encode(port), 0x0F  # extended port id follows the link size
+
         if len(link) > 1:
             port |= cls.extended_link
             _len = USINT.encode(len(link))
         else:
             _len = b""
 
-        _segment = USINT.encode(port) + _len + link
+        _segment = USINT.encode(port) + _len + ext_port + link
         if len(_segment) % 2:
             _segment += b"\x00"
 
@@ -1072,10 +1072,10 @@ class LogicalSegment(CIPSegment):
     logical_format = {
         1: 0b_000_000_00,  # 8-bit
         2: 0b_000_000_01,  # 16-bit
-        4: 0b_000_000_11,  # 32-bit
+        4: 0b_000_000_10,  # 32-bit
     }
 
-    # 32-bit only valid for Instance ID and Connection Point types
+    # 32-bit is defined for Instance ID and Connection Point, Logix also accepts it for Member ID (array index)
 
     def __init__(
         self, logical_value: Union[int, bytes], logical_type: str, *args, **kwargs
@@ -1141,9 +1141,9 @@ class DataSegment(CIPSegment):
     def _encode(cls, segment: "DataSegment", padded: bool = False) -> bytes:
         _segment = cls.segment_type
         if not isinstance(segment.data, str):
-            return (
-                USINT.encode(_segment) + USINT.encode(len(segment.data)) + segment.data
-            )
+            # simple data segment: size is in 16-bit words
+            _data = segment.data + b"\x00" * (len(segment.data) % 2)
+            return USINT.encode(_segment) + USINT.encode(len(_data) // 2) + _data
 
         _segment |= cls.extended_symbol
         _data = segment.data.encode()
@@ -1187,6 +1187,7 @@ class DataTypes(EnumMap):
     real = REAL
     lreal = LREAL
 
+    # Logix reuses CIP codes: 0xCC resolves to LDT, 0xD6 to FTIME (same signed 32-bit us as Logix TIME32); the later entry wins the code lookup
     stime = STIME
     date = DATE
     time_of_day = TIME_OF_DAY

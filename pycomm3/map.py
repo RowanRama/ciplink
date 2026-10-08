@@ -42,12 +42,6 @@ class MapMeta(type):
             if not key.startswith("_")
             and not isinstance(value, (classmethod, staticmethod))
         }
-        # also add uppercase keys for each member (if they're not already lowercase)
-        lower_members = {
-            key.lower(): value
-            for key, value in members.items()
-            if key.lower() not in members
-        }
 
         if enumcls.__dict__.get("_bidirectional_", True):
             # invert members to a value->key dict
@@ -58,8 +52,8 @@ class MapMeta(type):
         else:
             value_map = {}
 
-        # merge 3 previous dicts to get member lookup dict
-        enumcls._members_ = {**members, **lower_members, **value_map}
+        # lookups lowercase the key: store lowercase names, then value->name
+        enumcls._members_ = {**{k.lower(): v for k, v in members.items()}, **value_map}
         enumcls._attributes = list(members)
 
         # lookup by value only return CAPS keys if attribute set
@@ -83,9 +77,7 @@ class MapMeta(type):
         return val
 
     def __contains__(cls, item):
-        return cls._members_.__contains__(
-            item.lower() if isinstance(item, str) else item
-        )
+        return _key(item) in cls._members_
 
     @property
     def attributes(cls):

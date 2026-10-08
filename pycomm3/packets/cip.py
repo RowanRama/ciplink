@@ -36,12 +36,10 @@ from .util import request_path, wrap_unconnected_send
 from ..cip import DataType
 
 
-class GenericConnectedResponsePacket(SendUnitDataResponsePacket):
-    __log = logging.getLogger(f"{__module__}.{__qualname__}")
+class _GenericResponse:
+    """Shared body of the generic responses: decodes data with the request's data_type, subclasses set _log"""
 
-    def __init__(
-        self, request: "GenericConnectedRequestPacket", raw_data: bytes = None
-    ):
+    def __init__(self, request, raw_data: bytes = None):
         self.data_type = request.data_type
         self.value = None
         super().__init__(request, raw_data)
@@ -49,15 +47,19 @@ class GenericConnectedResponsePacket(SendUnitDataResponsePacket):
     def _parse_reply(self):
         super()._parse_reply()
 
-        if self.data_type is None:
+        if self.data_type is None or not self.data:
             self.value = self.data
         elif self.is_valid():
             try:
                 self.value = self.data_type.decode(self.data)
             except Exception as err:
-                self.__log.exception("Failed to parse reply")
+                self._log.exception("Failed to parse reply")
                 self._error = f"Failed to parse reply - {err}"
                 self.value = None
+
+
+class GenericConnectedResponsePacket(_GenericResponse, SendUnitDataResponsePacket):
+    _log = logging.getLogger(f"{__module__}.{__qualname__}")
 
 
 class GenericConnectedRequestPacket(SendUnitDataRequestPacket):
@@ -88,28 +90,8 @@ class GenericConnectedRequestPacket(SendUnitDataRequestPacket):
         self._msg += [self.service, req_path, self.request_data]
 
 
-class GenericUnconnectedResponsePacket(SendRRDataResponsePacket):
-    __log = logging.getLogger(f"{__module__}.{__qualname__}")
-
-    def __init__(
-        self, request: "GenericUnconnectedRequestPacket", raw_data: bytes = None
-    ):
-        self.data_type = request.data_type
-        self.value = None
-        super().__init__(request, raw_data)
-
-    def _parse_reply(self):
-        super()._parse_reply()
-
-        if self.data_type is None:
-            self.value = self.data
-        elif self.is_valid():
-            try:
-                self.value = self.data_type.decode(self.data)
-            except Exception as err:
-                self.__log.exception("Failed to parse reply")
-                self._error = f"Failed to parse reply - {err}"
-                self.value = None
+class GenericUnconnectedResponsePacket(_GenericResponse, SendRRDataResponsePacket):
+    _log = logging.getLogger(f"{__module__}.{__qualname__}")
 
 
 class GenericUnconnectedRequestPacket(SendRRDataRequestPacket):
@@ -149,6 +131,6 @@ class GenericUnconnectedRequestPacket(SendRRDataRequestPacket):
                 ),
             ]
         else:
-            msg = [self.service, req_path, self.request_data, self.route_path]
+            msg = [self.service, req_path, self.request_data]
 
         self._msg += msg
