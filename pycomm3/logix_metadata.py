@@ -1,7 +1,8 @@
 """Experimental codecs inferred from Logix extended-property captures.
 
-Validated against a Logix controller. These codecs do not authenticate
-a connection. A standard pycomm3 session on the test controller is denied access.
+Validated against a Logix controller, including live authenticated
+reads. These codecs do not authenticate a connection. An unauthenticated
+pycomm3 session on the test controller is denied access.
 Only controller base-tag Description and definition records have capture evidence;
 other tag properties, scopes, inheritance and non-ASCII text remain unverified.
 """
