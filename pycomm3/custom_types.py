@@ -43,7 +43,8 @@ from .cip import (
     INT,
     ULINT,
 )
-from .cip.data_types import _StructReprMeta
+from .cip.data_types import _StructReprMeta, _bool
+from .exceptions import DataError
 
 
 __all__ = [
@@ -57,17 +58,20 @@ __all__ = [
 ]
 
 
-def FixedSizeString(size_: int, len_type_: Union[DataType, Type[DataType]] = UDINT):
+def FixedSizeString(size_: int, len_type_: Union[DataType, Type[DataType]] = UDINT, max_len_: int = None):
     """
     Creates a custom string tag type
     """
 
     class FixedSizeString(StringDataType):
         size = size_
+        max_len = max_len_ or size_
         len_type = len_type_
 
         @classmethod
         def _encode(cls, value: str, *args, **kwargs) -> bytes:
+            if len(value) > cls.max_len:
+                raise DataError(f"String longer than {cls.max_len} characters")
             return (
                 cls.len_type.encode(len(value))
                 + value.encode(cls.encoding)
@@ -207,7 +211,7 @@ def StructTag(
 
         @classmethod
         def _encode(cls, values: Dict[str, Any]):
-            # make a copy so that private host members aren't added to the original
+            # copy into a plain dict: a missing member raises (DataError) even for a defaultdict/Counter
             values = {k: v for k, v in values.items()}
 
             value = bytearray(cls.size)
@@ -221,7 +225,7 @@ def StructTag(
             for bit_member, (offset, bit) in cls.bits.items():
                 val = values[bit_member]
 
-                if val:
+                if _bool(val):
                     value[offset] |= 1 << bit
                 else:
                     value[offset] &= ~(1 << bit)
