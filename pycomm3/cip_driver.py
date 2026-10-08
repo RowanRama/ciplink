@@ -28,15 +28,14 @@ __all__ = [
     "parse_connection_path",
 ]
 
-import ipaddress
 import logging
 import socket
+import threading
 from functools import wraps
 from os import urandom
 from typing import Union, Optional, Tuple, List, Sequence, Type, Any, Dict
 
 from .cip import (
-    ConnectionManagerInstances,
     ClassCode,
     CIPSegment,
     ConnectionManagerServices,
@@ -82,17 +81,23 @@ def with_forward_open(func):
 
         logger = logging.getLogger("pycomm3.cip_driver")
         opened = False
-        if self._cfg["extended forward open"]:
-            logger.info("Attempting an Extended Forward Open...")
-        if not self._forward_open():
+        with self._lock:  # one thread opens, the others wait and _forward_open() finds it connected
             if self._cfg["extended forward open"]:
-                logger.info("Extended Forward Open failed, attempting standard Forward Open.")
-                self._cfg["extended forward open"] = False
-                self._cfg["connection_size"] = 500
-                if self._forward_open():
-                    opened = True
-        else:
-            opened = True
+                logger.info("Attempting an Extended Forward Open...")
+            if not self._forward_open():
+                if self._cfg["extended forward open"]:
+                    logger.info("Extended Forward Open failed, attempting standard Forward Open.")
+                    size = self._cfg["connection_size"]
+                    self._cfg["extended forward open"] = False
+                    self._cfg["connection_size"] = 500
+                    try:
+                        opened = self._forward_open()
+                    finally:
+                        if not opened:  # standard FO failed or raised: no evidence Large FO is unsupported
+                            self._cfg["extended forward open"] = True
+                            self._cfg["connection_size"] = size
+            else:
+                opened = True
 
         if not opened:
             msg = f"Target did not connected. {func.__name__} will not be executed."
@@ -111,7 +116,10 @@ class CIPDriver:
     __log = logging.getLogger(f"{__module__}.{__qualname__}")
     _auto_slot_cip_path = False
 
-    def __init__(self, path: str, *args, **kwargs):
+    def __init__(
+        self, path: str, *args, socket_timeout: float = 5.0,
+        connection_size: int = 4000, **kwargs
+    ):
         self._sequence: cycle = cycle(65535, start=1)
         self._sock: Optional[Socket] = None
         self._session: int = 0
@@ -120,14 +128,13 @@ class CIPDriver:
         self._target_is_connected: bool = False
         self._info: Dict[str, Any] = {}
         self._cip_path = path
+        self._lock = threading.RLock()  # one request/reply on the connection at a time
         ip, port, _path = parse_connection_path(path, self._auto_slot_cip_path)
 
         self._cfg = {
             "context": b"_pycomm_",
             "protocol version": b"\x01\x00",
-            "rpi": 5000,
             "port": port or 44818,
-            "timeout": 10,
             "ip address": ip,
             "cip_path": _path,
             "option": 0,
@@ -139,9 +146,12 @@ class CIPDriver:
             "connection_size": 4000,
             "socket_timeout": 5.0,
         }
+        self.socket_timeout = socket_timeout
+        self.connection_size = connection_size
 
     def __enter__(self):
-        self.open()
+        if not self.open():
+            raise CommError("failed to register a session")
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -174,8 +184,17 @@ class CIPDriver:
 
     @property
     def connection_size(self):
-        """CIP connection size, ``4000`` if using Extended Forward Open else ``500``"""
+        """Maximum connected message size; configure before a Forward Open."""
         return self._cfg["connection_size"]
+
+    @connection_size.setter
+    def connection_size(self, value):
+        if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 65535:
+            raise ValueError("connection_size must be an integer between 1 and 65535")
+        if self._target_is_connected:
+            raise RequestError("Close the connection before changing connection_size")
+        self._cfg["connection_size"] = value
+        self._cfg["extended forward open"] = value > 511
 
     @property
     def socket_timeout(self):
@@ -184,6 +203,11 @@ class CIPDriver:
 
     @socket_timeout.setter
     def socket_timeout(self, value):
+        if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))
+                                  or not 0 < value < float("inf")):
+            raise ValueError("socket_timeout must be a positive finite number or None")
+        if self._sock is not None:
+            self._sock.settimeout(value)
         self._cfg["socket_timeout"] = value
 
     @classmethod
@@ -191,13 +215,15 @@ class CIPDriver:
         """
         Uses the ListIdentity service to identify the target
 
-        :return: device identity if reply contains valid response else None
+        :return: device identity if reply contains valid response else {}
         """
-        plc = cls(path)
-        plc.open()
-        identity = plc._list_identity()
-        plc.close()
-        return identity
+        plc = cls(path)  # cls keeps the subclass path parsing ('ip/slot')
+        try:
+            if not CIPDriver.open(plc):  # session only: skip LogixDriver's tag upload
+                return {}
+            return plc._list_identity()
+        finally:
+            plc.close()
 
     @classmethod
     def discover(cls, broadcast_address="255.255.255.255") -> List[Dict[str, Any]]:
@@ -206,15 +232,13 @@ class CIPDriver:
         Returns a list of the discovered devices Identity Object (as ``dict``).
         """
         cls.__log.info("Discovering devices...")
-        ip_addrs = [
-            sockaddr[0]
-            for family, _, _, _, sockaddr in socket.getaddrinfo(socket.gethostname(), None)
-            if family == socket.AddressFamily.AF_INET
-        ]
+        # one entry per address, getaddrinfo repeats each one per socket type on Linux
+        ip_addrs = list(dict.fromkeys(
+            sockaddr[0] for *_, sockaddr in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)
+        ))
 
-        driver = CIPDriver("0.0.0.0")  # dummy driver for creating the list_identity request
         request = ListIdentityRequestPacket()
-        message = request.build_request(None, driver._session, b"\x00" * 8, 0)
+        message = request.build_request(None, 0, b"\x00" * 8, 0)
         devices = []
 
         for ip in ip_addrs:
@@ -238,26 +262,25 @@ class CIPDriver:
     def _broadcast_discover(cls, ip, message, request, broadcast_address="255.255.255.255"):
         devices = []
         try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.settimeout(1)
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-            if ip:
-                sock.bind((ip, 0))
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+                sock.settimeout(1)
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+                if ip:
+                    sock.bind((ip, 0))
 
-            sock.sendto(message, (broadcast_address, 44818))
+                sock.sendto(message, (broadcast_address, 44818))
 
-            while True:
-                try:
-                    resp = sock.recv(4096)
-                    response = request.response_class(request, resp)
-                    if response:
-                        devices.append(response.identity)
-                except Exception:
-                    break
+                while True:
+                    try:
+                        resp = sock.recv(4096)
+                        response = request.response_class(request, resp)
+                        if response:
+                            devices.append(response.identity)
+                    except Exception:
+                        break
         except Exception:
             cls.__log.exception("Error broadcasting discover request")
-        finally:
-            return devices
+        return devices
 
     def _list_identity(self):
         request = ListIdentityRequestPacket()
@@ -291,6 +314,8 @@ class CIPDriver:
             else:
                 raise ResponseError(f"generic_message did not return valid data - {response.error}")
 
+        except CommError:
+            raise
         except Exception as err:
             raise ResponseError("error getting module info") from err
 
@@ -300,23 +325,24 @@ class CIPDriver:
 
         :return: True if successful, False otherwise
         """
-        # handle the socket layer
-        if self._connection_opened:
-            return True
-        try:
-            if self._sock is None:
-                self._sock = Socket(self._cfg["socket_timeout"])
-            self.__log.debug(f'Opening connection to {self._cfg["ip address"]}')
-            self._sock.connect(self._cfg["ip address"], self._cfg["port"])
-            self._connection_opened = True
-            self._cfg["cid"] = urandom(4)
-            self._cfg["vsn"] = urandom(4)
-            if self._register_session() is None:
-                self.__log.error("Session not registered")
-                return False
-            return True
-        except Exception as err:
-            raise CommError("failed to open a connection") from err
+        with self._lock:  # one thread opens, the others wait and find it open
+            # handle the socket layer
+            if self._connection_opened:
+                return True
+            try:
+                if self._sock is None:
+                    self._sock = Socket(self._cfg["socket_timeout"])
+                self.__log.debug(f'Opening connection to {self._cfg["ip address"]}')
+                self._sock.connect(self._cfg["ip address"], self._cfg["port"])
+                self._connection_opened = True
+                if not self._register_session():
+                    self.__log.error("Session not registered")
+                    self._drop_connection()
+                    return False
+                return True
+            except Exception as err:
+                self._drop_connection()
+                raise CommError("failed to open a connection") from err
 
     def _register_session(self) -> Optional[int]:
         """
@@ -349,7 +375,10 @@ class CIPDriver:
             return True
 
         if self._session == 0:
-            raise CommError("A session must be registered before a Forward Open")
+            raise CommError("A session must be registered before a Forward Open (call open() again after a connection error)")
+
+        # fresh connection triad per attempt, a retry must not look like the rejected connection (#282)
+        self._cfg["cid"], self._cfg["csn"], self._cfg["vsn"] = urandom(4), urandom(2), urandom(4)
 
         init_net_params = 0b_0100_0010_0000_0000  # CIP Vol 1 - 3-5.5.1.1
 
@@ -380,14 +409,14 @@ class CIPDriver:
             b"\x01\x40\x20\x00",  # T->O RPI
             net_params,
             TRANSPORT_CLASS,
+            route_path,
         ]
 
         response = self.generic_message(
             service=service,
             class_code=ClassCode.connection_manager,
-            instance=ConnectionManagerInstances.open_request,
+            instance=1,  # Connection Manager has a single instance
             request_data=b"".join(forward_open_msg),
-            route_path=route_path,
             connected=False,
             name="forward_open",
         )
@@ -407,29 +436,36 @@ class CIPDriver:
         Closes the current connection and un-registers the session.
         """
         errs = []
-        try:
-            if self._target_is_connected:
+        if self._target_is_connected:
+            try:
                 self._forward_close()
-            if self._session != 0:
+            except Exception as err:
+                errs.append(err)
+                self.__log.exception("Error closing connection with device")
+        if self._session:  # read after Forward Close, a transport error there has already dropped the session
+            try:
                 self._un_register_session()
-        except Exception as err:
-            errs.append(err)
-            self.__log.exception("Error closing connection with device")
+            except Exception as err:
+                errs.append(err)
+                self.__log.exception("Error closing connection with device")
 
         try:
-            if self._sock:
-                self._sock.close()
+            self._drop_connection()
         except Exception as err:
             errs.append(err)
             self.__log.exception("Error closing socket connection")
 
-        self._sock = None
+        if errs:
+            raise CommError(" - ".join(str(e) for e in errs))
+
+    def _drop_connection(self):
+        sock, self._sock = self._sock, None
+        self._target_cid = None
         self._target_is_connected = False
         self._session = 0
         self._connection_opened = False
-
-        if errs:
-            raise CommError(" - ".join(str(e) for e in errs))
+        if sock:
+            sock.close()
 
     def _un_register_session(self):
         """
@@ -437,7 +473,7 @@ class CIPDriver:
         """
         request = UnRegisterSessionRequestPacket()
         self.send(request)
-        self._session = None
+        self._session = 0
         self.__log.info("Session Unregistered")
 
     def _forward_close(self):
@@ -450,7 +486,7 @@ class CIPDriver:
         """
 
         if self._session == 0:
-            raise CommError("A session must be registered before a Forward Open")
+            raise CommError("A session must be registered before a Forward Open (call open() again after a connection error)")
 
         route_path = PADDED_EPATH.encode(
             self._cfg["cip_path"] + MSG_ROUTER_PATH, length=True, pad_length=True
@@ -462,14 +498,14 @@ class CIPDriver:
             self._cfg["csn"],
             self._cfg["vid"],
             self._cfg["vsn"],
+            route_path,
         ]
 
         response = self.generic_message(
             service=ConnectionManagerServices.forward_close,
             class_code=ClassCode.connection_manager,
-            instance=ConnectionManagerInstances.open_request,
+            instance=1,  # Connection Manager has a single instance
             connected=False,
-            route_path=route_path,
             request_data=b"".join(forward_close_msg),
             name="forward_close",
         )
@@ -504,14 +540,17 @@ class CIPDriver:
                          If set with 0, request class attributes.
         :param attribute: (optional) attribute ID for the service/class/instance
         :param request_data: (optional) any additional data required for the request.
-        :param data_type: a ``DataType`` class that will be used to decode the response, None to return just bytes
+        :param data_type: ``DataType`` used to decode the reply data, None for raw bytes. Only the bytes the type needs
+                          are decoded, so use an array (``INT[n]``, ``INT[None]``) or a ``Struct`` for replies with
+                          several values (e.g. an assembly); leave None for services that return no data
+                          (``Set_Attribute_*``)
         :param name:  return ``Tag.tag`` value, arbitrary but can be used for tracking returned Tags
         :param connected: ``True`` if service required a CIP connection (forward open), ``False`` to use UCMM
-        :param unconnected_send: (Unconnected Only) wrap service in an UnconnectedSend service
-        :param route_path: (Unconnected Only) ``True`` to use current connection route to destination, ``False`` to ignore,
-                           Or provide a path string, list of segments to be encoded as a PADDED_EPATH, or
-                           an already encoded path.
-        :return: a Tag with the result of the request. (Tag.value for writes will be the request_data)
+        :param unconnected_send: (Unconnected only) wrap the service in an UnconnectedSend
+        :param route_path: (UnconnectedSend only) route for the UnconnectedSend wrapper: ``True`` = current connection
+                           path, ``False``/``None`` = none, or a path string, list of segments or encoded bytes.
+                           Ignored unless ``unconnected_send=True``.
+        :return: a Tag whose value is the (decoded) reply data, ``b''`` when the reply carries none
         """
 
         if connected:
@@ -572,9 +611,15 @@ class CIPDriver:
                 "sequence": self._sequence,
             }
 
-            self._send(request.build_request(**request_kwargs))
+            message = request.build_request(**request_kwargs)
+            with self._lock:  # another thread must not send before this reply is read
+                try:
+                    self._send(message)
+                    reply = None if request.no_response else self._receive()
+                except BaseException:  # timeout, reset or Ctrl-C mid request: a late/partial reply would answer the next request
+                    self._drop_connection()
+                    raise
             self.__log.debug(f"Sent: %r", request)
-            reply = None if request.no_response else self._receive()
         else:
             reply = None
 

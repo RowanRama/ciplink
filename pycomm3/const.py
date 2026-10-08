@@ -49,7 +49,7 @@ INSUFFICIENT_PACKETS = 6
 OFFSET_MESSAGE_REQUEST = 40
 PAD = b"\x00"
 PRIORITY = b"\x0a"
-TIMEOUT_TICKS = b"\x05"
+TIMEOUT_TICKS = b"\x04"  # 2^10 ms * 4 = 4.1 s, must stay below the default socket_timeout (5 s)
 TIMEOUT_MULTIPLIER = b"\x07"
 TRANSPORT_CLASS = b"\xa3"
 BASE_TAG_BIT = 1 << 26

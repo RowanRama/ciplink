@@ -26,7 +26,6 @@ import string
 
 from io import BytesIO
 from typing import Union, Optional
-from collections.abc import Sequence
 
 from ..cip import (
     ClassCode,
@@ -76,13 +75,13 @@ def wrap_unconnected_send(message: bytes, route_path: bytes) -> bytes:
 
 
 def request_path(
-    class_code: Union[int, bytes, Sequence],
-    instance: Union[int, bytes, Sequence],
+    class_code: Union[int, bytes, list, tuple],
+    instance: Union[int, bytes, list, tuple],
     attribute: Union[int, bytes] = b"",
 ) -> bytes:
     segments = []
-    if isinstance(class_code, Sequence):
-        if isinstance(instance, Sequence):
+    if isinstance(class_code, (list, tuple)):
+        if isinstance(instance, (list, tuple)):
             for c, i in zip(class_code, instance):
                 segments.append(LogicalSegment(c, "class_id"))
                 segments.append(LogicalSegment(i, "instance_id"))
@@ -90,7 +89,7 @@ def request_path(
             for c in class_code:
                 segments.append(LogicalSegment(c, "class_id"))
                 segments.append(LogicalSegment(instance, "instance_id"))
-    elif isinstance(instance, Sequence):
+    elif isinstance(instance, (list, tuple)):
         for i in instance:
             segments.append(LogicalSegment(class_code, "class_id"))
             segments.append(LogicalSegment(i, "instance_id"))
@@ -108,42 +107,36 @@ def request_path(
 
 def tag_request_path(tag, tag_info, use_instance_ids):
     """
-    Returns the tag request path encoded as a packed EPATH, returns None on error.
+    Returns the tag request path encoded as a padded EPATH; raises ValueError for a non-integer index.
     """
 
-    tags = tag.split(".")
-    if tags:
-        base, *attrs = tags
-        base_tag, index = _find_tag_index(base)
-        if (
-            use_instance_ids
-            and not base.startswith("Program:")
-            and tag_info.get("instance_id")
-        ):
-            segments = [
-                LogicalSegment(ClassCode.symbol_object, "class_id"),
-                LogicalSegment(tag_info["instance_id"], "instance_id"),
-            ]
-        else:
-            segments = [
-                DataSegment(base_tag),
-            ]
-        if index is None:
-            return None
+    base, *attrs = tag.split(".")
+    base_tag, index = _find_tag_index(base)
+    if (
+        use_instance_ids
+        and not base.startswith("Program:")
+        and tag_info.get("instance_id")
+    ):
+        segments = [
+            LogicalSegment(ClassCode.symbol_object, "class_id"),
+            LogicalSegment(tag_info["instance_id"], "instance_id"),
+        ]
+    else:
+        segments = [
+            DataSegment(base_tag),
+        ]
 
-        segments += [LogicalSegment(int(idx), "member_id") for idx in index]
+    segments += [LogicalSegment(int(idx), "member_id") for idx in index]
 
-        for attr in attrs:
-            attr, index = _find_tag_index(attr)
+    for attr in attrs:
+        attr, index = _find_tag_index(attr)
 
-            attr_segments = [DataSegment(attr)]
-            attr_segments += [LogicalSegment(int(idx), "member_id") for idx in index]
+        attr_segments = [DataSegment(attr)]
+        attr_segments += [LogicalSegment(int(idx), "member_id") for idx in index]
 
-            segments += attr_segments
+        segments += attr_segments
 
-        return PADDED_EPATH.encode(segments, length=True)
-
-    return None
+    return PADDED_EPATH.encode(segments, length=True)
 
 
 def _find_tag_index(tag):
@@ -175,22 +168,10 @@ def get_extended_status(msg, start) -> Optional[str]:
     # 48 General Status
     # 49 Size of additional status
     # 50..n additional status
-    extended_status_size = USINT.decode(stream) * 2
-    extended_status = 0
-    if extended_status_size != 0:
-        # There is an additional status
-        if extended_status_size == 1:
-            extended_status = USINT.decode(stream)
-        elif extended_status_size == 2:
-            extended_status = UINT.decode(stream)
-        elif extended_status_size == 4:
-            extended_status = UDINT.decode(stream)
-        else:
-            return "[ERROR] Extended Status Size Unknown"
-    try:
-        return f"{EXTEND_CODES[status][extended_status]}  ({status:0>2x}, {extended_status:0>2x})"
-    except Exception:
+    if not USINT.decode(stream):  # additional status size, in 16-bit words
         return None
+    ext = UINT.decode(stream)  # first word is the extended code; further words are object specific
+    return f"{EXTEND_CODES.get(status, {}).get(ext, 'Extended status')}  ({status:0>2x}, {ext:0>2x})"
 
 
 def parse_read_reply(data, data_type, elements):

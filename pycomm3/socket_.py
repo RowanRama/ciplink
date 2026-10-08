@@ -37,12 +37,13 @@ class Socket:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.settimeout(timeout)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        self._receive_buffer = bytearray()
 
     def connect(self, host, port):
         try:
             self.sock.connect((socket.gethostbyname(host), port))
-        except socket.error:
-            raise CommError(f"Failed to open socket to {host}:{port}")
+        except socket.error as err:
+            raise CommError(f"Failed to open socket to {host}:{port}") from err
 
     def send(self, msg, timeout=0):
         if timeout != 0:
@@ -58,16 +59,26 @@ class Socket:
                 raise CommError("socket connection broken.") from err
         return total_sent
 
+    def settimeout(self, timeout):
+        self.sock.settimeout(timeout)
+
     def receive(self, timeout=0):
+        """Receive one encapsulation frame, retaining bytes for subsequent frames."""
         try:
             if timeout != 0:
                 self.sock.settimeout(timeout)
-            data = self.sock.recv(256)
-            data_len = struct.unpack_from("<H", data, 2)[0]
-            while len(data) - HEADER_SIZE < data_len:
-                data += self.sock.recv(256)
+            while True:
+                if len(self._receive_buffer) >= HEADER_SIZE:
+                    frame_size = HEADER_SIZE + struct.unpack_from("<H", self._receive_buffer, 2)[0]
+                    if len(self._receive_buffer) >= frame_size:
+                        frame = bytes(self._receive_buffer[:frame_size])
+                        del self._receive_buffer[:frame_size]
+                        return frame
 
-            return data
+                chunk = self.sock.recv(4096)
+                if not chunk:
+                    raise CommError("socket connection closed before a complete frame was received")
+                self._receive_buffer.extend(chunk)
         except socket.error as err:
             raise CommError("socket connection broken") from err
 

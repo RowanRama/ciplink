@@ -65,6 +65,8 @@ Drivers
     by the other drivers.  Things like opening/closing a connection, register/unregister sessions,
     forward open/close services, device discovery, and generic messaging.  It can be used to connect to
     any Ethernet/IP device, like: drives, switches, meters, and other non-PLC devices.
+    ``pycomm3`` is a client for explicit messaging only (unconnected/UCMM and class 3 connected over TCP 44818);
+    implicit class 0/1 I/O (UDP 2222), produced/consumed tags and acting as a CIP server/adapter are not supported.
 
 - `LogixDriver`_
     This driver supports services specific to ControlLogix, CompactLogix, and Micro800 PLCs.
@@ -74,7 +76,7 @@ Drivers
     This driver supports basic reading/writing data files in a SLC500 or MicroLogix PLCs.  It is
     a port of the ``SlcDriver`` from ``pycomm`` with minimal changes to make the API similar to the
     other drivers. Currently this driver is considered legacy and it's development will be on
-    a limited basis.
+    a limited basis.  PLC-5 processors are not supported by any driver.
 
 .. _CIPDriver: https://docs.pycomm3.dev/en/latest/usage/cipdriver.html
 
@@ -194,8 +196,8 @@ driver and print some of the information collected about the device.
         print(plc.info)
         # OUTPUT:
         # {'vendor': 'Rockwell Automation/Allen-Bradley', 'product_type': 'Programmable Logic Controller',
-        #  'product_code': 166, 'version_major': 28, 'version_minor': 13, 'revision': '28.13', 'serial': 'FFFFFFFF',
-        #  'device_type': '1756-L83E/B', 'keyswitch': 'REMOTE RUN', 'name': 'PLCA'}
+        #  'product_code': 166, 'revision': {'major': 28, 'minor': 13}, 'status': b'`0', 'serial': 'ffffffff',
+        #  'product_name': '1756-L83E/B', 'keyswitch': 'REMOTE RUN', 'name': 'PLCA'}
 
 
 Reading/Writing Tags
@@ -224,7 +226,7 @@ Examples::
     with LogixDriver('10.20.30.100') as plc:
         plc.read('tag1', 'tag2', 'tag3')  # read multiple tags
         plc.read('array{10}') # read 10 elements starting at 0 from an array
-        plc.read('array[5]{20}) # read 20 elements starting at elements 5 from an array
+        plc.read('array[5]{20}') # read 20 elements starting at elements 5 from an array
         plc.read('string_tag')  # read a string tag and get a string
         plc.read('a_udt_tag') # the response .value will be a dict like: {'attr1`: 1, 'attr2': 'a string', ...}
 
@@ -248,8 +250,7 @@ Examples::
 
 .. Note::
 
-    Tag names for both ``read`` and ``write`` are case-sensitive and are required to be the same as they are named in
-    the controller.  This may change in the future.
+    Tag names for both ``read`` and ``write`` are matched without regard to case (an exact match is tried first).
 
 
 Unit Testing

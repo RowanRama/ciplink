@@ -2,6 +2,65 @@
 Release History
 ===============
 
+1.3.0 (unreleased)
+==================
+
+- |:boom:| **[Breaking]** a request that fails with a ``CommError`` (timeout, connection reset) now closes the
+  connection, call ``open()`` again to reconnect.  A ``with`` block raises ``CommError`` if the connection cannot be opened.
+- |:sparkles:| requests on one driver are sent one at a time, so a driver can be shared between threads
+- |:bug:| fixed ``STRING2``, empty ``STRINGN``, ``DATE_AND_TIME`` inside structs and signed ``TIME32``;
+  data shorter than the type now raises ``DataError``
+- |:bug:| ``configure_default_logger`` replaces the handlers of a previous call instead of adding more
+
+CIPDriver
+---------
+
+- |:boom:| **[Breaking]** ``generic_message`` only uses ``route_path`` with ``unconnected_send=True``,
+  any other path must be part of ``request_data``
+- |:bug:| ``generic_message`` replies without data (e.g. ``Set_Attribute_Single``) no longer fail when ``data_type``
+  is set, the value is ``b''``
+- |:bug:| ``list_identity`` no longer uploads the tag list when called on ``LogixDriver`` and always closes its connection
+- |:sparkles:| added ``socket_timeout`` and ``connection_size`` keyword arguments
+
+LogixDriver
+-----------
+
+- |:sparkles:| added ``lazy_tags=True`` to load tag definitions on demand instead of uploading them on connect
+- |:sparkles:| BOOL array slices that do not start or end on a 32-bit boundary can be read and written
+- |:sparkles:| one-dimensional arrays with more than 65,535 elements are split into several requests
+- |:sparkles:| tag names are case-insensitive (an exact match is tried first)
+- |:bug:| ``write()`` keeps the call order, pending bit masks are sent before a following whole-value write
+- |:bug:| multi-service packets are sized by their exact request and reply bytes, a partial reply is read again
+  as a fragmented read
+- |:bug:| array indexes and instance ids above 65535 (32-bit) are encoded correctly
+- |:bug:| writing a string or ``None`` to a BOOL or a bit returns an error instead of writing ``True``
+- |:bug:| a failed ``open()`` closes the connection, connection errors during init and tag upload are raised as ``CommError``
+
+SLCDriver
+---------
+
+- |:bug:| fixed ``B3/n`` bit addresses and writes to timer/counter ``.PRE``/``.ACC``
+- |:bug:| ``ST`` string writes send the full 84-byte element
+- |:bug:| invalid addresses like ``N7:1000`` are rejected instead of being read as another address
+- |:sparkles:| uses the standard Forward Open directly
+
+1.2.16
+======
+
+- |:sparkles:| added ``DT``, ``LDT`` and ``TIME32`` data types #332
+
+LogixDriver
+-----------
+
+- |:bug:| ``get_plc_time`` reads the UTC system time (attribute 6) and returns a timezone-aware ``datetime``,
+  in local time unless ``tz`` is given #276 #306
+- |:sparkles:| added ``tag_namespace_filter`` to only upload tags whose name starts with a prefix #312
+
+SLCDriver
+---------
+
+- |:bug:| fixed odd-length string writes and garbage data on string reads #331
+
 1.2.14
 ======
 

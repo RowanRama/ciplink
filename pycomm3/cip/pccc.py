@@ -60,7 +60,7 @@ class PCCC_ASCII(PCCCStringType):
     def _encode(cls, value: str, *args, **kwargs) -> bytes:
         # PCCC ASCII is fixed at 2 bytes.
         # We truncate longer strings and pad shorter ones with spaces.
-        b_value = (value or "").encode(cls.encoding, "ignore")[:2]
+        b_value = (value or "").encode(cls.encoding)[:2]
 
         if len(b_value) == 0:
             b_value = b"  "
@@ -81,17 +81,10 @@ class PCCC_STRING(PCCCStringType):
     """
     @classmethod
     def _encode(cls, value: str) -> bytes:
-        # Encode first to handle characters dropped by "ignore"
-        data = (value or "").encode(cls.encoding, "ignore")
-        true_len = len(data)
+        data = (value or "").encode(cls.encoding)[:82]
 
-        # Pad with null byte if length is odd so it aligns to 16-bit words.
-        # This padding is NOT included in the length field.
-        if true_len & 1:
-            data += b'\x00'
-
-        # Return unpadded length + swapped padded data
-        return UINT.encode(true_len) + cls._slc_string_swap(data)
+        # Always send the whole 84-byte element: unpadded length + data padded with nulls to 82 bytes
+        return UINT.encode(len(data)) + cls._slc_string_swap(data.ljust(82, b"\x00"))
 
     @classmethod
     def _decode(cls, stream: BytesIO) -> str:

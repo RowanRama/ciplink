@@ -27,7 +27,7 @@ import pytest
 from pycomm3.cip_driver import CIPDriver
 from pycomm3.const import MICRO800_PREFIX, SUCCESS
 from pycomm3.exceptions import CommError, PycommError, RequestError
-from pycomm3.logix_driver import LogixDriver, encode_value
+from pycomm3.logix_driver import LogixDriver
 from pycomm3.packets import RequestPacket, ResponsePacket
 from pycomm3.socket_ import Socket
 from pycomm3.tag import Tag
@@ -51,7 +51,7 @@ IDENTITY_CLX_V32 = {'vendor': 'Rockwell Automation/Allen-Bradley',
                 'product_type': 'Programmable Logic Controller', 'product_code': 0,
                 'revision': {'major': 32, 'minor': 0},
                 'status': b'00', 'serial': '00000000',
-                'product_name': '1756-L85'}
+                'product_name': '1756-L83E/B'}
 
 IDENTITY_M8000 = {'encap_protocol_version': 1,
   'ip_address': '192.168.1.124',
@@ -160,8 +160,9 @@ def test_logix_context_manager_calls_open_and_close():
 
 
 def test__exit__returns_false_on_commerror():
-    ld = LogixDriver(CONNECT_PATH, init_info=False, init_tags=False)
-    assert ld.__exit__(None, None, None) is True  # Exit with no exception
+    ld = LogixDriver(CONNECT_PATH, init_tags=False)
+    with mock.patch.object(LogixDriver, 'close', side_effect=CommError):
+        assert ld.__exit__(None, None, None) is False
 
 
 def test__exit__returns_true_on_no_error_and_no_exc_type():
@@ -179,7 +180,7 @@ def test__exit__returns_false_on_no_error_and_exc_type():
 def test__repr___ret_str():
     ld = LogixDriver(CONNECT_PATH, init_info=False, init_tags=False)
     _repr = repr(ld)
-    assert repr
+    assert _repr
     assert isinstance(_repr, str)
 
 
