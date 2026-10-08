@@ -10,7 +10,15 @@ from examples.logix_extended_properties import (
     extract_cip_reply,
     probe,
 )
-from pycomm3.packets import SendUnitDataResponsePacket
+from examples.logix_metadata_transports import (
+    DEFINITION_READ,
+    IDENTITY_READ,
+    METADATA_DIRECTORY_READ,
+    compare_transports,
+)
+from pycomm3 import Tag
+from pycomm3.logix_metadata import build_description_request
+from pycomm3.packets import SendRRDataResponsePacket, SendUnitDataResponsePacket
 
 
 def enip(cip, connected=True, extra_items=()):
@@ -45,6 +53,10 @@ def test_cpf_items_and_additional_status_have_variable_lengths(connected):
     reply = decode_cip_reply(extract_cip_reply(packet))
     assert reply["additional_status"] == [0x1234, 0x5678]
     assert reply["data_hex"] == "616263"
+
+
+def test_success_status_is_labelled_success():
+    assert decode_cip_reply(bytes.fromhex("cb000000"))["status_text"] == "Success"
 
 
 @pytest.mark.parametrize("cip,expected", [
@@ -147,3 +159,75 @@ def test_invalid_probe_inputs_are_rejected_before_connecting(monkeypatch, tags, 
     monkeypatch.setattr("examples.logix_extended_properties.LogixDriver", must_not_connect)
     with pytest.raises(ValueError):
         probe("10.137.22.8", tags, properties)
+
+
+def test_transport_comparison_preserves_denials_and_only_sends_reads(monkeypatch):
+    sessions = []
+
+    class ReadOnlySession:
+        def __init__(self, ip):
+            assert ip == "10.137.22.8"
+            self._cfg = {"cid": b"CID!", "vsn": b"VSN!", "cip_path": []}
+            self._sequence = (i for i in range(1, 100))
+            self.requests = []
+            self._target_is_connected = False
+            sessions.append(self)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            self.closed = True
+
+        def _forward_open(self):
+            self._target_is_connected = True
+            return True
+
+        def generic_message(self, **kwargs):
+            # The only generic service is ordinary Forward Open. No captured
+            # class 0x64 setup services or cached connection identities are sent.
+            assert kwargs["service"] == b"\x54"
+            assert kwargs["class_code"] == b"\x06"
+            assert kwargs["instance"] == 1
+            assert kwargs["connected"] is False
+            assert kwargs["request_data"] == (
+                b"\x06\x9b" + bytes(4) + b"CID!CSM\x00VSN!\x02\0\0\0"
+                + struct.pack("<IH", 2000000, 0x43F8) * 2 + b"\xa3"
+            )
+            return Tag("forward_open", b"TCID", None, None)
+
+        def send(self, request):
+            connected = self._target_is_connected
+            wire = request.build_message()[2 if connected else 0:]
+            self.requests.append(wire)
+            status = 0x0F if wire[0] == 0x53 else 0
+            cip = bytes([wire[0] | 0x80, 0, status, 0])
+            packet_type = SendUnitDataResponsePacket if connected else SendRRDataResponsePacket
+            return packet_type(request, enip(cip, connected=connected))
+
+    monkeypatch.setattr("examples.logix_metadata_transports.CIPDriver", ReadOnlySession)
+    monkeypatch.setattr("examples.logix_metadata_transports.os.urandom", lambda length: b"CS")
+    report = compare_transports("10.137.22.8", 1063)
+    assert len(sessions) == 4
+    for session, profile in zip(sessions, report["profiles"]):
+        assert session.closed
+        assert "transport_error" not in profile
+        assert session.requests == [IDENTITY_READ, METADATA_DIRECTORY_READ,
+                                    DEFINITION_READ, build_description_request(1063)]
+        assert [read["reply"]["general_status"] for read in profile["reads"]] == [0, 0, 15, 15]
+        assert [read["reply"]["data_hex"] for read in profile["reads"][-2:]] == ["", ""]
+        assert all("decoded" not in read for read in profile["reads"])
+    assert [session._target_is_connected for session in sessions] == [False, True, True, True]
+    assert [session._cfg.get("connection_size") for session in sessions] == [None, 504, 4000, 504]
+    assert [session._cfg.get("extended forward open") for session in sessions] == [None, False, True, False]
+
+
+@pytest.mark.parametrize("ip,instance", [
+    ("10.137.22.8/1/0", 1063), ("10.137.22.8", 0), ("10.137.22.8", 0x100000000),
+])
+def test_invalid_transport_inputs_never_connect(monkeypatch, ip, instance):
+    def must_not_connect(*args, **kwargs):
+        pytest.fail("Invalid inputs must not contact a PLC")
+    monkeypatch.setattr("examples.logix_metadata_transports.CIPDriver", must_not_connect)
+    with pytest.raises(ValueError):
+        compare_transports(ip, instance)

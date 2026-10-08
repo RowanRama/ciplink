@@ -1,7 +1,8 @@
 """Experimental codecs inferred from Logix extended-property captures.
 
-Validated against GuardLogix 5580 firmware 37.13. These codecs do not authenticate
-a connection. A standard pycomm3 session on the test controller is denied access.
+Validated against GuardLogix 5580 firmware 37.13, including live authenticated
+reads. These codecs do not authenticate a connection. An unauthenticated
+pycomm3 session on the test controller is denied access.
 Only controller base-tag Description and definition records have capture evidence;
 other tag properties, scopes, inheritance and non-ASCII text remain unverified.
 """

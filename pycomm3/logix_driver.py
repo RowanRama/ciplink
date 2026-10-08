@@ -90,6 +90,7 @@ from .packets import (
     ReadModifyWriteRequestPacket,
 )
 from .tag import Tag
+from .logix_auth import LogixMetadataCredentials
 from .logix_metadata import (
     build_description_request,
     decode_metadata_page,
@@ -903,14 +904,59 @@ class LogixDriver(CIPDriver):
 
         return self._cache["id:udt"][instance_id]
 
+    def authenticate_metadata(self, credentials: Optional[LogixMetadataCredentials] = None) -> Tag:
+        """Authenticate the current CIP connection for experimental metadata reads.
+
+        Uses Python and the bundled or caller-supplied credentials. Authentication applies
+        to this connection only; call again after a reconnect. No controller
+        values or persistent permissions are changed. Native Linx is not used.
+        """
+        name = "metadata_authentication"
+        try:
+            if credentials is None:
+                credentials = LogixMetadataCredentials.bundled()
+            if not isinstance(credentials, LogixMetadataCredentials):
+                raise RequestError("Supply LogixMetadataCredentials")
+            if self._micro800:
+                raise RequestError("Metadata authentication requires a Logix controller")
+            challenge = self.generic_message(
+                service=0x4B, class_code=0x64, instance=1,
+                request_data=credentials.certificate, connected=True,
+                name="Metadata certificate challenge", return_response_packet=True,
+            )
+            if not challenge:
+                raise ResponseError("Certificate challenge rejected: " + str(challenge.error))
+            if challenge.value.raw[46:50] != bytes.fromhex("cb000000"):
+                raise ResponseError("Unexpected certificate challenge reply header")
+            connection = (self._session, self._target_cid)
+            proof = credentials.answer_challenge(challenge.value.data)
+            if not self._target_is_connected or connection != (self._session, self._target_cid):
+                raise ResponseError("CIP connection changed during metadata authentication")
+            completion = self.generic_message(
+                service=0x4C, class_code=0x64, instance=1,
+                request_data=b"\x14\x00" + proof, connected=True,
+                name="Metadata challenge completion", return_response_packet=True,
+            )
+            if not completion:
+                raise ResponseError("Challenge completion rejected: " + str(completion.error))
+            if completion.value.raw[46:50] != bytes.fromhex("cc000000"):
+                raise ResponseError("Unexpected metadata completion reply")
+            credentials.validate_completion(completion.value.data)
+            if not self._target_is_connected or connection != (self._session, self._target_cid):
+                raise ResponseError("CIP connection changed during metadata authentication")
+            return Tag(name, True, "BOOL", None)
+        except Exception as error:
+            return Tag(name, None, "BOOL", str(error))
+
     @with_forward_open
     def get_tag_description(self, tag_name: str, language: int = 0x007F,
                             encoding: str = "utf-8") -> Tag:
         """Experimentally read a controller base tag's extended Description.
 
-        The request and parser are validated against a FactoryTalk capture on
-        GuardLogix 5580 v37.13. A fresh pycomm3 session on that controller returns
-        Permission denied; this method does not implement session authentication.
+        Validated against capture and authenticated live reads on GuardLogix
+        5580 v37.13. An unauthenticated session returns Permission denied. This
+        method does not authenticate; call authenticate_metadata first with
+        caller-provided credentials, or use the optional native Linx example.
         Tag definitions must already be uploaded. Program tags, members, array
         elements and other extended properties are not supported by this method.
 

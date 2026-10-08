@@ -42,7 +42,7 @@ def decode_cip_reply(data: bytes) -> Dict[str, Any]:
         "reply_service": reply_service,
         "service": reply_service & 0x7F,
         "general_status": status,
-        "status_text": get_service_status(status),
+        "status_text": "Success" if status == 0 else get_service_status(status),
         "additional_status": list(struct.unpack(
             "<{}H".format(word_count), data[4:payload_start]
         )),
