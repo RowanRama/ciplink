@@ -75,3 +75,4 @@ target/
 tests/**/.hypothesis/
 /.venv/
 /venv*/
+/.extended-properties-results/
