@@ -64,7 +64,7 @@ class SendUnitDataResponsePacket(ResponsePacket):
             super()._parse_reply()
             self.service = Services.get(Services.from_reply(self.raw[46:47]))
             self.service_status = USINT.decode(self.raw[48:49])
-            self.data = self.raw[50:]
+            self.data = self.raw[50 + 2 * USINT.decode(self.raw[49:50]):]
         except Exception as err:
             self.__log.exception("Failed to parse reply")
             self._error = f"Failed to parse reply - {err}"
@@ -126,7 +126,7 @@ class SendRRDataResponsePacket(ResponsePacket):
             super()._parse_reply()
             self.service = Services.get(Services.from_reply(self.raw[40:41]))
             self.service_status = USINT.decode(self.raw[42:43])
-            self.data = self.raw[44:]
+            self.data = self.raw[44 + 2 * USINT.decode(self.raw[43:44]):]
         except Exception as err:
             self.__log.exception("Failed to parse reply")
             self._error = f"Failed to parse reply - {err}"

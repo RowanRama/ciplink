@@ -23,7 +23,6 @@
 #
 
 import logging
-from itertools import tee, zip_longest
 from reprlib import repr as _r
 from typing import Dict, Any, Sequence, Union
 
@@ -123,6 +122,8 @@ class ReadTagFragmentedResponsePacket(ReadTagResponsePacket):
 
     def _parse_reply(self):
         super()._parse_reply(dont_parse=True)
+        if self.data is None:
+            return
         if self.data[:2] == STRUCTURE_READ_REPLY:
             self.value_bytes = self.data[4:]
             self._data_type = self.data[:4]
@@ -377,15 +378,16 @@ class ReadModifyWriteRequestPacket(SendUnitDataRequestPacket):
         self.bits.append(bit)
         self._request_ids.append(request_id)
 
+    def tag_only_message(self):
+        return b"".join((
+            self.tag_service, self.request_path, UINT.encode(self._mask_size),
+            ULINT.encode(self._or_mask)[:self._mask_size],
+            ULINT.encode(self._and_mask)[:self._mask_size],
+        ))
+
     def _setup_message(self):
         super()._setup_message()
-        self._msg += [
-            self.tag_service,
-            self.request_path,
-            UINT.encode(self._mask_size),
-            ULINT.encode(self._or_mask)[: self._mask_size],
-            ULINT.encode(self._and_mask)[: self._and_mask],
-        ]
+        self._msg.append(self.tag_only_message())
 
 
 class MultiServiceResponsePacket(SendUnitDataResponsePacket):
@@ -400,19 +402,27 @@ class MultiServiceResponsePacket(SendUnitDataResponsePacket):
 
     def _parse_reply(self):
         super()._parse_reply()
-        num_replies = UINT.decode(self.data)
-        offset_data = self.data[2 : 2 + 2 * num_replies]
-        offsets = (UINT.decode(offset_data[i : i + 2]) for i in range(0, len(offset_data), 2))
-        start, end = tee(offsets)  # split offsets into start/end indexes
-        next(end)  # advance end by 1 so 2nd item is the end index for the first item
-        reply_data = [self.data[i:j] for i, j in zip_longest(start, end)]
-
-        padding = bytes(46)  # pad the front of the packet so it matches the size of
-        # a read tag response, probably not the best idea but it works for now
-
-        for data, request in zip(reply_data, self.request.requests):
-            response = request.response_class(request, padding + data)
-            self.responses.append(response)
+        if self._error or self.command_status != 0 or self.service_status not in (0, 6, 0x1E):
+            return
+        try:
+            num_replies = UINT.decode(self.data)
+            table_size = 2 + 2 * num_replies
+            if num_replies != len(self.request.requests) or len(self.data) < table_size:
+                raise ValueError("Reply count does not match the requested services")
+            offsets = [UINT.decode(self.data[2 + 2 * i:4 + 2 * i])
+                       for i in range(num_replies)]
+            bounds = offsets + [len(self.data)]
+            if (not offsets or offsets[0] < table_size
+                    or any(end - start < 4 for start, end in zip(bounds, bounds[1:]))):
+                raise ValueError("Invalid service reply offsets")
+            padding = bytes(46)
+            self.responses = [
+                request.response_class(request, padding + self.data[start:end])
+                for request, start, end in zip(self.request.requests, bounds, bounds[1:])
+            ]
+        except Exception as err:
+            self._error = f"Failed to parse multi-service reply - {err}"
+            self.responses = []
 
     def __repr__(self):
         return f"{self.__class__.__name__}(values={_r(self.values)}, error={self.error!r})"
@@ -435,7 +445,6 @@ class MultiServiceRequestPacket(SendUnitDataRequestPacket):
     def build_message(self):
         super().build_message()
         num_requests = len(self.requests)
-        self._msg.append(UINT.encode(num_requests))
         offset = 2 + (num_requests * 2)
         offsets = []
         messages = [request.tag_only_message() for request in self.requests]
@@ -443,4 +452,5 @@ class MultiServiceRequestPacket(SendUnitDataRequestPacket):
             offsets.append(UINT.encode(offset))
             offset += len(msg)
 
-        return b"".join(self._msg + offsets + messages)
+        self.message = b"".join(self._msg + [UINT.encode(num_requests)] + offsets + messages)
+        return self.message
