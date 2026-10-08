@@ -119,7 +119,10 @@ class SLCDriver(CIPDriver):
     _auto_slot_cip_path = True
 
     def __init__(self, path, *args, **kwargs):
-        super().__init__(path, *args, large_packets=False, **kwargs)
+        super().__init__(path, *args, **kwargs)
+        # SLC/MicroLogix only support a standard Forward Open
+        self._cfg["extended forward open"] = False
+        self._cfg["connection_size"] = 500
 
     def _msg_start(self):
         """
@@ -158,7 +161,7 @@ class SLCDriver(CIPDriver):
 
     def _read_tag(self, tag) -> Tag:
         _tag = parse_tag(tag)
-        if _tag is None:
+        if _tag is None or (_tag.get("address_field") == 3 and _tag["element_count"] > 1):
             raise RequestError(f"Error parsing the tag passed to read() - {tag}")
 
         message_request = [
@@ -169,10 +172,10 @@ class SLCDriver(CIPDriver):
             UINT.encode(next(self._sequence)),  # transaction identifier
             SLC_FNC_READ,  # function code
             USINT.encode(PCCC_DATA_SIZE[_tag["file_type"]] * _tag["element_count"]),  # byte size
-            USINT.encode(int(_tag["file_number"])),
+            _addr(_tag["file_number"]),
             PCCC_DATA_TYPE[_tag["file_type"]],
-            USINT.encode(int(_tag["element_number"])),
-            USINT.encode(int(_tag.get("pos_number", 0))),  # sub-element number
+            _addr(_tag["element_number"]),
+            _addr(_tag.get("pos_number", 0)),  # sub-element number
         ]
 
         request = SendUnitDataRequestPacket(self._sequence)
@@ -181,7 +184,7 @@ class SLCDriver(CIPDriver):
         self.__log.debug(f"SLC read_tag({tag})")
         
 
-        status = request_status(response.raw)
+        status = request_status(response)
 
         if status is not None:
             return Tag(_tag["tag"], None, _tag["file_type"], status)
@@ -221,10 +224,13 @@ class SLCDriver(CIPDriver):
         :return: None is returned in case of error
         """
         _tag = parse_tag(tag)
-        if _tag is None:
+        if _tag is None or (_tag.get("address_field") == 3 and _tag["element_count"] > 1):
             raise RequestError(f"Error parsing the tag passed to write() - {tag}")
 
-        _tag["data_size"] = PCCC_DATA_SIZE[_tag["file_type"]]
+        data = writeable_value(_tag, value)
+        sub_element = _tag.get("pos_number", 0)
+        if _tag["file_type"] in ("T", "C") and _tag.get("sub_element") in (PCCC_CT["PRE"], PCCC_CT["ACC"]):
+            sub_element = _tag["sub_element"]  # PRE/ACC are words 1/2 of the element
 
         message_request = [
             self._msg_start(),
@@ -232,18 +238,18 @@ class SLCDriver(CIPDriver):
             b"\x00",
             UINT.encode(next(self._sequence)),
             SLC_FNC_WRITE,
-            USINT.encode(_tag["data_size"] * _tag["element_count"]),
-            USINT.encode(int(_tag["file_number"])),
+            USINT.encode(len(data) - 2),  # data bytes after the 2-byte mask
+            _addr(_tag["file_number"]),
             PCCC_DATA_TYPE[_tag["file_type"]],
-            USINT.encode(int(_tag["element_number"])),
-            USINT.encode(int(_tag.get("pos_number", 0))),
-            writeable_value(_tag, value),
+            _addr(_tag["element_number"]),
+            _addr(sub_element),
+            data,
         ]
         request = SendUnitDataRequestPacket(self._sequence)
         request.add(b"".join(message_request))
         response = self.send(request)
 
-        status = request_status(response.raw)
+        status = request_status(response)
         if status is not None:
             return Tag(_tag["tag"], None, _tag["file_type"], status)
 
@@ -264,37 +270,19 @@ class SLCDriver(CIPDriver):
         request = SendUnitDataRequestPacket(self._sequence)
         request.add(b"".join(msg_request))
         response = self.send(request)
-        if response:
-            try:
-                typ = response.raw[SLC_REPLY_START:][5:16].decode("utf-8").strip()
-            except Exception as err:
-                self.__log.exception(f"failed getting processor type: {err}")
-                typ = None
-            finally:
-                return typ
-        else:
-            self.__log.error(
-                f"failed to get processor type: {request_status(response.raw)}",
-            )
+        status = request_status(response)
+        if status is not None:
+            self.__log.error(f"failed to get processor type: {status}")
             return None
-        
+
+        return response.raw[SLC_REPLY_START + 5 : SLC_REPLY_START + 16].decode("utf-8", "ignore").strip() or None
+
     @with_forward_open
     def get_datalog_queue(self, num_data_logs, queue_num):
-        data = []
-        
-        for i in range(num_data_logs):        
-            data.append(self._get_datalog(queue_num))
-        
-        #extra read to clear the queue
-        #will thow error in _get_datalog due to Status == None
-        trash = self._get_datalog(queue_num)
-        
-        if data is not None:
-            return data
-        else:
-            raise ResponseError("No Data in Queue")
-        raise ResponseError("Failed to read processor type")
-        
+        data = [self._get_datalog(queue_num) for _ in range(num_data_logs)]
+        self._get_datalog(queue_num)  # extra read clears the queue (returns None once it is empty)
+        return data
+
     def _get_datalog(self, queue_num):
         msg_request = [
             b"\x4b",            # Ethernet/IP Service Code
@@ -321,22 +309,18 @@ class SLCDriver(CIPDriver):
         request.add(b"".join(msg_request))
         response = self.send(request)
 
-        status = request_status(response.raw)
-        
-        if status is None:
-            try:
-                datalog_entry = response.raw[SLC_REPLY_START:]
-                datalog_entry = datalog_entry.decode("UTF-8")
-            except Exception as err:
-                self.__log.exception("Failed to retreive data log")
-            finally:
-                return datalog_entry
-        else:
-            self.__log.error(
-                f"Failed to retreive data log",
-            )
+        status = request_status(response)
+        if status is not None:
+            self.__log.error(f"Failed to retrieve data log: {status}")
             return None
-        
+
+        entry = response.raw[SLC_REPLY_START:]
+        try:
+            return entry.decode("utf-8")
+        except UnicodeDecodeError:
+            self.__log.exception("Failed to decode data log")
+            return entry
+
     
     @with_forward_open
     def get_file_directory(self):
@@ -349,6 +333,7 @@ class SLCDriver(CIPDriver):
             
             if sys0_info["size"] is not None:
                 data = self._read_whole_file_directory(sys0_info)
+                self.__log.debug(f"SYS0 data ({len(data)} bytes): {data.hex()}")
                 return _parse_file0(sys0_info, data)
             else:
                 raise ResponseError("Failed to read file directory size")
@@ -371,16 +356,15 @@ class SLCDriver(CIPDriver):
         request = SendUnitDataRequestPacket(self._sequence)
         request.add(b"".join(msg_request))
         response = self.send(request)
-        status = request_status(response.raw)
+        status = request_status(response)
         if status is None:
             try:
                 size = UINT.decode(response.raw[SLC_REPLY_START:]) - sys0_info.get("size_const", 0)
-                self.__log.debug(f"SYS 0 file size: {size}")
-            except Exception as err:
+            except Exception:
                 self.__log.exception("failed to parse size of File 0")
-                size = None
-            finally:
-                return size
+                return None
+            self.__log.debug(f"SYS 0 file size: {size}")
+            return size
         else:
             self.__log.error(
                 f"failed to read size of File 0: {status}",
@@ -410,14 +394,12 @@ class SLCDriver(CIPDriver):
                 file_type,
             ]
 
-            msg_request += (
-                [USINT.encode(offset)] if offset < 256 else [b"\xFF", UINT.encode(offset)]
-            )
+            msg_request.append(_addr(offset))
 
             request = SendUnitDataRequestPacket(self._sequence)
             request.add(b"".join(msg_request))
             response = self.send(request)
-            status = request_status(response.raw)
+            status = request_status(response)
             if status is None:
                 data = response.raw[SLC_REPLY_START:]
                 offset += len(data) // 2
@@ -431,10 +413,6 @@ class SLCDriver(CIPDriver):
 
 
 def _parse_file0(sys0_info, data):
-    num_data_files = data[52]
-    num_lad_files = data[46]
-    print(f"data files: {num_data_files}, logic files: {num_lad_files}")
-
     file_pos = sys0_info["file_position"]
     row_size = sys0_info["row_size"]
 
@@ -443,6 +421,8 @@ def _parse_file0(sys0_info, data):
     while file_pos < len(data):
         file_code = data[file_pos : file_pos + 1]
         file_type = PCCC_DATA_TYPE.get(file_code, None)
+        if file_type == "I" and file_num == 0:  # O0 row missed (#281): I is always data file 1
+            file_num = 1
 
         if file_type:
             file_name = f"{file_type}{file_num}"
@@ -496,7 +476,6 @@ def _get_sys0_info(plc_type):
             "size_element": b"\x2b",
             "size_len": b"\x08",
             "size_const": 19968,  # no idea why, but this seems like a const added to the size? wtf?
-            "file_type_queue": b"\xA5",
         }
     else:  # SLC 5/05
         return {
@@ -549,7 +528,7 @@ def _parse_read_reply(tag, data) -> Tag:
 
 
 def parse_tag(tag: str) -> Optional[dict]:
-    t = CT_RE.search(tag)
+    t = CT_RE.fullmatch(tag)
     if (
         t
         and (1 <= int(t.group("file_number")) <= 255)
@@ -565,7 +544,7 @@ def parse_tag(tag: str) -> Optional[dict]:
             "tag": t.group(0),
         }
 
-    t = LFBN_RE.search(tag)
+    t = LFBN_RE.fullmatch(tag)
     if t:
         _cnt = t.group("_elem_cnt_token")
         tag_name = t.group(0).replace(_cnt, "") if _cnt else t.group(0)
@@ -601,7 +580,7 @@ def parse_tag(tag: str) -> Optional[dict]:
                     "tag": tag_name,
                 }
 
-    t = IO_RE.search(tag)
+    t = IO_RE.fullmatch(tag)
     if t:
         _cnt = t.group("_elem_cnt_token")
         tag_name = t.group(0).replace(_cnt, "") if _cnt else t.group(0)
@@ -638,7 +617,7 @@ def parse_tag(tag: str) -> Optional[dict]:
                     "tag": tag_name,
                 }
 
-    t = ST_RE.search(tag)
+    t = ST_RE.fullmatch(tag)
     if (
         t
         and (1 <= int(t.group("file_number")) <= 255)
@@ -657,7 +636,7 @@ def parse_tag(tag: str) -> Optional[dict]:
             "tag": tag_name,
         }
 
-    t = A_RE.search(tag)
+    t = A_RE.fullmatch(tag)
     if (
         t
         and (1 <= int(t.group("file_number")) <= 255)
@@ -676,7 +655,7 @@ def parse_tag(tag: str) -> Optional[dict]:
             "tag": tag_name,
         }
 
-    t = S_RE.search(tag)
+    t = S_RE.fullmatch(tag)
     if t:
         _cnt = t.group("_elem_cnt_token")
         tag_name = t.group(0).replace(_cnt, "") if _cnt else t.group(0)
@@ -705,7 +684,7 @@ def parse_tag(tag: str) -> Optional[dict]:
                     "tag": tag_name,
                 }
 
-    t = B_RE.search(tag)
+    t = B_RE.fullmatch(tag)
     if (
         t
         and (1 <= int(t.group("file_number")) <= 255)
@@ -714,8 +693,7 @@ def parse_tag(tag: str) -> Optional[dict]:
         _cnt = t.group("_elem_cnt_token")
         tag_name = t.group(0).replace(_cnt, "") if _cnt else t.group(0)
         bit_position = int(t.group("element_number"))
-        element_number = bit_position / 16
-        sub_element = bit_position - (element_number * 16)
+        element_number, sub_element = divmod(bit_position, 16)
         element_count = t.group("element_count")
         return {
             "file_type": t.group("file_type").upper(),
@@ -728,6 +706,11 @@ def parse_tag(tag: str) -> Optional[dict]:
         }
 
     return None
+
+
+def _addr(v) -> bytes:
+    v = int(v)
+    return b"\xff" + UINT.encode(v) if v >= 255 else USINT.encode(v)  # PCCC: 0xFF escapes a 2-byte value
 
 
 def get_bit(value: int, idx: int) -> bool:
@@ -758,8 +741,6 @@ def writeable_value(tag: dict, value: Union[bytes, TagValueType]) -> bytes:
             _value = b"".join(pack_func(val) for val in value)
         else:
             if bit_field:
-                tag["data_size"] = 2
-
                 if tag["file_type"] in ["T", "C"] and bit_position in {
                     PCCC_CT["PRE"],
                     PCCC_CT["ACC"],
@@ -773,18 +754,23 @@ def writeable_value(tag: dict, value: Union[bytes, TagValueType]) -> bytes:
 
     except Exception as err:
         raise RequestError(
-            f'Failed to create a writeable value for {tag["tag"]} from {value}'
+            f'Failed to create a writeable value for {tag["tag"]} from {value} - {err}'
         ) from err
 
     else:
         return bit_mask + _value
 
 
-def request_status(data) -> Optional[str]:
-    try:
-        _status_code = int(data[58])
-        if _status_code == SUCCESS:
-            return None
-        return PCCC_ERROR_CODE.get(_status_code, "Unknown Status")
-    except Exception:
+def request_status(response) -> Optional[str]:
+    if not response:
+        return response.error  # CIP or encapsulation error
+    data = response.raw
+    if len(data) <= 58:
         return "Unknown Status"
+    status = data[58]
+    if status == SUCCESS:
+        return None
+    msg = PCCC_ERROR_CODE.get(status, f"Unknown Status (0x{status:02x})")
+    if status == 0xF0 and len(data) > SLC_REPLY_START:
+        msg += f" (EXT STS 0x{data[SLC_REPLY_START]:02x})"
+    return msg
