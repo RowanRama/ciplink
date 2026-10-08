@@ -37,7 +37,6 @@ def _raw_tag(name, instance_id, symbol_type=0xC4):
 def _isolate_plc():
     plc = LogixDriver('1.2.3.4', init_tags=False)
     plc._info = {'programs': {}, 'tasks': {}, 'modules': {}}
-    plc._cache = {'id:struct': {}, 'id:udt': {}}
     return plc
 
 
@@ -206,7 +205,7 @@ def test_get_tag_list_requests_and_tag_definitions(program, path):
     assert udt['type_class'].decode(raw) == {'A': 1, 'B': [2, 3], 'Flag': True}
     assert plc.data_types['MyUDT']['attributes'] == ['A', 'B', 'Flag']
     assert gm.call_count == 2  # the second UDT tag uses the cached definition
-    assert plc._cache is None and plc.tags == {t['tag_name']: t for t in tags}
+    assert plc.tags == {t['tag_name']: t for t in tags}
 
 
 def test_logix_request_packet_bytes():

@@ -23,7 +23,6 @@
 #
 
 import logging
-from itertools import tee, zip_longest
 from reprlib import repr as _r
 from typing import Dict, Any, Sequence, Union
 
@@ -32,7 +31,7 @@ from .ethernetip import SendUnitDataRequestPacket, SendUnitDataResponsePacket
 from .util import parse_read_reply, request_path, tag_request_path
 
 from ..cip import ClassCode, Services, DataTypes, UINT, UDINT, ULINT
-from ..const import STRUCTURE_READ_REPLY, SUCCESS
+from ..const import STRUCTURE_READ_REPLY, SUCCESS, INSUFFICIENT_PACKETS
 from ..exceptions import RequestError
 
 
@@ -365,15 +364,16 @@ class ReadModifyWriteRequestPacket(SendUnitDataRequestPacket):
 
         self._request_ids.append(request_id)
 
+    def tag_only_message(self):
+        return b"".join((
+            self.tag_service, self.request_path, UINT.encode(self._mask_size),
+            ULINT.encode(self._or_mask)[:self._mask_size],
+            ULINT.encode(self._and_mask)[:self._mask_size],
+        ))
+
     def _setup_message(self):
         super()._setup_message()
-        self._msg += [
-            self.tag_service,
-            self.request_path,
-            UINT.encode(self._mask_size),
-            ULINT.encode(self._or_mask)[: self._mask_size],
-            ULINT.encode(self._and_mask)[: self._mask_size],
-        ]
+        self._msg.append(self.tag_only_message())
 
 
 class MultiServiceResponsePacket(SendUnitDataResponsePacket):
@@ -386,21 +386,24 @@ class MultiServiceResponsePacket(SendUnitDataResponsePacket):
 
     def _parse_reply(self):
         super()._parse_reply()
-        if self.service_status not in (SUCCESS, 0x1E):
-            return  # sub-replies only follow success or 0x1E (embedded service error)
-        num_replies = UINT.decode(self.data)
-        offset_data = self.data[2 : 2 + 2 * num_replies]
-        offsets = (UINT.decode(offset_data[i : i + 2]) for i in range(0, len(offset_data), 2))
-        start, end = tee(offsets)  # split offsets into start/end indexes
-        next(end)  # advance end by 1 so 2nd item is the end index for the first item
-        reply_data = [self.data[i:j] for i, j in zip_longest(start, end)]
+        if self.service_status not in (SUCCESS, INSUFFICIENT_PACKETS, 0x1E):
+            return  # sub-replies only follow these, 0x1E is an embedded service error
+        try:
+            num_replies = UINT.decode(self.data)
+            if num_replies != len(self.request.requests):
+                raise ValueError("reply count does not match the requested services")
+            bounds = [UINT.decode(self.data[2 + 2 * i : 4 + 2 * i]) for i in range(num_replies)]
+            bounds.append(len(self.data))
+            if any(end - start < 4 for start, end in zip(bounds, bounds[1:])):
+                raise ValueError("invalid service reply offsets")  # a reply has at least a 4-byte header
 
-        padding = bytes(46)  # pad the front of the packet so it matches the size of
-        # a read tag response, probably not the best idea but it works for now
-
-        for data, request in zip(reply_data, self.request.requests):
-            response = request.response_class(request, padding + data)
-            self.responses.append(response)
+            padding = bytes(46)  # pad each reply so it parses like a whole response packet
+            self.responses = [
+                request.response_class(request, padding + self.data[start:end])
+                for request, start, end in zip(self.request.requests, bounds, bounds[1:])
+            ]
+        except Exception as err:
+            self._error = f"Failed to parse multi-service reply - {err}"
 
 
 class MultiServiceRequestPacket(SendUnitDataRequestPacket):
@@ -420,7 +423,6 @@ class MultiServiceRequestPacket(SendUnitDataRequestPacket):
     def build_message(self):
         super().build_message()
         num_requests = len(self.requests)
-        self._msg.append(UINT.encode(num_requests))
         offset = 2 + (num_requests * 2)
         offsets = []
         messages = [request.tag_only_message() for request in self.requests]
@@ -428,4 +430,5 @@ class MultiServiceRequestPacket(SendUnitDataRequestPacket):
             offsets.append(UINT.encode(offset))
             offset += len(msg)
 
-        return b"".join(self._msg + offsets + messages)
+        self.message = b"".join(self._msg + [UINT.encode(num_requests)] + offsets + messages)
+        return self.message

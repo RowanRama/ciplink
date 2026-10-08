@@ -32,6 +32,8 @@ def test_writes(plc, tag_name, data_type, value):
         ("write_bool_ary1[0]{32}", "BOOL[32]", _bool_array[:32]),
         ("write_bool_ary1[32]{32}", "BOOL[32]", _bool_array[32:64]),
         ("write_bool_ary1[32]{64}", "BOOL[64]", _bool_array[32:]),
+        ("write_bool_ary1[1]{2}", "BOOL[2]", _bool_array[1:3]),
+        ("write_bool_ary1[30]{5}", "BOOL[5]", _bool_array[30:35]),
     ),
 )
 def test_bool_array_writes(plc, tag_name, data_type, value):
@@ -45,7 +47,7 @@ def test_bool_array_writes(plc, tag_name, data_type, value):
 
 
 def test_bool_array_invalid_writes(plc):
-    result = plc.write("write_bool_ary1[1]{2}", [True, False])
+    result = plc.write("write_bool_ary1[1]{2}", [True])
     assert not result
 
 

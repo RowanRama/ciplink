@@ -90,10 +90,12 @@ def with_forward_open(func):
                     size = self._cfg["connection_size"]
                     self._cfg["extended forward open"] = False
                     self._cfg["connection_size"] = 500
-                    opened = self._forward_open()
-                    if not opened:  # standard FO failed too: no evidence Large FO is unsupported
-                        self._cfg["extended forward open"] = True
-                        self._cfg["connection_size"] = size
+                    try:
+                        opened = self._forward_open()
+                    finally:
+                        if not opened:  # standard FO failed or raised: no evidence Large FO is unsupported
+                            self._cfg["extended forward open"] = True
+                            self._cfg["connection_size"] = size
             else:
                 opened = True
 
@@ -114,7 +116,10 @@ class CIPDriver:
     __log = logging.getLogger(f"{__module__}.{__qualname__}")
     _auto_slot_cip_path = False
 
-    def __init__(self, path: str, *args, **kwargs):
+    def __init__(
+        self, path: str, *args, socket_timeout: float = 5.0,
+        connection_size: int = 4000, **kwargs
+    ):
         self._sequence: cycle = cycle(65535, start=1)
         self._sock: Optional[Socket] = None
         self._session: int = 0
@@ -141,6 +146,8 @@ class CIPDriver:
             "connection_size": 4000,
             "socket_timeout": 5.0,
         }
+        self.socket_timeout = socket_timeout
+        self.connection_size = connection_size
 
     def __enter__(self):
         if not self.open():
@@ -177,8 +184,17 @@ class CIPDriver:
 
     @property
     def connection_size(self):
-        """CIP connection size, ``4000`` if using Extended Forward Open else ``500``"""
+        """Maximum connected message size; configure before a Forward Open."""
         return self._cfg["connection_size"]
+
+    @connection_size.setter
+    def connection_size(self, value):
+        if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 65535:
+            raise ValueError("connection_size must be an integer between 1 and 65535")
+        if self._target_is_connected:
+            raise RequestError("Close the connection before changing connection_size")
+        self._cfg["connection_size"] = value
+        self._cfg["extended forward open"] = value > 511
 
     @property
     def socket_timeout(self):
@@ -187,6 +203,11 @@ class CIPDriver:
 
     @socket_timeout.setter
     def socket_timeout(self, value):
+        if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))
+                                  or not 0 < value < float("inf")):
+            raise ValueError("socket_timeout must be a positive finite number or None")
+        if self._sock is not None:
+            self._sock.settimeout(value)
         self._cfg["socket_timeout"] = value
 
     @classmethod
@@ -304,23 +325,24 @@ class CIPDriver:
 
         :return: True if successful, False otherwise
         """
-        # handle the socket layer
-        if self._connection_opened:
-            return True
-        try:
-            if self._sock is None:
-                self._sock = Socket(self._cfg["socket_timeout"])
-            self.__log.debug(f'Opening connection to {self._cfg["ip address"]}')
-            self._sock.connect(self._cfg["ip address"], self._cfg["port"])
-            self._connection_opened = True
-            if self._register_session() is None:
-                self.__log.error("Session not registered")
+        with self._lock:  # one thread opens, the others wait and find it open
+            # handle the socket layer
+            if self._connection_opened:
+                return True
+            try:
+                if self._sock is None:
+                    self._sock = Socket(self._cfg["socket_timeout"])
+                self.__log.debug(f'Opening connection to {self._cfg["ip address"]}')
+                self._sock.connect(self._cfg["ip address"], self._cfg["port"])
+                self._connection_opened = True
+                if not self._register_session():
+                    self.__log.error("Session not registered")
+                    self._drop_connection()
+                    return False
+                return True
+            except Exception as err:
                 self._drop_connection()
-                return False
-            return True
-        except Exception as err:
-            self._drop_connection()
-            raise CommError("failed to open a connection") from err
+                raise CommError("failed to open a connection") from err
 
     def _register_session(self) -> Optional[int]:
         """
@@ -414,14 +436,18 @@ class CIPDriver:
         Closes the current connection and un-registers the session.
         """
         errs = []
-        try:
-            if self._target_is_connected:
+        if self._target_is_connected:
+            try:
                 self._forward_close()
-            if self._session != 0:
+            except Exception as err:
+                errs.append(err)
+                self.__log.exception("Error closing connection with device")
+        if self._session:  # read after Forward Close, a transport error there has already dropped the session
+            try:
                 self._un_register_session()
-        except Exception as err:
-            errs.append(err)
-            self.__log.exception("Error closing connection with device")
+            except Exception as err:
+                errs.append(err)
+                self.__log.exception("Error closing connection with device")
 
         try:
             self._drop_connection()
@@ -434,6 +460,7 @@ class CIPDriver:
 
     def _drop_connection(self):
         sock, self._sock = self._sock, None
+        self._target_cid = None
         self._target_is_connected = False
         self._session = 0
         self._connection_opened = False

@@ -210,3 +210,4 @@ def test_slc_driver_uses_standard_forward_open():
     with mock.patch.object(CIPDriver, '_forward_open', return_value=False) as m, pytest.raises(ResponseError):
         driver.read('N7:0')
     assert m.call_count == 1  # no Extended Forward Open attempt first
+    assert SLCDriver('10.0.0.1', connection_size=300).connection_size == 300
