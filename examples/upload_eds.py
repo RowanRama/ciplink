@@ -153,7 +153,7 @@ def get_file_name(driver):
         data_type=attr.data_type
     )
 
-    file_name = resp.value['FileName'][0] if resp else None
+    file_name = resp.value[0][0] if resp else None  # STRINGI decodes to (strings, langs, char_sets)
     return file_name
 
 
