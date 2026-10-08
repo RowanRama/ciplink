@@ -38,6 +38,28 @@ True
 True
 
 
+Loading Definitions on Demand
+-----------------------------
+
+For applications that access only a few tags, use ``lazy_tags=True``::
+
+    with LogixDriver('10.20.30.100', lazy_tags=True) as plc:
+        result = plc.read('Motor.Speed')
+        print(result.value, result.error)
+
+This option overrides ``init_tags`` and skips the tag upload during connection
+initialization. The first request in a controller or program scope uploads that
+scope's symbol list. Only the requested tags and their required structure
+templates are resolved. Later requests reuse those definitions. Program scopes
+are loaded independently, without uploading unrelated programs.
+
+The ``tags`` property contains only the definitions resolved so far. Use
+``get_tag_list(program='*')`` when a complete inventory is needed. Reopening a
+lazy driver clears its definitions so they are refreshed for the new session.
+``init_tags=False`` without lazy mode continues to require a supplied tag cache
+or an explicit call to ``get_tag_list``.
+
+
 Tag Structure
 -------------
 
@@ -211,10 +233,15 @@ BOOL Arrays
 
 BOOL arrays work a little differently due them being implemented as DWORD arrays in the PLC. (That is the reason you can
 only make BOOL arrays in multiples of 32, DWORDs are 32 bits.) The element count in the request (``'{#}'``)
-represents the number of BOOL elements.  To write multiple elements to a BOOL array, you must write the entire
-underlying DWORD element.  This means the list of values must be in multiples of 32 and the starting index must also
-be multiples of 32, e.g. ``'bools{32}'``, ``'bools[32]{64}'``.  There is no limitation on reading multiple elements
-or reading and writing a single element.
+represents the number of BOOL elements. Reads start at the first DWORD containing
+the requested slice. Writes may start at any BOOL index and span word boundaries::
+
+    plc.write('bools[30]{5}', [True, False, True, True, False])
+
+Partial words use Read-Modify-Write masks to preserve all unrequested bits. Aligned
+slices containing complete DWORDs use ordinary tag writes. Each word update is
+independent; a slice spanning multiple words is not a single atomic operation.
+A failed word update is reported in the returned Tag even if other words succeed.
 
 Reading Tags
 ------------
@@ -245,6 +272,13 @@ Tag(tag='dint_array', value=[1, 2, 3, 4, 5], type='DINT[5]', error=None)
 >>> plc.read('dint_array[20]{3}') # read 3 elements starting at index 20
 Tag(tag='dint_array[20]', value=[20, 21, 22], type='DINT[3]', error=None)
 
+One-dimensional non-BOOL arrays with more than 65,535 requested elements are
+split into consecutive service requests and returned as one Tag. Both reads and
+writes support a nonzero starting index. Packet fragmentation handles the bytes
+within each service request. Larger service counts for BOOL arrays and
+multidimensional arrays return a request error. Transfers spanning several
+requests do not provide a simultaneous snapshot or an atomic write.
+
 Verify all reads were successful
 
 >>> tag_list = ['tag1', 'tag2', ...]
@@ -265,6 +299,10 @@ set (the Tag is falsy); extra values in a list that is too long are ignored.  Wr
 structure is supported as long as all attributes have Read/Write external access.  The value for a struct should be a
 ``dict`` of ``{<attribute name>: <value>}``, nesting as needed.  It is not recommended to write full structures for builtin types,
 like ``TIMER``, ``PID``, etc.
+
+Bit writes to the same word can share a Read-Modify-Write request. Pending bit
+masks are sent before a following whole-tag or array write, so overlapping bit
+and whole-value writes follow the supplied order.
 
 Write a tag
 
@@ -310,3 +348,19 @@ than the plc tag returns an error (the tag is not written).
 Tag(tag='string_tag', value='Hello World!', type='STRING', error=None)
 >>> plc.write(('short_string_tag', 'Test Write'))
 Tag(tag='short_string_tag', value='Test Write', type='STRING20', error=None)
+
+
+Repeated Reads
+--------------
+
+Keep the connection open around the polling loop, and request all needed tags in
+one read call so they can be grouped into packets. Check each returned Tag for
+errors. For parallel requests use one driver instance per thread. Repeated calls to open on an already
+open driver reuse the connection and its initialized definitions.
+
+The polling example uses a monotonic clock and a configurable interval::
+
+    python -m examples.polling 10.20.30.100 Motor.Speed Motor.Running --interval 1 --lazy-tags
+
+.. literalinclude:: ../../examples/polling.py
+    :language: python

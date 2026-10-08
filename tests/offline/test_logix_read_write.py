@@ -47,7 +47,8 @@ def _capture(plc):
 
     def fake(requests):
         sent.extend(requests)
-        return {r.request_id: Tag(r.tag, None, None, None) for r in requests if r.type_ != "multi"}
+        replies = [sub for r in requests for sub in (r.requests if r.type_ == "multi" else [r])]
+        return {r.request_id: Tag(r.tag, None, None, None) for r in replies}
 
     return sent, mock.patch.object(plc, "_send_requests", side_effect=fake)
 
@@ -97,25 +98,26 @@ def test_multi_write_keeps_call_order_and_fits_connection():
     sent, patch = _capture(plc)
     with patch:
         plc.write(("d.0", True), ("d", 0))
-    assert [type(r) for r in sent] == [ReadModifyWriteRequestPacket, MultiServiceRequestPacket]
+    assert [type(r) for r in sent] == [MultiServiceRequestPacket]
+    assert [type(r) for r in sent[0].requests] == [ReadModifyWriteRequestPacket, WriteTagRequestPacket]
 
     sent.clear()
     with patch:
         plc.write(("arr{1500}", list(range(1500))), ("arr[0]", 5))
-    assert [type(r) for r in sent] == [WriteTagFragmentedRequestPacket, MultiServiceRequestPacket]
+    assert [type(r) for r in sent] == [WriteTagFragmentedRequestPacket, WriteTagRequestPacket]
 
     # 3996 bytes fits alone but not inside a multi-service packet
     sent.clear()
     with patch:
         plc.write(("d", 1), ("arr{996}", list(range(996))), ("i", 2))
-    assert [type(r) for r in sent] == [MultiServiceRequestPacket, WriteTagRequestPacket, MultiServiceRequestPacket]
+    assert [type(r) for r in sent] == [WriteTagRequestPacket] * 3
     assert all(len(r.build_message()) <= plc.connection_size for r in sent)
 
-    # each bit write reports its own result
+    # bits of one word share a mask, each bit write still reports its own result
     sent.clear()
     with patch:
         results = plc.write(("d.0", True), ("d.1", False))
-    assert [r.request_id for r in sent] == [0, 1]
+    assert len(sent) == 1 and sent[0]._request_ids == [0, 1]
     assert all(r.error is None for r in results)
 
 
@@ -130,9 +132,15 @@ def test_read_size_checks_count_reply_overhead():
     # a read too big for a multi-service packet must not drop the other reads
     sent.clear()
     with patch:
-        plc.read("arr{996}", "d")
+        plc.read("arr{997}", "d")
+    assert [r.tag for r in sent] == ["arr", "d"]
+
+    # results are matched by request_id, so the small reads share one packet ahead of a fragmented read
+    sent.clear()
+    with patch:
+        plc.read("d", "arr{1200}", "i")
     assert [type(r) for r in sent] == [MultiServiceRequestPacket, ReadTagFragmentedRequestPacket]
-    assert [r.tag for r in sent[0].requests] == ["d"]
+    assert [r.tag for r in sent[0].requests] == ["d", "i"]
 
 
 SUD_HEADER = b"\x70\x00" + bytes(42)  # encapsulation header + CPF of a send_unit_data reply, status 0
@@ -177,17 +185,17 @@ def test_bad_tag_requests_fail_per_tag():
     with patch:
         results = plc.read("d", "arr[x]")
     assert len(results) == 2 and "arr[x]" in results[1].error
-    assert [r.tag for r in sent[0].requests] == ["d"]
+    assert [r.tag for r in sent] == ["d"]
 
     sent.clear()
     with patch:
         results = plc.write(("d", 1), ("udt.3", True))
     assert len(results) == 2 and "MyUDT" in results[1].error
-    assert [r.tag for r in sent[0].requests] == ["d"]
+    assert [r.tag for r in sent] == ["d"]
 
     sent.clear()
     with patch:
-        result = plc.read("arr{70000}")
+        result = plc.read("d{70000}")  # only one-dimensional arrays are split above 65535 elements
     assert result.error and not sent
 
 

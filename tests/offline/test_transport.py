@@ -247,6 +247,19 @@ def test_forward_open_fallback_uses_new_triad_and_keeps_large_forward_open():
     assert driver.connection_size == 4000
 
 
+def test_transport_error_in_forward_open_fallback_keeps_large_forward_open():
+    driver = CIPDriver("1.2.3.4")
+    driver._session = 1
+    replies = [Tag("forward_open", None, None, "rejected"), CommError("timeout")]
+
+    with mock.patch.object(CIPDriver, "generic_message", side_effect=replies):
+        with pytest.raises(CommError):
+            with_forward_open(lambda self: None)(driver)
+
+    assert driver._cfg["extended forward open"] is True
+    assert driver.connection_size == 4000
+
+
 @pytest.mark.parametrize("method, service", [
     ("_forward_open", ConnectionManagerServices.large_forward_open),
     ("_forward_close", ConnectionManagerServices.forward_close),

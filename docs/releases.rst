@@ -20,12 +20,18 @@ CIPDriver
 - |:bug:| ``generic_message`` replies without data (e.g. ``Set_Attribute_Single``) no longer fail when ``data_type``
   is set, the value is ``b''``
 - |:bug:| ``list_identity`` no longer uploads the tag list when called on ``LogixDriver`` and always closes its connection
+- |:sparkles:| added ``socket_timeout`` and ``connection_size`` keyword arguments
 
 LogixDriver
 -----------
 
+- |:sparkles:| added ``lazy_tags=True`` to load tag definitions on demand instead of uploading them on connect
+- |:sparkles:| BOOL array slices that do not start or end on a 32-bit boundary can be read and written
+- |:sparkles:| one-dimensional arrays with more than 65,535 elements are split into several requests
 - |:sparkles:| tag names are case-insensitive (an exact match is tried first)
-- |:boom:| ``write()`` keeps the call order, bits of the same tag are now separate read-modify-write requests
+- |:bug:| ``write()`` keeps the call order, pending bit masks are sent before a following whole-value write
+- |:bug:| multi-service packets are sized by their exact request and reply bytes, a partial reply is read again
+  as a fragmented read
 - |:bug:| array indexes and instance ids above 65535 (32-bit) are encoded correctly
 - |:bug:| writing a string or ``None`` to a BOOL or a bit returns an error instead of writing ``True``
 - |:bug:| a failed ``open()`` closes the connection, connection errors during init and tag upload are raised as ``CommError``

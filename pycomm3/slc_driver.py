@@ -118,11 +118,8 @@ class SLCDriver(CIPDriver):
     __log = logging.getLogger(f"{__module__}.{__qualname__}")
     _auto_slot_cip_path = True
 
-    def __init__(self, path, *args, **kwargs):
-        super().__init__(path, *args, **kwargs)
-        # SLC/MicroLogix only support a standard Forward Open
-        self._cfg["extended forward open"] = False
-        self._cfg["connection_size"] = 500
+    def __init__(self, path, *args, connection_size=500, **kwargs):
+        super().__init__(path, *args, connection_size=connection_size, **kwargs)  # SLC/MicroLogix: standard Forward Open
 
     def _msg_start(self):
         """

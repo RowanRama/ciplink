@@ -10,6 +10,26 @@ on this page also applies to the other drivers as well.
 implicit class 0/1 I/O (UDP 2222), produced/consumed tags and acting as a CIP server/adapter are not supported.
 
 
+Connection Settings
+-------------------
+
+All drivers accept ``socket_timeout`` and ``connection_size`` keyword arguments::
+
+    with LogixDriver('10.20.30.100', socket_timeout=2.0, connection_size=500) as plc:
+        result = plc.read('Speed')
+
+The defaults are five seconds and 4,000 bytes. Connection sizes up to 511 bytes
+use a standard Forward Open; larger sizes use an Extended Forward Open, with a
+500-byte fallback if the extended request is rejected. Batching bounds both
+outgoing messages and expected replies.
+
+Set ``connection_size`` before the connected CIP session is opened; close the
+driver before changing an established connection's size. Updating
+``socket_timeout`` also updates an existing socket. A transport failure discards
+the broken session; reopen the driver to establish a new one. Failed operations
+are not automatically replayed.
+
+
 Discovery and Identification
 ----------------------------
 
