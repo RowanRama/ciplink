@@ -92,11 +92,7 @@ from .packets import (
 )
 from .tag import Tag
 from .logix_auth import LogixMetadataCredentials
-from .logix_metadata import (
-    build_description_request,
-    decode_metadata_page,
-    decode_description_response,
-)
+from .logix_descriptions import read_description
 
 AtomicValueType = Union[int, float, bool, str]
 TagValueType = Union[AtomicValueType, List[AtomicValueType], Dict[str, "TagValueType"]]
@@ -966,52 +962,17 @@ class LogixDriver(CIPDriver):
     @with_forward_open
     def get_tag_description(self, tag_name: str, language: int = 0x007F,
                             encoding: str = "utf-8") -> Tag:
-        """Experimentally read a controller base tag's extended Description.
-
-        Validated against capture and authenticated live reads on a controller
-        Logix controller. An unauthenticated session returns Permission denied. This
-        method does not authenticate; call authenticate_metadata first with
-        caller-provided credentials, or use the optional native Linx example.
-        Tag definitions must already be uploaded. Program tags, members, array
-        elements and other extended properties are not supported by this method.
-
-        :param tag_name: controller-scoped base tag name
-        :param language: captured language selector (0x007F returned the test text)
-        :param encoding: text encoding; capture evidence currently covers ASCII
-        :return: a STRING Tag with the description or an explicit error
-        """
-        result_name = tag_name + ".@Description"
+        """Read a tag, member, or array element's Description."""
+        result_name = f"{tag_name}.@Description"
         try:
-            if not tag_name or any(char in tag_name for char in ".[]{}"):
-                raise RequestError("Specify a controller-scoped base tag")
             if self._micro800:
                 raise RequestError("Extended descriptions require a Logix controller")
-            info = self.get_tag_info(tag_name)
-            instance_id = info["instance_id"]
-            pages = []
-            offset = 0
-            for _ in range(1024):
-                request = SendUnitDataRequestPacket(self._sequence)
-                request.add(build_description_request(instance_id, language, offset))
-                response = self.send(request)
-                if not response:
-                    return Tag(result_name, None, "STRING", response.error)
-                page = decode_metadata_page(response.data)
-                if page["first"] != (offset == 0) or page["offset"] != offset:
-                    raise ResponseError("Out-of-order extended description page")
-                pages.append(response.data)
-                if page["last"]:
-                    record = decode_description_response(pages, encoding)
-                    if record is None:
-                        return Tag(result_name, None, "STRING",
-                                   "No description returned for language 0x{:04x}".format(language))
-                    if record["instance_id"] != instance_id or record["language"] != language:
-                        raise ResponseError("Extended description reply targets a different tag/language")
-                    return Tag(result_name, record["value"], "STRING", None)
-                if not page["data"]:
-                    raise ResponseError("Extended description continuation made no progress")
-                offset += len(page["data"])
-            raise ResponseError("Extended description exceeded 1024 pages")
+            with self._lock:
+                value = read_description(self, tag_name, language, encoding)
+            if value is None:
+                return Tag(result_name, None, "STRING",
+                           "No description returned for language 0x{:04x}".format(language))
+            return Tag(result_name, value, "STRING", None)
         except Exception as error:
             return Tag(result_name, None, "STRING", str(error))
 
