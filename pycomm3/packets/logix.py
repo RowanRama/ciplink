@@ -23,6 +23,7 @@
 #
 
 import logging
+from io import BytesIO
 from reprlib import repr as _r
 from typing import Dict, Any, Sequence, Union
 
@@ -30,9 +31,19 @@ from ..util import cycle
 from .ethernetip import SendUnitDataRequestPacket, SendUnitDataResponsePacket
 from .util import parse_read_reply, request_path, tag_request_path
 
-from ..cip import ClassCode, Services, DataTypes, UINT, UDINT, ULINT
+from ..cip import ClassCode, Services, DataTypes, INT, DINT, UINT, UDINT, ULINT
 from ..const import STRUCTURE_READ_REPLY, SUCCESS, INSUFFICIENT_PACKETS
 from ..exceptions import RequestError
+
+# controller object (0xAC) attributes that version the tag table (1756-PM020 step 5): the edit counter, attribute 2,
+# the download timestamps and the project timestamp
+TAG_TABLE_VERSION_ATTRIBUTES = ((1, INT), (2, INT), (3, DINT), (4, DINT), (10, DINT))
+TAG_TABLE_VERSION_SERVICE = b"".join((
+    Services.get_attribute_list,
+    request_path(0xAC, 1),
+    UINT.encode(len(TAG_TABLE_VERSION_ATTRIBUTES)),
+    *(UINT.encode(attribute) for attribute, _ in TAG_TABLE_VERSION_ATTRIBUTES),
+))
 
 
 class TagServiceResponsePacket(SendUnitDataResponsePacket):
@@ -336,6 +347,7 @@ class ReadModifyWriteRequestPacket(SendUnitDataRequestPacket):
         tag_info: Dict[str, Any],
         request_id: int,
         use_instance_id: bool = True,
+        request_path: bytes = None,
     ):
         super().__init__(sequence)
         self.tag = tag
@@ -345,7 +357,7 @@ class ReadModifyWriteRequestPacket(SendUnitDataRequestPacket):
         self.request_id = request_id
         self._use_instance_id = use_instance_id
         self.data_type = tag_info["data_type_name"]
-        self.request_path = tag_request_path(tag, tag_info, use_instance_id)
+        self.request_path = request_path or tag_request_path(tag, tag_info, use_instance_id)
         self._request_ids = []
         self._and_mask = 0xFFFF_FFFF_FFFF_FFFF
         self._or_mask = 0x0000_0000_0000_0000
@@ -374,6 +386,61 @@ class ReadModifyWriteRequestPacket(SendUnitDataRequestPacket):
     def _setup_message(self):
         super()._setup_message()
         self._msg.append(self.tag_only_message())
+
+
+class TagTableVersionResponsePacket(SendUnitDataResponsePacket):
+    __log = logging.getLogger(f"{__module__}.{__qualname__}")
+
+    def __init__(self, request: "TagTableVersionRequestPacket", raw_data: bytes = None):
+        self.value = None
+        self.data_type = None
+        super().__init__(request, raw_data)
+
+    def _parse_reply(self):
+        super()._parse_reply()
+        if not self.is_valid():
+            return
+        try:
+            stream = BytesIO(self.data)
+            UINT.decode(stream)  # attribute count
+            values = []
+            for attribute, data_type in TAG_TABLE_VERSION_ATTRIBUTES:
+                if (UINT.decode(stream), UINT.decode(stream)) != (attribute, SUCCESS):
+                    raise ValueError(f"attribute {attribute} was not returned")
+                values.append(data_type.decode(stream))
+            self.value = tuple(values)
+        except Exception as err:
+            self.__log.exception("Failed parsing reply data")
+            self._error = f"Failed to parse reply - {err}"
+
+
+class TagTableVersionRequestPacket(SendUnitDataRequestPacket):
+    """
+    Reads the tag table version, any change means symbol instance IDs may now name other tags.  Sent alone or
+    as the first service of a multi-service packet, the value of its reply is the version as an opaque tuple.
+    """
+
+    __log = logging.getLogger(f"{__module__}.{__qualname__}")
+    type_ = "read"
+    response_class = TagTableVersionResponsePacket
+    tag = "@tag_table_version"
+    # bytes in a multi-service packet: a sequence or offset (2) plus the service, its reply adds a 4-byte header
+    request_size = 2 + len(TAG_TABLE_VERSION_SERVICE)
+    reply_size = 6 + 2 + sum(4 + data_type.size for _, data_type in TAG_TABLE_VERSION_ATTRIBUTES)
+
+    def __init__(self, sequence: cycle):
+        super().__init__(sequence)
+        self.request_id = self  # unique, several checks can share a call's results
+
+    def tag_only_message(self):
+        return TAG_TABLE_VERSION_SERVICE
+
+    def _setup_message(self):
+        super()._setup_message()
+        self._msg.append(self.tag_only_message())
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}()"
 
 
 class MultiServiceResponsePacket(SendUnitDataResponsePacket):

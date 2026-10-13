@@ -318,6 +318,7 @@ def test_lazy_mode_defers_upload_and_caches_scope_definitions():
             mock.patch.object(plc, "_list_identity", return_value=identity), \
             mock.patch.object(plc, "get_plc_info", return_value=identity), \
             mock.patch.object(plc, "get_plc_name"), \
+            mock.patch.object(plc, "_read_tag_table_version", return_value=(1, 1, 2, 2, 3)), \
             mock.patch.object(plc, "get_tag_list") as upload:
         plc.open()
     upload.assert_not_called()

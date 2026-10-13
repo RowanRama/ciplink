@@ -27,8 +27,11 @@ __all__ = [
 ]
 
 import datetime
+import json
 import logging
 import operator
+import os
+import tempfile
 import time
 from contextlib import suppress
 from functools import reduce
@@ -88,11 +91,17 @@ from .packets import (
     WriteTagRequestPacket,
     MultiServiceRequestPacket,
     ReadModifyWriteRequestPacket,
+    TagTableVersionRequestPacket,
     tag_request_path,
 )
 from .tag import Tag
 from .logix_auth import LogixMetadataCredentials
 from .logix_descriptions import read_description
+
+_TAG_CACHE_VERSION = 2  # bump when the tag cache file layout changes
+_MAKEUP_KEYS = ("object_definition_size", "structure_size", "member_count", "structure_handle")
+_PARSE_MEMO_SIZE = 10_000  # parsed requests kept before the memo starts over
+_TAG_TABLE_UPLOAD_TRIES = 3  # uploads of a tag table that keeps changing before the last one is kept
 
 AtomicValueType = Union[int, float, bool, str]
 TagValueType = Union[AtomicValueType, List[AtomicValueType], Dict[str, "TagValueType"]]
@@ -115,6 +124,7 @@ class LogixDriver(CIPDriver):
         init_program_tags: bool = True,
         tag_namespace_filter: str = '',
         lazy_tags: bool = False,
+        tag_cache_file: Optional[str] = None,
         **kwargs,
     ):
         """
@@ -141,6 +151,19 @@ class LogixDriver(CIPDriver):
                 using any of them to decrease tag upload times.
         :param tag_namespace_filter: only upload tags whose name starts with this prefix, prefix match on the tag name
                 (without the ``Program:X.`` part); program, task and module discovery is not filtered
+        :param tag_cache_file: path of a file that keeps the tag list between connections to speed up the tag upload
+                on a restart. It stores the symbol lists, the data type templates, the controller's serial number and
+                the tag table version (see :meth:`.check_tag_table`) read before they were uploaded. If the controller
+                reports the same serial number and version on the next connect, nothing is uploaded, the whole tag
+                list comes from the file. Otherwise (an edit since, another controller, or a controller that does not
+                report its version) the symbol lists are uploaded and the stored templates are only used if every
+                symbol list (instance ids included) is unchanged since the file was written, else they are uploaded
+                again. On that path each template's structure makeup is still read, a template whose makeup changed is
+                uploaded again; a change that keeps the makeup (e.g. a member renamed to a name of the same length) is
+                not detected, delete the file after such an edit. The file is rewritten after every upload. A missing,
+                corrupt, older-format or unwritable file never stops the connection, it is logged and the upload
+                continues without it. Only the startup scope's upload (all programs with ``init_program_tags``, else
+                the controller) reads and writes it. Not used with ``lazy_tags``.
 
         .. tip::
 
@@ -151,14 +174,31 @@ class LogixDriver(CIPDriver):
             Tag lists are controller-specific: on v21+ tags are addressed by instance_id, which differs between
             controllers even with identical programs, so only share a tag list between connections to the same controller.
 
+        .. note::
+
+            An online edit can give an instance ID to another tag (a deleted tag's ID goes to the next tag created),
+            so requests by instance ID are checked against the controller's tag table version (its edit counter and
+            download timestamps, Rockwell 1756-PM020): every read packet starts with the check, writes are checked
+            right before and after, and a change loads the tag definitions again (see :meth:`.read`, :meth:`.write`
+            and :meth:`.check_tag_table`).  The version is read on connect: a controller that cannot answer it (e.g.
+            the Emulate 5580 emulator) is used with tags requested by name instead, and a warning is logged.  A tag
+            list kept from an earlier connection (``init_tags=False``) keeps the version it was loaded at, so an
+            edit made while disconnected loads it again.  A tag list shared as above after ``plc2`` connected is
+            checked against the version read when ``plc2`` connected, one shared before has no known version and
+            is loaded again at the first read or write.
+
         """
 
         super().__init__(path, *args, **kwargs)
-        self._cache = {"id:struct": {}, "id:udt": {}}
+        self._cache = {"id:struct": {}, "id:template": {}, "id:udt": {}}
+        self._tag_cache_file = tag_cache_file
         self._lazy_tags = lazy_tags
         self._lazy_tag_lists = {}
         self._data_types = {}
         self._tags = {}
+        self._parse_memo = (self._tags, {})  # (tag list, {(tag, rw, use_instance_ids): parsed request})
+        self._tag_table_detection = False  # the controller reports its tag table version, see _initialize_driver
+        self._tag_table_version = None  # the version self._tags was loaded at, None if unknown
         self._micro800 = False
         self._cfg["use_instance_ids"] = True
         self._init_args = {
@@ -183,10 +223,7 @@ class LogixDriver(CIPDriver):
             if ret:
                 try:
                     if self._lazy_tags:
-                        self._tags, self._data_types = {}, {}  # rebind: the old dict may be shared
-                        self._lazy_tag_lists.clear()
-                        for cache in self._cache.values():
-                            cache.clear()
+                        self._reset_lazy_tags()
                     self._initialize_driver(**self._init_args)
                 except BaseException:  # also Ctrl-C, else the next open() returns True with no definitions
                     with suppress(CommError):
@@ -217,10 +254,84 @@ class LogixDriver(CIPDriver):
                 -1
             )  # strip off backplane/0 segment, not used for these processors
 
+        # an ID can name another tag after an online edit, IDs are only used if the tag table version shows edits
+        self._tag_table_detection = False
+        if self._cfg["use_instance_ids"]:
+            version = self._read_tag_table_version()
+            self._tag_table_detection = version is not None
+            if not self._tags:  # lazy loads come after it, a kept tag list keeps the version it was loaded at
+                self._tag_table_version = version
+            if not self._tag_table_detection:
+                self.__log.warning(
+                    "The controller does not report its tag table version, tag table change detection is "
+                    "unavailable: tags are requested by name instead of by instance ID"
+                )
+                self._cfg["use_instance_ids"] = False
+
         if init_tags:
             self.get_tag_list(tag_namespace_filter=tag_namespace_filter, program="*" if init_program_tags else None)
 
         self.__log.info("Initialization complete.")
+
+    def _reset_lazy_tags(self):
+        self._tags, self._data_types = {}, {}  # rebind: the old dict may be shared
+        self._lazy_tag_lists.clear()
+        for cache in self._cache.values():
+            cache.clear()
+
+    @property
+    def _version_checks(self) -> bool:
+        """requests by instance ID are checked against the tag table version"""
+        return self._cfg["use_instance_ids"] and self._tag_table_detection
+
+    def _read_tag_table_version(self):
+        """
+        Reads the tag table version (Rockwell 1756-PM020 step 5: the edit counter and the download and project
+        timestamps), returns None if the controller did not return it.
+        """
+        response = self.send(TagTableVersionRequestPacket(self._sequence))
+        if not response:
+            self.__log.info(f"Tag table version not read - {response.error}")
+            return None
+        return response.value
+
+    def _tag_table_changed(self, versions, loaded_at) -> bool:
+        """
+        True if a version read differs from ``loaded_at`` or failed (None).  ``loaded_at`` is the version of the tag
+        list the requests were built from, read before they were built: another thread may load it again meanwhile.
+        """
+        return any(version is None or version != loaded_at for version in versions)
+
+    def _refresh_tag_table(self):
+        """loads the tag definitions again as open() did, after the tag table version changed"""
+        self.__log.info("Tag table changed on the controller, loading the tag definitions again")
+        with self._lock:
+            if self._lazy_tags:
+                self._reset_lazy_tags()
+                self._tag_table_version = self._read_tag_table_version()
+            else:
+                self.get_tag_list(program="*" if self._init_args["init_program_tags"] else None,
+                                  tag_namespace_filter=self._init_args["tag_namespace_filter"])
+
+    @with_forward_open
+    def check_tag_table(self) -> bool:
+        """
+        Loads the tag definitions again if the controller's tag table changed since they were loaded, e.g. an
+        online edit added, renamed or deleted a tag.  :meth:`.read` and :meth:`.write` check this on their own, so
+        it is only needed to pick up an edit while idle: e.g. a program that reads rarely can call it every few
+        seconds so the next read does not wait for the reload.  Reads the version only, the tag list is uploaded
+        only after a change.
+
+        Without instance IDs (before v21, Micro800, or a controller that does not report its tag table version)
+        nothing is read and False is returned.
+
+        :return: True if the tag definitions were loaded again
+        """
+        if not (self._version_checks
+                and self._tag_table_changed([self._read_tag_table_version()], self._tag_table_version)):
+            return False
+        self._refresh_tag_table()
+        return True
 
     @property
     def revision_major(self) -> int:
@@ -435,6 +546,10 @@ class LogixDriver(CIPDriver):
         :param tag_namespace_filter: prefix match on the tag name (without the ``Program:X.`` part), only matching tags
                       are returned; program, task and module discovery is not filtered
 
+        With instance IDs and ``cache``, the tag table version is read before and after the upload and the upload
+        is repeated if it changed (at most 3 uploads, then the last one is kept and the next read or write loads
+        it again).
+
         :return: a list containing dicts for each tag definition collected
         """
 
@@ -442,32 +557,166 @@ class LogixDriver(CIPDriver):
             program = program[len("Program:"):]
 
         with self._lock:  # a lazy load in another thread must not see the template cache cleared
-            for values in self._cache.values():
-                values.clear()
-            for key in ("programs", "tasks", "modules"):
-                if program in {"*", None} or key not in self._info:
-                    self._info[key] = {}
-
-            self.__log.info("Starting tag list upload...")
-            if program == "*":
-                tags = self._get_tag_list(tag_namespace_filter=tag_namespace_filter)
-                for prog in self._info["programs"]:
-                    tags += self._get_tag_list(prog, tag_namespace_filter=tag_namespace_filter)
-            else:
-                tags = self._get_tag_list(program, tag_namespace_filter=tag_namespace_filter)
+            checks = cache and self._version_checks
+            for attempt in range(1, _TAG_TABLE_UPLOAD_TRIES + 1):
+                version = self._read_tag_table_version() if checks else None
+                tags = self._upload_tag_list(program, cache, tag_namespace_filter, version)
+                if not checks or (version is not None and version == self._read_tag_table_version()):
+                    break
+                self.__log.info(f"Tag table changed during upload {attempt} of {_TAG_TABLE_UPLOAD_TRIES}")
+            else:  # its version is the one before the upload, so the next check loads it again
+                self.__log.warning("Tag table kept changing during the upload, keeping the last one")
 
             if cache:
                 self._tags = {tag["tag_name"]: tag for tag in tags}
                 self._lazy_tag_lists.clear()
+                self._tag_table_version = version
 
         self.__log.info(f"Completed tag list upload. Uploaded {len(self._tags)} tags.")
         return tags
 
+    def _upload_tag_list(self, program, cache, tag_namespace_filter, version):
+        for values in self._cache.values():
+            values.clear()
+        for key in ("programs", "tasks", "modules"):
+            if program in {"*", None} or key not in self._info:
+                self._info[key] = {}
+
+        self.__log.info("Starting tag list upload...")
+        startup_scope = "*" if self._init_args["init_program_tags"] else None  # other scopes don't touch the file
+        if cache and self._tag_cache_file and not self._lazy_tags and program == startup_scope:
+            return self._get_tag_list_with_cache_file(program, tag_namespace_filter, version)
+        if program == "*":
+            tags = self._get_tag_list(tag_namespace_filter=tag_namespace_filter)
+            for prog in self._info["programs"]:
+                tags += self._get_tag_list(prog, tag_namespace_filter=tag_namespace_filter)
+            return tags
+        return self._get_tag_list(program, tag_namespace_filter=tag_namespace_filter)
+
     def _get_tag_list(self, program=None, tag_namespace_filter=''):
+        all_tags = self._get_symbol_list(program)
+        return self._isolate_user_tags(all_tags, program, tag_namespace_filter)
+
+    def _get_symbol_list(self, program=None):
         self.__log.info(f'Beginning upload of {program or "controller"} tags...')
         all_tags = self._get_instance_attribute_list_service(program)
         self.__log.info(f'Completed upload of {program or "controller"} tags')
-        return self._isolate_user_tags(all_tags, program, tag_namespace_filter)
+        return all_tags
+
+    def _get_tag_list_with_cache_file(self, program, tag_namespace_filter, version):
+        """
+        Same result as the uploads in get_tag_list.  If the tag cache file was written for this controller and scope
+        at the current tag table ``version``, nothing is uploaded, the symbol lists, makeups and templates all come
+        from the file.  Else every requested symbol list is uploaded first and the templates come from the file
+        only if those lists equal the stored ones, so ids are never stale, and only if their makeup, still read for
+        each template, is unchanged (_get_data_type).
+        """
+        cached = self._load_tag_cache_file()
+        current = (cached is not None and version is not None and cached["scope"] == program
+                   and cached["serial"] == self._info.get("serial") and cached["table_version"] == list(version))
+
+        def upload_symbols():
+            scope = None if program == "*" else program
+            uploaded = [[scope, self._get_symbol_list(scope)]]
+            if program == "*":  # same programs, in the same order, that _isolate_user_tags will find
+                programs = [t["tag_name"].replace("Program:", "") for t in uploaded[0][1]
+                            if t["tag_name"].startswith("Program:")]
+                uploaded += [[prog, self._get_symbol_list(prog)] for prog in programs]
+            return uploaded
+
+        def isolate():
+            return [tag for scope, all_tags in symbols
+                    for tag in self._isolate_user_tags(all_tags, scope, tag_namespace_filter)]
+
+        symbols = cached["symbols"] if current else upload_symbols()
+        templates = {}
+        if cached is not None and cached["symbols"] == symbols:
+            templates = cached["templates"]
+        elif cached is not None:
+            self.__log.info(f"Tag cache file {self._tag_cache_file} not used, it is out of date")
+        if current:  # the tag table is unchanged, so are the makeups
+            self._cache["id:struct"].update((i, makeup) for i, (makeup, _) in templates.items())
+        self._cache["id:template"].update(templates)  # after get_tag_list cleared the caches
+        try:
+            tags = isolate()
+        except CommError:
+            raise
+        except Exception as err:  # e.g. a damaged template in the file, upload everything instead
+            if not (templates or current):
+                raise
+            self.__log.warning(f"Ignoring tag cache file {self._tag_cache_file}, its contents failed: {err!r}")
+            for values in self._cache.values():
+                values.clear()
+            for key in ("programs", "tasks", "modules"):  # only the startup scope ('*' or None) gets here
+                self._info[key] = {}
+            templates = {}
+            if current:  # the symbol lists came from the file too
+                symbols, current = upload_symbols(), False
+            tags = isolate()
+
+        if current:
+            self.__log.info(f"Tag table unchanged since tag cache file {self._tag_cache_file} was written, "
+                            f"loaded the tag list from it")
+        elif templates:
+            saved = sum(1 for i in self._cache["id:udt"] if self._cache["id:template"][i] is templates.get(i))
+            self.__log.info(f"Used tag cache file {self._tag_cache_file}, saved the reads of {saved} templates")
+        self._save_tag_cache_file(program, symbols, version)
+        return tags
+
+    def _load_tag_cache_file(self):
+        """
+        returns the tag cache file's contents, with the templates as {template instance id: (structure makeup, raw
+        template)}, or None if the file is missing, unreadable or in an older format
+        """
+        try:
+            with open(self._tag_cache_file, encoding="utf-8") as file:
+                cached = json.load(file)
+            if cached["version"] != _TAG_CACHE_VERSION:
+                self.__log.info(f"Tag cache file {self._tag_cache_file} not used, it is out of date")
+                return None
+            return {
+                "scope": cached["scope"],
+                "serial": cached["serial"],
+                "table_version": cached["table_version"],
+                "symbols": cached["symbols"],
+                "templates": {
+                    int(instance_id): ({k: int(makeup[k]) for k in _MAKEUP_KEYS}, bytes.fromhex(data))
+                    for instance_id, makeup, data in cached["templates"]
+                },
+            }
+        except FileNotFoundError:
+            self.__log.info(f"Tag cache file {self._tag_cache_file} not found, it will be created")
+        except Exception as err:
+            self.__log.warning(f"Ignoring unreadable tag cache file {self._tag_cache_file}: {err!r}")
+        return None
+
+    def _save_tag_cache_file(self, program, symbols, version):
+        """
+        atomically writes the symbol lists, every template used by them, and the controller serial and tag table
+        version they were uploaded at (read before the upload, so a version still current means nothing changed)
+        """
+        cached = {
+            "version": _TAG_CACHE_VERSION,
+            "scope": program,
+            "serial": self._info.get("serial"),
+            "table_version": None if version is None else list(version),
+            "symbols": symbols,
+            "templates": [
+                [i, self._cache["id:template"][i][0], self._cache["id:template"][i][1].hex()]
+                for i in self._cache["id:udt"]
+            ],
+        }
+        tmp = None
+        try:
+            fd, tmp = tempfile.mkstemp(suffix=".tmp", dir=os.path.dirname(os.path.abspath(self._tag_cache_file)))
+            with open(fd, "w", encoding="utf-8") as file:
+                json.dump(cached, file)
+            os.replace(tmp, self._tag_cache_file)
+        except Exception as err:
+            self.__log.warning(f"Could not write tag cache file {self._tag_cache_file}: {err!r}")
+            if tmp is not None:
+                with suppress(OSError):
+                    os.remove(tmp)
 
     def _get_instance_attribute_list_service(self, program=None):
         """Step 1: Finding user-created controller scope tags in a Logix5000 controller
@@ -901,8 +1150,11 @@ class LogixDriver(CIPDriver):
             try:
                 self.__log.debug(f"Getting data type for id {instance_id}")
                 template = self._get_structure_makeup(instance_id)  # instance id from type
-                _data = self._read_template(instance_id, template["object_definition_size"])
-                data_type = self._parse_template_data(_data, template, symbol_type)
+                cached = self._cache["id:template"].get(instance_id)  # (makeup, raw template), maybe from the file
+                if cached is None or cached[0] != template:  # a changed makeup means the template changed
+                    cached = template, self._read_template(instance_id, template["object_definition_size"])
+                    self._cache["id:template"][instance_id] = cached
+                data_type = self._parse_template_data(cached[1], template, symbol_type)
                 self._cache["id:udt"][instance_id] = data_type
                 self._data_types[data_type["name"]] = data_type
                 self.__log.debug(f'Got data type {data_type["name"]} for id {instance_id}')
@@ -985,16 +1237,34 @@ class LogixDriver(CIPDriver):
         count in using curly braces (array{10}).  Also supports full structure reading (when possible), return value
         will be a dict of {attribute name: value}.
 
+        With instance IDs, every packet starts with a check of the tag table version (fragmented reads are sent
+        between two checks).  If the tag table changed since the tag definitions were loaded, e.g. by an online
+        edit, an ID may have named another tag: every result is discarded, the definitions are loaded again (see
+        :meth:`.check_tag_table`) and the tags are read once more.  If it changed again during that second read,
+        every result gets an error instead.
+
         :param tags: one or many tags to read
         :return: a single or list of ``Tag`` objects
         """
 
         if not tags:
             return []
-        parsed_requests = self._parse_requested_tags(tags, "r")
-        requests = self._read_build_requests(parsed_requests)
-        read_results = self._send_requests(requests)
-        self._merge_chunk_results(parsed_requests, read_results, "r")
+        for attempt in range(2):
+            # before the parse: get_tag_list sets the tags before their version, so a reload in between is a retry
+            loaded_at = self._tag_table_version
+            parsed_requests = self._parse_requested_tags(tags, "r")
+            requests = self._read_build_requests(parsed_requests)
+            read_results = self._send_requests(requests)
+            versions = [read_results.pop(key).value for key in list(read_results)
+                        if isinstance(key, TagTableVersionRequestPacket)]
+            self._merge_chunk_results(parsed_requests, read_results, "r")
+            if not self._tag_table_changed(versions, loaded_at):
+                break
+            if attempt == 0:
+                self._refresh_tag_table()
+            else:  # no third read, the next call loads the definitions again
+                error = "Tag table changed on the controller during the read and again during its retry, discarded"
+                read_results = {key: Tag(result.tag, None, None, error) for key, result in read_results.items()}
 
         results = []
 
@@ -1049,24 +1319,34 @@ class LogixDriver(CIPDriver):
                 sized_requests.append((request, _read_reply_size(tag_data)))
         # reads are matched by request_id, so batch the small reads ahead of the fragmented ones
         sized_requests.sort(key=lambda item: isinstance(item[0], ReadTagFragmentedRequestPacket))
-        return self._pack_multi_requests(sized_requests)
+        return self._pack_multi_requests(sized_requests, self._version_checks)
 
-    def _pack_multi_requests(self, sized_requests):
+    def _pack_multi_requests(self, sized_requests, version_checks=False):
         """
         Groups consecutive requests into multi-service packets, in call order, bounding both the request and
         the reply size. Fragmented requests, requests too big for a multi-service packet, and groups of one
         are sent alone.
+
+        With ``version_checks`` (reads only) every multi-service packet starts with a tag table version check, so
+        a group of one is a packet of two, and a request sent alone gets a standalone check before and after it.
         """
         if self._micro800:  # micro800 don't support multi-request packets
             return [request for request, _ in sized_requests]
 
         packets = []
         group = []
-        request_size = MULTISERVICE_READ_OVERHEAD
-        response_size = 8  # sequence, reply header, and service count
+        empty_request = MULTISERVICE_READ_OVERHEAD
+        empty_response = 8  # sequence, reply header, and service count
+        if version_checks:
+            empty_request += TagTableVersionRequestPacket.request_size
+            empty_response += TagTableVersionRequestPacket.reply_size
+        request_size, response_size = empty_request, empty_response
 
         def flush():
-            if len(group) == 1:
+            if version_checks and group:
+                packets.append(MultiServiceRequestPacket(
+                    self._sequence, [TagTableVersionRequestPacket(self._sequence), *group]))
+            elif len(group) == 1:
                 packets.append(group[0])
             elif group:
                 packets.append(MultiServiceRequestPacket(self._sequence, list(group)))
@@ -1076,17 +1356,21 @@ class LogixDriver(CIPDriver):
             # an embedded service omits its 2-byte sequence and adds a 2-byte offset, so its size is unchanged
             message_size = len(request.build_message())
             if (isinstance(request, (ReadTagFragmentedRequestPacket, WriteTagFragmentedRequestPacket))
-                    or MULTISERVICE_READ_OVERHEAD + message_size > self.connection_size
-                    or 8 + reply_size > self.connection_size):
+                    or empty_request + message_size > self.connection_size
+                    or empty_response + reply_size > self.connection_size):
                 flush()
+                if version_checks and not (packets and isinstance(packets[-1], TagTableVersionRequestPacket)):
+                    packets.append(TagTableVersionRequestPacket(self._sequence))
                 packets.append(request)
-                request_size, response_size = MULTISERVICE_READ_OVERHEAD, 8
+                if version_checks:
+                    packets.append(TagTableVersionRequestPacket(self._sequence))
+                request_size, response_size = empty_request, empty_response
                 continue
 
             if (request_size + message_size > self.connection_size
                     or response_size + reply_size > self.connection_size):
                 flush()
-                request_size, response_size = MULTISERVICE_READ_OVERHEAD, 8
+                request_size, response_size = empty_request, empty_response
             group.append(request)
             request_size += message_size
             response_size += reply_size
@@ -1107,6 +1391,7 @@ class LogixDriver(CIPDriver):
                 parsed_tag["request_id"],
                 self._cfg["use_instance_ids"],
             )
+            request.request_path = parsed_tag.get("request_path")  # None encodes it from the tag
 
             if _read_reply_size(parsed_tag) > self.connection_size:
                 request = ReadTagFragmentedRequestPacket.from_request(self._sequence, request)
@@ -1127,6 +1412,11 @@ class LogixDriver(CIPDriver):
         count in using curly braces (array{10}).  Also supports full structure writing (when possible), value must be a
         sequence of values or a dict of {attribute: value} matching the exact structure of the destination tag.
 
+        With instance IDs, the tag table version is checked right before the writes are sent (if it changed, the tag
+        definitions are loaded again first, see :meth:`.check_tag_table`) and right after them.  If it changed
+        during the writes, an ID may have named another tag: the definitions are loaded again and every result gets
+        an error.  Writes are never retried.
+
         :param tags_values: a tag name and value as two arguments, ``write('tag', value)``, or one or more (tag, value)
                             tuples, ``write(('tag1', 1), ('tag2', 2))``. To write a list of pairs, unpack it: ``write(*pairs)``.
         :return: a single or list of ``Tag`` objects.
@@ -1137,14 +1427,23 @@ class LogixDriver(CIPDriver):
         if len(tags_values) == 2 and isinstance(tags_values[0], str):
             tags_values = ((*tags_values,),)
 
-        tags = (tag for (tag, value) in tags_values)
-        parsed_requests = self._parse_requested_tags(tags, "w")
+        def build():
+            loaded_at = self._tag_table_version  # before the parse, as in read()
+            tags = (tag for (tag, value) in tags_values)
+            parsed = self._parse_requested_tags(tags, "w")
+            for i, (tag, value) in enumerate(tags_values):
+                parsed[i]["value"] = value
+            return loaded_at, parsed, self._write_build_requests(parsed)
 
-        for i, (tag, value) in enumerate(tags_values):
-            parsed_requests[i]["value"] = value
-
-        requests = self._write_build_requests(parsed_requests)
+        loaded_at, parsed_requests, requests = build()
+        checks = self._version_checks and bool(requests)  # never in a packet with a write, before and after them
+        if checks and self._tag_table_changed([self._read_tag_table_version()], loaded_at):
+            self._refresh_tag_table()
+            loaded_at, parsed_requests, requests = build()
         write_results = self._send_requests(requests)
+        changed = checks and self._tag_table_changed([self._read_tag_table_version()], loaded_at)
+        if changed:
+            self._refresh_tag_table()
 
         # a mask can carry bits of several requests and a BOOL slice can span several masks
         for packet in requests:
@@ -1158,6 +1457,9 @@ class LogixDriver(CIPDriver):
                             write_results[req_id] = result
 
         self._merge_chunk_results(parsed_requests, write_results, "w")
+        if changed:
+            error = "Tag table changed on the controller during the write, it may have written another tag"
+            write_results = {key: result._replace(error=error) for key, result in write_results.items()}
         results = []
         for i, (tag, value) in enumerate(tags_values):
             try:
@@ -1234,9 +1536,11 @@ class LogixDriver(CIPDriver):
                             word_offset, target_bit = divmod((bit or 0) % 32 + index, 32)
                             target = f"{word_tag}[{(word_index or 0) + word_offset}]"
                         if target not in bit_writes:
+                            same_path = target == tag_data["plc_tag"]  # a BOOL array mask may be another word
                             bit_writes[target] = ReadModifyWriteRequestPacket(
                                 self._sequence, target, tag_data["tag_info"],
                                 -1 - len(bit_requests) - len(bit_writes), self._cfg["use_instance_ids"],
+                                tag_data.get("request_path") if same_path else None,
                             )
                         bit_writes[target].set_bit(target_bit, value, request_id)
                 else:
@@ -1265,6 +1569,7 @@ class LogixDriver(CIPDriver):
                 self._cfg["use_instance_ids"],
                 parsed_tag["write_value"],
             )
+            request.request_path = parsed_tag.get("request_path")  # None encodes it from the tag
             if len(request.build_message()) > self.connection_size:
                 request = WriteTagFragmentedRequestPacket.from_request(self._sequence, request)
 
@@ -1358,7 +1663,23 @@ class LogixDriver(CIPDriver):
     def _parse_tag_request(self, tag: str, rw="r") -> dict:
         """
         rw: read/write - because of how bool arrays always read from 0, but writing doesn't
+
+        Successful parses are memoized for the current tag list, rebinding self._tags or a full memo starts a new one.
+        Returns a copy, callers may change it.
         """
+        if not isinstance(tag, str):  # e.g. read([...]), unhashable, the parse reports it per tag
+            return self._parse_new_tag_request(tag, rw)
+        if self._parse_memo[0] is not self._tags:
+            self._parse_memo = (self._tags, {})
+        memo = self._parse_memo[1]
+        key = (tag, rw, self._cfg["use_instance_ids"])
+        if key not in memo:
+            if len(memo) >= _PARSE_MEMO_SIZE:  # e.g. a moving index, names that never repeat must not pile up
+                memo.clear()
+            memo[key] = self._parse_new_tag_request(tag, rw)  # a failure raises, it is not memoized
+        return dict(memo[key])
+
+    def _parse_new_tag_request(self, tag: str, rw="r") -> dict:
         try:
             if tag.endswith("}") and "{" in tag:
                 tag, _tmp = tag.split("{")
@@ -1380,6 +1701,8 @@ class LogixDriver(CIPDriver):
                 tag = base if not len(attrs) else f"{base}.{'.'.join(attrs)}"
 
             tag_info = self._get_tag_info(base, attrs)
+            if attrs:  # a member definition, the request addresses its base tag by the base's ID
+                tag_info = {**tag_info, "base_instance_id": self._get_tag_info(base, []).get("instance_id")}
 
             if tag_info["data_type"] == "DWORD":
                 _tag, idx = util.get_array_index(tag)
@@ -1395,7 +1718,7 @@ class LogixDriver(CIPDriver):
                     raise RequestError(f"Bit access is not supported on {tag_info['data_type_name']}")
                 if bit >= DataTypes.get(tag_info["data_type_name"]).size * 8:
                     raise RequestError("Bit index is outside the tag's data type")
-            tag_request_path(tag, tag_info, self._cfg["use_instance_ids"])  # a bad array index fails here, per tag
+            path = tag_request_path(tag, tag_info, self._cfg["use_instance_ids"])  # a bad index fails here, per tag
 
             return {
                 "user_tag": request_tag,  # tag name from user, without element request
@@ -1404,6 +1727,7 @@ class LogixDriver(CIPDriver):
                 "elements": elements,
                 "tag_info": tag_info,
                 "bool_elements": bool_elements,
+                "request_path": path,  # encoded once, the packets use it as is
             }
         except (CommError, RequestError):
             raise
@@ -1434,7 +1758,7 @@ class LogixDriver(CIPDriver):
                 for offset in range(0, count, 65535):
                     chunk_count = min(65535, count - offset)
                     chunk_id = (request_id, len(chunks))
-                    chunk = dict(tag_data, request_id=chunk_id,
+                    chunk = dict(tag_data, request_id=chunk_id, request_path=None,  # encoded for the chunk's index
                                  plc_tag=f"{array_tag}[{start + offset}]", elements=chunk_count)
                     if rw == "w":
                         begin, end = offset, offset + chunk_count
@@ -1475,7 +1799,9 @@ class LogixDriver(CIPDriver):
 
         for request in requests:
             multi = request.type_ == "multi"
-            subrequests = request.requests if multi else [request]
+            # a version check is only answered by its own reply, a packet that failed as a whole read nothing
+            subrequests = [req for req in (request.requests if multi else [request])
+                           if not isinstance(req, TagTableVersionRequestPacket)]
             try:
                 response = self.send(request)
             except (RequestError, ResponseError) as err:
@@ -1486,9 +1812,12 @@ class LogixDriver(CIPDriver):
             for resp in response.responses if multi else [response]:
                 req = resp.request
                 if type(req) is ReadTagRequestPacket and resp.service_status == INSUFFICIENT_PACKETS:
-                    # partial reply, read it again as a fragmented read
+                    # partial reply, read it again as a fragmented read, checked after it if the packet was (a read
+                    # sent alone is already followed by a check)
                     fragmented = ReadTagFragmentedRequestPacket.from_request(self._sequence, req)
-                    results.update(self._send_requests([fragmented]))
+                    checked = multi and isinstance(request.requests[0], TagTableVersionRequestPacket)
+                    after = [TagTableVersionRequestPacket(self._sequence)] if checked else []
+                    results.update(self._send_requests([fragmented, *after]))
                 elif resp:
                     results[req.request_id] = Tag(req.tag, resp.value, resp.data_type, None)
                 else:

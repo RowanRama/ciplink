@@ -108,23 +108,26 @@ def request_path(
 def tag_request_path(tag, tag_info, use_instance_ids):
     """
     Returns the tag request path encoded as a padded EPATH; raises ValueError for a non-integer index.
+
+    With use_instance_ids the base tag is addressed by its symbol instance ID: ``base_instance_id`` when tag_info
+    is a member definition, else ``instance_id``.  A program tag's ID is relative to its program, so the program
+    is named first.  Without an ID the base tag is addressed by name, 0 counts as none (it is never a symbol).
     """
 
     base, *attrs = tag.split(".")
+    segments = []
+    if base.startswith("Program:") and attrs:
+        segments.append(DataSegment(base))
+        base, *attrs = attrs
     base_tag, index = _find_tag_index(base)
-    if (
-        use_instance_ids
-        and not base.startswith("Program:")
-        and tag_info.get("instance_id")
-    ):
-        segments = [
+    instance_id = tag_info.get("base_instance_id", tag_info.get("instance_id"))
+    if use_instance_ids and instance_id:
+        segments += [
             LogicalSegment(ClassCode.symbol_object, "class_id"),
-            LogicalSegment(tag_info["instance_id"], "instance_id"),
+            LogicalSegment(instance_id, "instance_id"),
         ]
     else:
-        segments = [
-            DataSegment(base_tag),
-        ]
+        segments.append(DataSegment(base_tag))
 
     segments += [LogicalSegment(int(idx), "member_id") for idx in index]
 
