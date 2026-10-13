@@ -1,11 +1,4 @@
-"""Experimental codecs inferred from Logix extended-property captures.
-
-Validated against GuardLogix 5580 firmware 37.13, including live authenticated
-reads. These codecs do not authenticate a connection. An unauthenticated
-pycomm3 session on the test controller is denied access.
-Only controller base-tag Description and definition records have capture evidence;
-other tag properties, scopes, inheritance and non-ASCII text remain unverified.
-"""
+"""Logix metadata records."""
 
 import struct
 from typing import Any, Dict, Optional, Sequence
@@ -16,29 +9,46 @@ from .exceptions import DataError
 
 DESCRIPTION_SERVICE = 0x53
 METADATA_CLASS = 0x349
-# Preserve the exact 16-bit class/instance path observed in the capture.
 _READ_PREFIX = bytes.fromhex("53042100490325000000")
 
 
 def build_description_request(instance_id: int, language: int = 0x007F,
-                              offset: int = 0) -> bytes:
-    """Build the captured controller base-tag Description read, including CIP path.
-
-    The fixed selector bytes reproduce the observed query; they are not a public
-    protocol specification. 0x007F returned the confirmed description whereas
-    0x0409 returned an empty result. Continuations use byte offsets and clear the
-    initial-page flag, as observed for a split definition response.
-    """
+                              offset: int = 0, *, path: str = "",
+                              class_id: int = 0x6B,
+                              owner_context: Sequence[int] = (0, 0)) -> bytes:
+    """Create a Description request."""
     if not isinstance(instance_id, int) or not 1 <= instance_id <= 0xFFFFFFFF:
         raise ValueError("Symbol instance_id must be a positive UDINT")
     if not isinstance(language, int) or not 0 <= language <= 0xFFFF:
         raise ValueError("Language must be a UINT")
     if not isinstance(offset, int) or not 0 <= offset <= 0xFFFFFFFF:
         raise ValueError("Offset must be a UDINT")
+    if not isinstance(class_id, int) or not 0 <= class_id <= 0xFFFF:
+        raise ValueError("Class must be a UINT")
+    if (len(owner_context) != 2 or not isinstance(owner_context[0], int)
+            or not 0 <= owner_context[0] <= 0xFFFFFFFF
+            or not isinstance(owner_context[1], int)
+            or not 0 <= owner_context[1] <= 0xFFFF):
+        raise ValueError("Invalid Description owner")
+    if not isinstance(path, str):
+        raise ValueError("Description path must be a string")
+    raw_path = path.encode("utf-8")
+    if len(raw_path) > 0xFFFF:
+        raise ValueError("Description path is too long")
     header = struct.pack("<BBHI", 1, 1 if offset == 0 else 0, 0, offset)
-    selector = struct.pack("<HHHIIIHH", 0x0F, 0xFF, 0x6B, instance_id, 0, 0,
-                           language, 1)
+    selector = (struct.pack("<HHHIIHH", 0x0F, 0xFF, class_id, instance_id,
+                            owner_context[0], owner_context[1], len(raw_path))
+                + raw_path + struct.pack("<HH", language, 1))
     return _READ_PREFIX + header + selector
+
+
+def build_description_index_request(language: int = 0x007F, offset: int = 0) -> bytes:
+    if not isinstance(language, int) or not 0 <= language <= 0xFFFF:
+        raise ValueError("Language must be a UINT")
+    if not isinstance(offset, int) or not 0 <= offset <= 0xFFFFFFFF:
+        raise ValueError("Offset must be a UDINT")
+    return (_READ_PREFIX + struct.pack("<BBHIHHHH", 1, int(offset == 0), 0,
+                                      offset, 0x0C, 0xFF, language, 1))
 
 
 def decode_metadata_page(data: bytes) -> Dict[str, Any]:
@@ -98,7 +108,7 @@ class _Cursor:
             length, = self.unpack("<H")
             raw = self.read(length)
             try:
-                value = raw.decode(encoding)
+                value = raw if encoding is None else raw.decode(encoding)
             except UnicodeError as error:
                 raise DataError("Cannot decode metadata text using {}".format(encoding)) from error
             result = {"value": value}
@@ -140,24 +150,36 @@ def decode_definition_response(pages: Sequence[bytes],
 
 def decode_description_response(pages: Sequence[bytes],
                                 encoding: str = "utf-8") -> Optional[Dict[str, Any]]:
-    """Parse the observed single-property Description response, or missing result.
-
-    This intentionally rejects unverified multi-property layouts. A valid empty
-    response means that the selected language/query returned no property, which
-    is distinct from a configured description whose string length is zero.
-    """
-    cursor = _Cursor(assemble_metadata_pages(pages))
-    if not cursor.data:
+    """Return one Description record, or None."""
+    records = decode_description_records(pages, encoding, max_records=1)
+    if not records:
         return None
-    class_id, instance_id, a, b, language = cursor.unpack("<HIIIH")
-    property_id, record_id, c, d, e, kind = cursor.unpack("<HIIIIH")
-    if class_id != 0x6B or property_id != 1 or kind != 1:
-        raise DataError("Response is not the captured Symbol Description layout")
-    record = cursor.value(kind, encoding)
-    if cursor.offset != len(cursor.data):
+    if len(records) != 1:
         raise DataError("Unexpected additional Description records")
-    record.update({"class_id": class_id, "instance_id": instance_id,
-                   "language": language, "property_id": property_id,
-                   "record_id": record_id, "owner_context": [a, b],
-                   "context": [c, d, e]})
-    return record
+    if records[0]["kind"] != 1:
+        raise DataError("Response is not a text Description")
+    return records[0]
+
+
+def decode_description_records(pages: Sequence[bytes],
+                               encoding: Optional[str] = "utf-8", *,
+                               max_records: Optional[int] = None) -> Sequence[Dict[str, Any]]:
+    cursor = _Cursor(assemble_metadata_pages(pages))
+    records = []
+    while cursor.offset < len(cursor.data):
+        if max_records is not None and len(records) >= max_records:
+            raise DataError("Unexpected additional Description records")
+        class_id, instance_id, a, b = cursor.unpack("<HIIH")
+        path = cursor.value(1, "utf-8")["value"]
+        language, = cursor.unpack("<H")
+        property_id, record_id, c, d, e, kind = cursor.unpack("<HIIIIH")
+        if property_id != 1 or kind not in (1, 4):
+            raise DataError("Response is not a Description record")
+        record = (cursor.value(kind, encoding) if kind == 1
+                  else {"value": None, "kind": kind, "raw_value_hex": ""})
+        record.update({"class_id": class_id, "instance_id": instance_id,
+                       "language": language, "property_id": property_id,
+                       "record_id": record_id, "owner_context": [a, b],
+                       "path": path, "context": [c, d, e]})
+        records.append(record)
+    return records

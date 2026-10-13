@@ -1,7 +1,4 @@
-"""Read a controller base-tag Description without FactoryTalk or crypto DLLs.
-
-Uses the sealed Python credential bundle by default. Supply both external credential files together to use a matching external DER credential instead.
-"""
+"""Read a tag Description."""
 
 import argparse
 import datetime
@@ -14,8 +11,6 @@ from pycomm3 import LogixDriver, LogixMetadataCredentials
 
 
 def read_description(ip, tag, certificate=None, private_key=None):
-    if not tag or any(character in tag for character in ".[]{}"):
-        raise ValueError("Specify a controller-scoped base tag")
     if certificate is None and private_key is None:
         credentials = LogixMetadataCredentials.bundled()
     elif certificate is None or private_key is None:
@@ -49,7 +44,7 @@ def read_description(ip, tag, certificate=None, private_key=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("ip", help="Controller address or pycomm3 routing path")
-    parser.add_argument("--tag", required=True, help="Controller base tag name")
+    parser.add_argument("--tag", required=True, help="Tag, member, or array element")
     parser.add_argument("--certificate", type=Path, help="Optional external signed public certificate")
     parser.add_argument("--private-key", type=Path, help="Optional matching external RSA DER private key")
     parser.add_argument("--output", type=Path, help="Optional report, excluding credentials and setup bytes")
