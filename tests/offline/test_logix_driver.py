@@ -98,7 +98,8 @@ def test_open_call_init_driver_with():
 def test_logix_init_for_version_support_instance_ids_large_connection(identity):
     with mock.patch.object(LogixDriver, '_list_identity') as mock_identity, \
          mock.patch.object(LogixDriver, 'get_plc_info') as mock_get_info, \
-         mock.patch.object(LogixDriver, 'get_plc_name') as mock_get_name:
+         mock.patch.object(LogixDriver, 'get_plc_name') as mock_get_name, \
+         mock.patch.object(LogixDriver, '_read_tag_table_version', return_value=(1, 1, 2, 2, 3)):
 
         mock_identity.return_value = identity
         mock_get_info.return_value = identity  # this is the ListIdentity response
@@ -139,6 +140,7 @@ def test_logix_init_calls_get_tag_list_if_init_tags(identity):
          mock.patch.object(LogixDriver, 'get_plc_info') as mock_get_info, \
          mock.patch.object(LogixDriver, 'get_plc_name'), \
          mock.patch.object(CIPDriver, 'open'), \
+         mock.patch.object(LogixDriver, '_read_tag_table_version', return_value=(1, 1, 2, 2, 3)), \
          mock.patch.object(LogixDriver, 'get_tag_list') as mock_tag:
 
         mock_identity.return_value = identity

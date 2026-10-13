@@ -105,8 +105,9 @@ def test_tag_request_path_contract():
     # pins the encoded paths and the ValueError for a non-integer index
     assert tag_request_path("a.b[2]", {}, False) == bytes.fromhex("0591016100910162002802")
     assert tag_request_path("a[1,2].b", {"instance_id": 5}, True) == bytes.fromhex("06206b24052801280291016200")
+    # a program tag by its program-relative ID after the program name
     assert tag_request_path("Program:p.x[3]", {"instance_id": 5}, True) == bytes.fromhex(
-        "09910950726f6772616d3a7000910178002803"
+        "09910950726f6772616d3a7000206b24052803"
     )
     with pytest.raises(ValueError):
         tag_request_path("a[x]", {}, False)

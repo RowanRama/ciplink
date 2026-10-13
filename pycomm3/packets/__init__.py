@@ -57,5 +57,7 @@ from .logix import (
     ReadModifyWriteResponsePacket,
     MultiServiceRequestPacket,
     MultiServiceResponsePacket,
+    TagTableVersionRequestPacket,
+    TagTableVersionResponsePacket,
 )
 from .util import *
