@@ -5,19 +5,19 @@ from unittest import mock
 
 import pytest
 
-from pycomm3.cip import DINT, UINT
-from pycomm3.cip_driver import CIPDriver
-from pycomm3.const import BASE_TAG_BIT
-from pycomm3.exceptions import ResponseError
-from pycomm3.logix_driver import LogixDriver, _RELOAD_BACKOFF
-from pycomm3.packets import (
+from ciplink.cip import DINT, UINT
+from ciplink.cip_driver import CIPDriver
+from ciplink.const import BASE_TAG_BIT
+from ciplink.exceptions import ResponseError
+from ciplink.logix_driver import LogixDriver, _RELOAD_BACKOFF
+from ciplink.packets import (
     MultiServiceRequestPacket,
     ReadTagFragmentedRequestPacket,
     ReadTagRequestPacket,
     TagTableVersionRequestPacket,
     WriteTagRequestPacket,
 )
-from pycomm3.packets.logix import TAG_TABLE_VERSION_ATTRIBUTES
+from ciplink.packets.logix import TAG_TABLE_VERSION_ATTRIBUTES
 
 IDENTITY = {'product_name': '1756-L83E/B', 'revision': {'major': 33, 'minor': 11}, 'status': b'00',
             'serial': 'c0ffee01'}
@@ -141,7 +141,7 @@ def connected(fake, identity=IDENTITY, **kwargs):
 def clock():
     """the time.monotonic() the driver sees, ``now[0]`` is moved by the test"""
     now = [1000.0]
-    with mock.patch('pycomm3.logix_driver.time.monotonic', side_effect=lambda: now[0]):
+    with mock.patch('ciplink.logix_driver.time.monotonic', side_effect=lambda: now[0]):
         yield now
 
 
@@ -400,7 +400,7 @@ def test_change_during_a_write_is_an_error_and_not_retried():
 
 def test_controller_without_tag_table_version_uses_names(caplog):
     fake = FakePLC(TAGS, version=None)  # like an emulator, status 0x05
-    with caplog.at_level(logging.WARNING, logger='pycomm3'), connected(fake) as plc:
+    with caplog.at_level(logging.WARNING, logger='ciplink'), connected(fake) as plc:
         assert plc._cfg['use_instance_ids'] is False
         assert plc.read('a').value == 1
         assert plc.write('b', 20).error is None
@@ -452,7 +452,7 @@ def test_tag_list_that_keeps_changing_is_kept_and_loaded_again_later(caplog):
     with connected(fake) as plc:
         for packet, version in ((1, V2), (3, V3), (5, V4)):  # each check after an upload
             fake.edit_at(packet, EDITED, version)
-        with caplog.at_level(logging.WARNING, logger='pycomm3'):
+        with caplog.at_level(logging.WARNING, logger='ciplink'):
             plc.get_tag_list()
         assert 'kept changing' in caplog.text
         assert fake.uploads == 4

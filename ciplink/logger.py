@@ -31,7 +31,7 @@ __all__ = ["configure_default_logger", "LOG_VERBOSE"]
 LOG_VERBOSE = 5
 
 
-_logger = logging.getLogger("pycomm3")
+_logger = logging.getLogger("ciplink")
 _logger.addHandler(logging.NullHandler())
 
 
@@ -45,11 +45,11 @@ def configure_default_logger(level: int = logging.INFO, filename: str = None, lo
     """
     Helper method to configure basic logging.  `level` will set the logging level.
     To enable the verbose logging (where the contents of every packet sent/received is logged)
-    import the `LOG_VERBOSE` level from the `pycomm3.logger` module. The default level is `logging.INFO`.
+    import the `LOG_VERBOSE` level from the `ciplink.logger` module. The default level is `logging.INFO`.
 
     To log to a file in addition to the terminal, set `filename` to the desired log file.
 
-    By default this method only configures the 'pycomm3' logger, to also configure your own logger,
+    By default this method only configures the 'ciplink' logger, to also configure your own logger,
     set the `logger` argument to the name of the logger you wish to also configure.  For the root logger
     use an empty string (``''``).
 
@@ -60,7 +60,7 @@ def configure_default_logger(level: int = logging.INFO, filename: str = None, lo
         _handler.close()
     _handlers.clear()
 
-    loggers = [logging.getLogger('pycomm3'), ]
+    loggers = [logging.getLogger('ciplink'), ]
     if logger == '':
         loggers.append(logging.getLogger())
     elif logger:
@@ -82,7 +82,7 @@ def configure_default_logger(level: int = logging.INFO, filename: str = None, lo
         _log.setLevel(level)
 
     if logger == '':
-        loggers = loggers[1:]  # pycomm3 propagates to the root logger, so only root gets the handlers
+        loggers = loggers[1:]  # ciplink propagates to the root logger, so only root gets the handlers
 
     for _log in loggers:
         for _handler in handlers:

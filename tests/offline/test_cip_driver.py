@@ -10,7 +10,7 @@ from unittest import mock
 
 import pytest
 
-from pycomm3 import (
+from ciplink import (
     PADDED_EPATH,
     UDINT,
     CIPDriver,
@@ -21,7 +21,7 @@ from pycomm3 import (
     ResponseError,
     parse_connection_path,
 )
-from pycomm3.socket_ import Socket
+from ciplink.socket_ import Socket
 
 from . import Mocket
 

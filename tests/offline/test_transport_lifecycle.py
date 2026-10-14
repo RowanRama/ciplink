@@ -6,9 +6,9 @@ from unittest import mock
 
 import pytest
 
-from pycomm3 import CIPDriver, CommError, RequestError
-from pycomm3.packets import ListIdentityRequestPacket
-from pycomm3.socket_ import Socket
+from ciplink import CIPDriver, CommError, RequestError
+from ciplink.packets import ListIdentityRequestPacket
+from ciplink.socket_ import Socket
 
 
 def frame(payload):
@@ -89,7 +89,7 @@ def test_invalid_socket_timeout_is_rejected(timeout):
 
 def test_failed_registration_releases_socket_and_allows_retry():
     driver = CIPDriver("127.0.0.1")
-    with mock.patch("pycomm3.cip_driver.Socket") as factory, \
+    with mock.patch("ciplink.cip_driver.Socket") as factory, \
             mock.patch.object(driver, "_register_session", side_effect=[None, 10]):
         assert not driver.open()
         factory.return_value.close.assert_called_once()
@@ -161,7 +161,7 @@ class SlowSocket:
 def test_two_threads_can_reopen_a_shared_driver():
     driver = CIPDriver("127.0.0.1")  # dropped after a CommError, both threads call open() again
     results = []
-    with mock.patch("pycomm3.cip_driver.Socket", SlowSocket):
+    with mock.patch("ciplink.cip_driver.Socket", SlowSocket):
         threads = [threading.Thread(target=lambda: results.append(driver.open())) for _ in range(2)]
         for thread in threads:
             thread.start()
@@ -188,7 +188,7 @@ def test_transport_failure_invalidates_connection_without_retry(operation):
 
 def test_zero_session_handle_is_treated_as_failed_registration():
     driver = CIPDriver("127.0.0.1")
-    with mock.patch("pycomm3.cip_driver.Socket") as factory, \
+    with mock.patch("ciplink.cip_driver.Socket") as factory, \
             mock.patch.object(driver, "_register_session", return_value=0):
         assert not driver.open()
     factory.return_value.close.assert_called_once()

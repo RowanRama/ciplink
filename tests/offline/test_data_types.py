@@ -2,8 +2,8 @@ from collections import defaultdict
 
 import pytest
 
-from pycomm3.exceptions import BufferEmptyError, DataError
-from pycomm3.cip.data_types import (
+from ciplink.exceptions import BufferEmptyError, DataError
+from ciplink.cip.data_types import (
     BOOL,
     BYTE,
     DATE_AND_TIME,
@@ -33,9 +33,9 @@ from pycomm3.cip.data_types import (
     SymbolicSegment,
     n_bytes,
 )
-from pycomm3.custom_types import FixedSizeString, StructTag
-from pycomm3.map import EnumMap
-from pycomm3.packets.util import tag_request_path
+from ciplink.custom_types import FixedSizeString, StructTag
+from ciplink.map import EnumMap
+from ciplink.packets.util import tag_request_path
 
 
 # BOOL encoders must not treat strings / None as truthy
@@ -283,7 +283,7 @@ def test_enum_map_lookups(enum):
 
 
 def test_enum_map_value_lookup():
-    from pycomm3.cip import DataTypes, Services, BOOL
+    from ciplink.cip import DataTypes, Services, BOOL
 
     assert DataTypes[0xC1] == "BOOL" and 0xC1 in DataTypes
     assert DataTypes["Bool"] is BOOL

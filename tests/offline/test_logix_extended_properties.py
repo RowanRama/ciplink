@@ -16,9 +16,9 @@ from examples.logix_metadata_transports import (
     METADATA_DIRECTORY_READ,
     compare_transports,
 )
-from pycomm3 import Tag
-from pycomm3.logix_metadata import build_description_request
-from pycomm3.packets import SendRRDataResponsePacket, SendUnitDataResponsePacket
+from ciplink import Tag
+from ciplink.logix_metadata import build_description_request
+from ciplink.packets import SendRRDataResponsePacket, SendUnitDataResponsePacket
 
 
 def enip(cip, connected=True, extra_items=()):

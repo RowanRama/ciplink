@@ -7,7 +7,7 @@ import struct
 import sys
 from pathlib import Path
 
-from pycomm3 import LogixDriver, LogixMetadataCredentials
+from ciplink import LogixDriver, LogixMetadataCredentials
 
 
 def read_description(ip, tag, certificate=None, private_key=None):
@@ -43,7 +43,7 @@ def read_description(ip, tag, certificate=None, private_key=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("ip", help="Controller address or pycomm3 routing path")
+    parser.add_argument("ip", help="Controller address or ciplink routing path")
     parser.add_argument("--tag", required=True, help="Tag, member, or array element")
     parser.add_argument("--certificate", type=Path, help="Optional external signed public certificate")
     parser.add_argument("--private-key", type=Path, help="Optional matching external RSA DER private key")

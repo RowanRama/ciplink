@@ -1,4 +1,4 @@
-from pycomm3.util import strip_array, get_array_index
+from ciplink.util import strip_array, get_array_index
 
 TEST_TAG = "This is a tag"
 

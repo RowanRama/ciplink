@@ -79,7 +79,7 @@ def with_forward_open(func):
         if self._target_is_connected:
             return func(self, *args, **kwargs)
 
-        logger = logging.getLogger("pycomm3.cip_driver")
+        logger = logging.getLogger("ciplink.cip_driver")
         opened = False
         with self._lock:  # one thread opens, the others wait and _forward_open() finds it connected
             if self._cfg["extended forward open"]:

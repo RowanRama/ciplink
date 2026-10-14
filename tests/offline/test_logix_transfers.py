@@ -5,15 +5,15 @@ from unittest import mock
 
 import pytest
 
-from pycomm3 import Array, DINT, DWORD, INT, SINT, CommError, LogixDriver, RequestError
-from pycomm3.cip_driver import CIPDriver
-from pycomm3.const import BASE_TAG_BIT
-from pycomm3.packets import (
+from ciplink import Array, DINT, DWORD, INT, SINT, CommError, LogixDriver, RequestError
+from ciplink.cip_driver import CIPDriver
+from ciplink.const import BASE_TAG_BIT
+from ciplink.packets import (
     MultiServiceRequestPacket, ReadModifyWriteRequestPacket,
     ReadTagFragmentedRequestPacket, ReadTagRequestPacket,
     WriteTagRequestPacket,
 )
-from pycomm3.util import get_array_index
+from ciplink.util import get_array_index
 
 
 def definition(name, dtype=DINT, length=None):

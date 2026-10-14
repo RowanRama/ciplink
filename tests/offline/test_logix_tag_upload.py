@@ -5,10 +5,10 @@ packets, and a reload reads again only the templates whose makeup changed.
 from contextlib import contextmanager
 from unittest import mock
 
-from pycomm3.cip import UDINT, UINT
-from pycomm3.cip_driver import CIPDriver
-from pycomm3.logix_driver import LogixDriver
-from pycomm3.packets import TagTableVersionRequestPacket
+from ciplink.cip import UDINT, UINT
+from ciplink.cip_driver import CIPDriver
+from ciplink.logix_driver import LogixDriver
+from ciplink.packets import TagTableVersionRequestPacket
 from tests.offline.test_logix_tag_cache import OUTER_MAKEUP, OUTER_TEMPLATE, makeup_data, multi_reply
 from tests.offline.test_logix_tag_list import UDT_MAKEUP, UDT_TEMPLATE, _symbol
 from tests.offline.test_logix_tag_table_version import HEADER, V1, V2, cip_reply, version_reply

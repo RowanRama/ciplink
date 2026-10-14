@@ -2,7 +2,7 @@
 Getting Started
 ===============
 
-.. py:currentmodule:: pycomm3
+.. py:currentmodule:: ciplink
 
 
 Creating a Driver
@@ -26,7 +26,7 @@ starting them; for parallel requests use one driver per thread and share the tag
 If a request fails with a ``CommError`` (timeout, connection reset) the driver closes the connection; call ``open()``
 again to reconnect.
 
-Each driver requires a ``path`` argument, this is a CIP path to the destination device. The paths used in ``pycomm3`` are
+Each driver requires a ``path`` argument, this is a CIP path to the destination device. The paths used in ``ciplink`` are
 similar to how they appear in Logix.
 
 There are three possible forms:
@@ -54,7 +54,7 @@ There are three possible forms:
         Path segments may be delimited by forward or back slashes or commas, e.g. ``10.10.30.100,bp,0``.
         To use a custom port, provide it following a colon with the IP address, e.g. ``10.20.30.100:4444``.
 
->>> from pycomm3 import CIPDriver
+>>> from ciplink import CIPDriver
 >>> CIPDriver.list_identity('10.20.30.100')
 {'encap_protocol_version': 1, 'ip_address': '10.20.30.100', 'vendor': 'Rockwell Automation/Allen-Bradley',
 'product_type': 'AC Drive', 'product_code': 150, 'revision': {'major': 1, 'minor': 2}, 'status': b'0\x00',
@@ -98,7 +98,7 @@ which differs between controllers even with identical programs.
 
 ::
 
-    from pycomm3 import LogixDriver
+    from ciplink import LogixDriver
     first_plc = LogixDriver('10.20.30.100')
     first_plc.open()  # uploads the tag list
     second_plc = LogixDriver('10.20.30.100', init_tags=False)
@@ -121,7 +121,7 @@ A successful request will have a ``value`` that is not ``None`` and the ``error`
 will be a failed request.  The ``error`` attribute will contain either the CIP error message or exception raised during
 the request.
 
-.. autoclass:: pycomm3.Tag
+.. autoclass:: ciplink.Tag
     :members:
 
     .. automethod:: __bool__
@@ -130,11 +130,11 @@ the request.
 Data Types
 ----------
 
-Data types are a major component of ``pycomm3``, they are classes used to represent any tag or CIP object. They are able to
+Data types are a major component of ``ciplink``, they are classes used to represent any tag or CIP object. They are able to
 encode and decode to and from Python values and bytes. Atomic and structure values along with arrays of either are supported.
 Each elementary (primitive) data type is provided as well as some common derived (structure of elementary types) types.
 See the :ref:`api_reference/data_types:Data Types` for all available CIP types and :ref:`api_reference/data_types:Custom Types`
-for any ``pycomm3`` provided custom types.  The type classes provide two class methods: ``encode`` and ``decode``.  These
+for any ``ciplink`` provided custom types.  The type classes provide two class methods: ``encode`` and ``decode``.  These
 are *class* methods, meaning they do not require an instance of they type to be created.  In fact, the only time an
 instance of a type is used is when added members (with a name) to a structure.  The ``encode`` method takes a Python object
 and encodes it to ``bytes``.  The ``decode`` method takes ``bytes`` and returns the corresponding Python object.
@@ -144,11 +144,11 @@ Elementary Types
 ^^^^^^^^^^^^^^^^
 
 Also known as primitives, these types are the building blocks for all CIP data types. These are basic types that store a
-single value, like integers, floats, strings, etc.  All of these types can be imported directly from ``pycomm3``, for a
+single value, like integers, floats, strings, etc.  All of these types can be imported directly from ``ciplink``, for a
 full list of the types refer to :ref:`api_reference/data_types:Data Types`.
 
 
->>> from pycomm3 import DINT, SHORT_STRING
+>>> from ciplink import DINT, SHORT_STRING
 >>> DINT.encode(112233)
 b'i\xb6\x01\x00'
 >>> DINT.decode(b'\x12\x34\x56\x78')
@@ -163,14 +163,14 @@ Structure Types
 ^^^^^^^^^^^^^^^
 
 Structures are complex types composed of any number of different elementary or struct member types.
-The :func:`~pycomm3.cip.data_types.Struct` factory is used to create new struct types.  To create a new struct,
-a list of members is required.  Members must be :class:`~pycomm3.cip.data_types.DataType`, either classes (unnamed) or
+The :func:`~ciplink.cip.data_types.Struct` factory is used to create new struct types.  To create a new struct,
+a list of members is required.  Members must be :class:`~ciplink.cip.data_types.DataType`, either classes (unnamed) or
 instance (named).  Creating named members is really the only time a user would create an instance of a type.
 When decoding a struct, the value is returned as dictionary of ``{member_name: value}``.
 Any unnamed members will be excluded from the return value, also since the return value is a ``dict``, member names
 should be unique.
 
->>> from pycomm3 import Struct, DINT, STRING, REAL
+>>> from ciplink import Struct, DINT, STRING, REAL
 >>> MyStruct = Struct(DINT('code'), STRING('name'), REAL('value'))
 >>> struct_values = {
 ...     'code': 80,
@@ -194,10 +194,10 @@ a list/sequence instead.
 Arrays
 ^^^^^^
 
-Arrays are a homogenous sequence of a :class:`~pycomm3.cip.data_types.DataType` (either elementary or structs).
+Arrays are a homogenous sequence of a :class:`~ciplink.cip.data_types.DataType` (either elementary or structs).
 Any type can be used to create an array of that type using the ``[]`` operator or the
-:func:`~pycomm3.cip.data_types.Array` factory.  There are two important components for an array, the *element type* and
-the *length*.  The *element type* is the :class:`~pycomm3.cip.data_types.DataType` and the *length* specifies the
+:func:`~ciplink.cip.data_types.Array` factory.  There are two important components for an array, the *element type* and
+the *length*.  The *element type* is the :class:`~ciplink.cip.data_types.DataType` and the *length* specifies the
 number of elements. The *length* has 3 options:
 
 Fixed
@@ -209,7 +209,7 @@ Fixed
     [1, 2, 3, 4, 5]
 
 Derived
-    Where the length is specified as a :class:`~pycomm3.cip.data_types.DataType`.  When decoding an array, the length
+    Where the length is specified as a :class:`~ciplink.cip.data_types.DataType`.  When decoding an array, the length
     will be decoded first using the type specified and then decoded that many elements.  Encoding will encode however many
     values are supplied, but does not add the encoded length.
 
@@ -236,52 +236,52 @@ level will log every sent/received packed and other diagnostic data.  Set the le
 wish to see errors, exceptions, etc.  A helper method called ``configure_default_logger`` is provided to setup basic
 logging.  There are three optional parameters, ``level``, ``filename``, and ``logger``.
 ``level`` (default ``logging.INFO``) is the logging level.  ``filename`` (default ``None``) if set,
-will also log to the specified file.  By default this function only configures the ``pycomm3`` logger.  You can also
-configure your own custom logger by passing the name in using the ``logger`` parameter. The ``pycomm3`` logger is
+will also log to the specified file.  By default this function only configures the ``ciplink`` logger.  You can also
+configure your own custom logger by passing the name in using the ``logger`` parameter. The ``ciplink`` logger is
 always configured. To configure the root logger set ``logger`` to an empty string (``''``).
 
 .. code-block::
 
-    from pycomm3.logger import configure_default_logger
+    from ciplink.logger import configure_default_logger
 
-    configure_default_logger(filename='c:/tmp/pycomm3.log')
+    configure_default_logger(filename='c:/tmp/ciplink.log')
 
 
 Produces output similar to::
 
-    2021-02-26 14:37:41,389 [DEBUG] pycomm3.cip_driver.CIPDriver.open(): Opening connection to 192.168.1.236
-    2021-02-26 14:37:41,393 [DEBUG] pycomm3.cip_driver.CIPDriver.send(): Sent: RegisterSessionRequestPacket(message=[b'\x01\x00', b'\x00\x00'])
-    2021-02-26 14:37:41,397 [DEBUG] pycomm3.cip_driver.CIPDriver.send(): Received: RegisterSessionResponsePacket(session=184719106, error=None)
-    2021-02-26 14:37:41,398 [INFO] pycomm3.cip_driver.CIPDriver._register_session(): Session=184719106 has been registered.
-    2021-02-26 14:37:41,398 [INFO] pycomm3.logix_driver.LogixDriver._initialize_driver(): Initializing driver...
+    2021-02-26 14:37:41,389 [DEBUG] ciplink.cip_driver.CIPDriver.open(): Opening connection to 192.168.1.236
+    2021-02-26 14:37:41,393 [DEBUG] ciplink.cip_driver.CIPDriver.send(): Sent: RegisterSessionRequestPacket(message=[b'\x01\x00', b'\x00\x00'])
+    2021-02-26 14:37:41,397 [DEBUG] ciplink.cip_driver.CIPDriver.send(): Received: RegisterSessionResponsePacket(session=184719106, error=None)
+    2021-02-26 14:37:41,398 [INFO] ciplink.cip_driver.CIPDriver._register_session(): Session=184719106 has been registered.
+    2021-02-26 14:37:41,398 [INFO] ciplink.logix_driver.LogixDriver._initialize_driver(): Initializing driver...
 
 
-``pycomm3`` also uses a custom logging level for verbose logging, this level also prints the contents of each
+``ciplink`` also uses a custom logging level for verbose logging, this level also prints the contents of each
 packet send and received.  If submitting a bug report, this level of logging is the most helpful.
 
 .. code-block::
 
-    from pycomm3.logger import configure_default_logger, LOG_VERBOSE
-    configure_default_logger(level=LOG_VERBOSE, filename='c:/tmp/pycomm3.log')
+    from ciplink.logger import configure_default_logger, LOG_VERBOSE
+    configure_default_logger(level=LOG_VERBOSE, filename='c:/tmp/ciplink.log')
 
 Verbose output::
 
-    2021-02-26 14:42:36,752 [DEBUG] pycomm3.cip_driver.CIPDriver.open(): Opening connection to 192.168.1.236
-    2021-02-26 14:42:36,765 [VERBOSE] pycomm3.cip_driver.CIPDriver._send(): >>> SEND >>>
+    2021-02-26 14:42:36,752 [DEBUG] ciplink.cip_driver.CIPDriver.open(): Opening connection to 192.168.1.236
+    2021-02-26 14:42:36,765 [VERBOSE] ciplink.cip_driver.CIPDriver._send(): >>> SEND >>>
     (0000) 65 00 04 00 00 00 00 00 00 00 00 00 5f 70 79 63     e•••••••••••_pyc
     (0010) 6f 6d 6d 5f 00 00 00 00 01 00 00 00                 omm_••••••••
-    2021-02-26 14:42:36,766 [DEBUG] pycomm3.cip_driver.CIPDriver.send(): Sent: RegisterSessionRequestPacket(message=[b'\x01\x00', b'\x00\x00'])
-    2021-02-26 14:42:36,768 [VERBOSE] pycomm3.cip_driver.CIPDriver._receive(): <<< RECEIVE <<<
+    2021-02-26 14:42:36,766 [DEBUG] ciplink.cip_driver.CIPDriver.send(): Sent: RegisterSessionRequestPacket(message=[b'\x01\x00', b'\x00\x00'])
+    2021-02-26 14:42:36,768 [VERBOSE] ciplink.cip_driver.CIPDriver._receive(): <<< RECEIVE <<<
     (0000) 65 00 04 00 02 98 02 0b 00 00 00 00 5f 70 79 63     e•••••••••••_pyc
     (0010) 6f 6d 6d 5f 00 00 00 00 01 00 00 00                 omm_••••••••
-    2021-02-26 14:42:36,768 [DEBUG] pycomm3.cip_driver.CIPDriver.send(): Received: RegisterSessionResponsePacket(session=184719362, error=None)
-    2021-02-26 14:42:36,769 [INFO] pycomm3.cip_driver.CIPDriver._register_session(): Session=184719362 has been registered.
-    2021-02-26 14:42:36,769 [INFO] pycomm3.logix_driver.LogixDriver._initialize_driver(): Initializing driver...
-    2021-02-26 14:42:36,769 [VERBOSE] pycomm3.cip_driver.CIPDriver._send(): >>> SEND >>>
+    2021-02-26 14:42:36,768 [DEBUG] ciplink.cip_driver.CIPDriver.send(): Received: RegisterSessionResponsePacket(session=184719362, error=None)
+    2021-02-26 14:42:36,769 [INFO] ciplink.cip_driver.CIPDriver._register_session(): Session=184719362 has been registered.
+    2021-02-26 14:42:36,769 [INFO] ciplink.logix_driver.LogixDriver._initialize_driver(): Initializing driver...
+    2021-02-26 14:42:36,769 [VERBOSE] ciplink.cip_driver.CIPDriver._send(): >>> SEND >>>
     (0000) 63 00 00 00 02 98 02 0b 00 00 00 00 5f 70 79 63     c•••••••••••_pyc
     (0010) 6f 6d 6d 5f 00 00 00 00                             omm_••••
-    2021-02-26 14:42:36,769 [DEBUG] pycomm3.cip_driver.CIPDriver.send(): Sent: ListIdentityRequestPacket(message=[])
-    2021-02-26 14:42:36,771 [VERBOSE] pycomm3.cip_driver.CIPDriver._receive(): <<< RECEIVE <<<
+    2021-02-26 14:42:36,769 [DEBUG] ciplink.cip_driver.CIPDriver.send(): Sent: ListIdentityRequestPacket(message=[])
+    2021-02-26 14:42:36,771 [VERBOSE] ciplink.cip_driver.CIPDriver._receive(): <<< RECEIVE <<<
     (0000) 63 00 45 00 02 98 02 0b 00 00 00 00 5f 70 79 63     c•E•••••••••_pyc
     (0010) 6f 6d 6d 5f 00 00 00 00 01 00 0c 00 3f 00 01 00     omm_••••••••?•••
     (0020) 00 02 af 12 c0 a8 01 ec 00 00 00 00 00 00 00 00     ••••••••••••••••

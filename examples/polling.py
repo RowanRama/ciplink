@@ -8,7 +8,7 @@ import math
 import sys
 from time import monotonic, sleep
 
-from pycomm3 import CommError, LogixDriver
+from ciplink import CommError, LogixDriver
 
 
 def main():

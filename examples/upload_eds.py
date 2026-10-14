@@ -1,4 +1,4 @@
-from pycomm3 import (CIPDriver, Services, ClassCode,  FileObjectServices, FileObjectInstances,
+from ciplink import (CIPDriver, Services, ClassCode,  FileObjectServices, FileObjectInstances,
                      FileObjectInstanceAttributes, Struct, UDINT, USINT, n_bytes)
 import itertools
 import gzip

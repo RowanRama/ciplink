@@ -1,71 +1,60 @@
 =======
-pycomm3
+ciplink
 =======
 
 .. <<start>>
 
-.. image:: https://img.shields.io/pypi/v/pycomm3.svg?style=for-the-badge
-   :target: https://pypi.python.org/pypi/pycomm3
+.. image:: https://img.shields.io/pypi/v/ciplink.svg?style=for-the-badge
+   :target: https://pypi.org/project/ciplink/
    :alt: PyPI Version
 
-.. image:: https://img.shields.io/pypi/l/pycomm3.svg?style=for-the-badge
-   :target: https://pypi.python.org/pypi/pycomm3
+.. image:: https://img.shields.io/pypi/l/ciplink.svg?style=for-the-badge
+   :target: https://pypi.org/project/ciplink/
    :alt: License
 
-.. image:: https://img.shields.io/pypi/pyversions/pycomm3.svg?style=for-the-badge
-   :target: https://pypi.python.org/pypi/pycomm3
+.. image:: https://img.shields.io/pypi/pyversions/ciplink.svg?style=for-the-badge
+   :target: https://pypi.org/project/ciplink/
    :alt: Python Versions
 
 |
 
-.. image:: https://img.shields.io/pypi/dm/pycomm3?style=social
-   :target: https://pypi.python.org/pypi/pycomm3
-   :alt: Downloads
-
-.. image:: https://img.shields.io/github/watchers/ottowayi/pycomm3?style=social
-    :target: https://github.com/ottowayi/pycomm3
-    :alt: Watchers
-
-.. image:: https://img.shields.io/github/stars/ottowayi/pycomm3?style=social
-    :target: https://github.com/ottowayi/pycomm3
-    :alt: Stars
-
-.. image:: https://img.shields.io/github/forks/ottowayi/pycomm3?style=social
-    :target: https://github.com/ottowayi/pycomm3
-    :alt: Forks
-
-|
-
-**⚠️ NOTE:** ``pycomm3`` is no longer actively developed
-
-
 Introduction
 ============
 
-``pycomm3`` started as a Python 3 fork of `pycomm`_, which is a Python 2 library for
-communicating with Allen-Bradley PLCs using Ethernet/IP.  The initial Python 3 port was done
-in this `fork`_ and was used as the base for ``pycomm3``.  Since then, the library has been
-almost entirely rewritten and the API is no longer compatible with ``pycomm``.  Without the
-hard work done by the original ``pycomm`` developers, ``pycomm3`` would not exist.  This
-library seeks to expand upon their great work.
+``ciplink`` is a fork of `pycomm3`_ by Ian Ottoway, a Python library for communicating with
+Allen-Bradley PLCs using Ethernet/IP. It keeps the pycomm3 API (import ``ciplink`` instead of
+``pycomm3``) and adds:
 
+- tag requests addressed by symbol instance ID, including UDT members and program-scoped tags
+- tag-table change detection with the controller's edit counter, so online edits trigger a
+  reload instead of reading a reused instance ID
+- fast reloads, batched tag-list uploads and a restart cache (``tag_cache_file``)
+- Add-On Instruction access probing: whole AOI reads return their readable parameters, and
+  AOI locals are refused without a request
+
+Without the work of the pycomm3 developers, and of the original `pycomm`_ developers before
+them, ``ciplink`` would not exist. The pycomm3 `documentation`_ applies to ciplink apart from
+the import name.
+
+
+.. _pycomm3: https://github.com/ottowayi/pycomm3
 
 .. _pycomm: https://github.com/ruscito/pycomm
 
-.. _fork: https://github.com/bpaterni/pycomm/tree/pycomm3
+.. _documentation: https://docs.pycomm3.dev
 
 
 Drivers
 =======
 
-``pycomm3`` includes 3 drivers:
+``ciplink`` includes 3 drivers:
 
 - `CIPDriver`_
     This driver is the base driver for the library, it handles common CIP services used
     by the other drivers.  Things like opening/closing a connection, register/unregister sessions,
     forward open/close services, device discovery, and generic messaging.  It can be used to connect to
     any Ethernet/IP device, like: drives, switches, meters, and other non-PLC devices.
-    ``pycomm3`` is a client for explicit messaging only (unconnected/UCMM and class 3 connected over TCP 44818);
+    ``ciplink`` is a client for explicit messaging only (unconnected/UCMM and class 3 connected over TCP 44818);
     implicit class 0/1 I/O (UDP 2222), produced/consumed tags and acting as a CIP server/adapter are not supported.
 
 - `LogixDriver`_
@@ -96,9 +85,9 @@ is aimed at providing quick and convenient access for reading/writing data insid
 Setup
 =====
 
-The package can be installed from `PyPI`_ using ``pip``: ``pip install pycomm3`` or ``python -m pip install pycomm3``.
+The package can be installed from `PyPI`_ using ``pip``: ``pip install ciplink`` or ``python -m pip install ciplink``.
 
-.. _PyPI: https://pypi.org/project/pycomm3/
+.. _PyPI: https://pypi.org/project/ciplink/
 
 Optionally, you may configure logging using the Python standard `logging`_ library.  A convenience method is provided
 to help configure basic logging, see the `Logging Section`_ in the docs for more information.
@@ -111,7 +100,7 @@ to help configure basic logging, see the `Logging Section`_ in the docs for more
 Python and OS Support
 =====================
 
-``pycomm3`` is a Python 3-only library and is supported on Python versions from 3.6.1 up to 3.10.
+``ciplink`` is a Python 3-only library and is supported on Python 3.9 and newer.
 There should be no OS-specific requirements and should be able to run on any OS that Python is supported on.
 Development and testing is done primarily on Windows 10.  If you encounter an OS-related problem, please open an issue
 in the `GitHub repository`_ and it will be investigated.
@@ -186,7 +175,7 @@ driver and print some of the information collected about the device.
 
 ::
 
-    from pycomm3 import LogixDriver
+    from ciplink import LogixDriver
 
     with LogixDriver('10.20.30.100/1') as plc:
         print(plc)
@@ -287,4 +276,4 @@ or with ``pytest``:
 
 License
 =======
-``pycomm3`` is distributed under the MIT License
+``ciplink`` is distributed under the MIT License

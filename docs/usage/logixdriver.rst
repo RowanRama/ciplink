@@ -1,4 +1,4 @@
-.. py:currentmodule:: pycomm3
+.. py:currentmodule:: ciplink
 
 =================
 Using LogixDriver
@@ -113,7 +113,7 @@ alias
     .. note:: This is not documented, but an educated guess found through trial and error.
 
 type_class
-    the :class:`~pycomm3.cip.data_types.DataType` that was created for this tag
+    the :class:`~ciplink.cip.data_types.DataType` that was created for this tag
 
 
 Structure Definitions
@@ -166,7 +166,7 @@ internal_tags
 .. note:: ``attributes`` and ``internal_tags`` do **NOT** include InOut parameters.
 
 type_class
-    The :class:`~pycomm3.cip.data_types.DataType` type that was created to represent this structure
+    The :class:`~ciplink.cip.data_types.DataType` type that was created to represent this structure
 
 
 Reading/Writing Tags
@@ -174,7 +174,7 @@ Reading/Writing Tags
 
 All reading and writing is handled by the :meth:`~LogixDriver.read` and :meth:`~LogixDriver.write` methods.  The original
 pycomm and other similar libraries will have different methods for handling different types like strings and arrays, this
-is not necessary in ``pycomm3`` due to uploading the tag list and creation of a :class:`~pycomm3.cip.data_types.DataType`
+is not necessary in ``ciplink`` due to uploading the tag list and creation of a :class:`~ciplink.cip.data_types.DataType`
 class for each type. Both methods accept any number of tags, they will automatically use the *Multiple Service Packet (0x0A)*
 service and track the request/return data size making sure to stay below the connection size.  If there is a tag value
 that cannot fit within the request/reply packet, it will automatically handle that tag independently using the

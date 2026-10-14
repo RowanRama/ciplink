@@ -1,6 +1,6 @@
-## Contributing to pycomm3
+## Contributing to ciplink
 
-This document aims to provide a brief guide on how to contribute to `pycomm3`.  
+This document aims to provide a brief guide on how to contribute to `ciplink`.  
 
 ### Who can contribute?
 
@@ -17,7 +17,7 @@ a question as an issue, please use the _question_ template.
 
 ## Submitting an Issue
 
-No code is perfect, `pycomm3` is no different and user submitted issues aid in improving the quality of this library.
+No code is perfect, `ciplink` is no different and user submitted issues aid in improving the quality of this library.
 Before submitting an issue, check to see if someone has already submitted one before so we can avoid duplicate issues. 
 
 ### Bug Reports
@@ -25,7 +25,7 @@ Before submitting an issue, check to see if someone has already submitted one be
 To submit a bug report, please create an issue using the _Bug Report_ template. Please include as much information as 
 possible relating to the bug.  The more detailed the bug report, the easier and faster it will be to resolve.
 Some details to include:
-- The version of `pycomm3` (easily found with the `pip show pycomm3` command)
+- The version of `ciplink` (easily found with the `pip show ciplink` command)
 - Model/Firmware/etc if the issue is related to a specific device or firmware version
 - Logs (see the [documentation](https://pycomm3.dev/getting_started.html#logging) to configure)
   - A helper method is provided to simplify logging configs, including logging to a file  
@@ -37,7 +37,7 @@ Some details to include:
 For feature requests or enhancements, please create an issue using the _Feature Request_ template.  New features could be
 things like:
 - A missing feature from a similar library
-    - e.g. Library _X_ has a feature _Y_, would it be possible to add _Y_ functionality to `pycomm3`?
+    - e.g. Library _X_ has a feature _Y_, would it be possible to add _Y_ functionality to `ciplink`?
 - Change or modification to the API
     - If it's a breaking change be sure to include why the new functionality is better than the current
 - Enhancing a current feature

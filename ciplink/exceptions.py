@@ -22,19 +22,38 @@
 # SOFTWARE.
 #
 
-from ._version import __version__, __version_info__
-from .logger import *
-from .const import *
-from .tag import Tag
-from .exceptions import *
-from .cip import *
-from .custom_types import *
-from .cip_driver import *
-from .logix_auth import LogixMetadataCredentials
-from .logix_driver import *
-from .slc_driver import *
 
-from types import ModuleType as _ModuleType
+class PycommError(Exception):
+    """
+    Base exception for all exceptions raised by ciplink
+    """
 
-# export everything above except the submodules, so `from pycomm3 import *` does not shadow map, logger, etc.
-__all__ = [n for n, v in list(globals().items()) if not n.startswith('_') and not isinstance(v, _ModuleType)]
+
+class CommError(PycommError):
+    """
+    For exceptions raised during connection related issues
+    """
+
+
+class DataError(PycommError):
+    """
+    For exceptions raised during binary encoding/decoding of data
+    """
+
+
+class BufferEmptyError(DataError):
+    """
+    Raised when trying to decode an empty buffer
+    """
+
+
+class ResponseError(PycommError):
+    """
+    For exceptions raised during handling for responses to requests
+    """
+
+
+class RequestError(PycommError):
+    """
+    For exceptions raised due to issues building requests or processing of user supplied data
+    """

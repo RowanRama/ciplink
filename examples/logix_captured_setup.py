@@ -15,8 +15,8 @@ import struct
 import subprocess
 from pathlib import Path
 
-from pycomm3 import CIPDriver
-from pycomm3.logix_metadata import build_description_request, decode_description_response
+from ciplink import CIPDriver
+from ciplink.logix_metadata import build_description_request, decode_description_response
 
 from .logix_extended_properties import extract_cip_reply
 from .logix_metadata_transports import (

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from examples.logix_captured_setup import capture_requests
-from pycomm3.packets import SendUnitDataRequestPacket
+from ciplink.packets import SendUnitDataRequestPacket
 
 
 def enip(wire, cid=b'cid!', session=123):

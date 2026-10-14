@@ -1,4 +1,4 @@
-from pycomm3 import LogixDriver
+from ciplink import LogixDriver
 
 
 def find_attributes():

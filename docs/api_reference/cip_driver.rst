@@ -1,7 +1,7 @@
 CIPDriver API
 ===============
 
-.. autoclass:: pycomm3.CIPDriver
+.. autoclass:: ciplink.CIPDriver
     :members:
 
     .. automethod:: __init__

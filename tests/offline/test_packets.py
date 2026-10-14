@@ -3,10 +3,10 @@ from unittest import mock
 
 import pytest
 
-from pycomm3 import CIPDriver
-from pycomm3.cip import PADDED_EPATH, REAL, STATUS, UDINT, UINT, Services
-from pycomm3.const import MSG_ROUTER_PATH
-from pycomm3.packets import (
+from ciplink import CIPDriver
+from ciplink.cip import PADDED_EPATH, REAL, STATUS, UDINT, UINT, Services
+from ciplink.const import MSG_ROUTER_PATH
+from ciplink.packets import (
     GenericConnectedRequestPacket,
     GenericConnectedResponsePacket,
     GenericUnconnectedResponsePacket,
@@ -14,7 +14,7 @@ from pycomm3.packets import (
     SendRRDataResponsePacket,
     SendUnitDataResponsePacket,
 )
-from pycomm3.packets.util import get_extended_status, get_service_status, request_path, tag_request_path, wrap_unconnected_send
+from ciplink.packets.util import get_extended_status, get_service_status, request_path, tag_request_path, wrap_unconnected_send
 
 
 def test_request_path_bytes_value_is_one_id():
@@ -135,7 +135,7 @@ def test_generic_reply_values_and_errors(cls, head, caplog):
     assert resp and resp.value == 1.5
     resp = cls(req, head + b"\x8e\x00\x00\x00" + b"\x00\x00")  # truncated REAL
     assert not resp and resp.value is None and resp.error.startswith("Failed to parse reply - ")
-    assert caplog.records[-1].name == f"pycomm3.packets.cip.{cls.__name__}"
+    assert caplog.records[-1].name == f"ciplink.packets.cip.{cls.__name__}"
     resp = cls(req, head + b"\x8e\x00\x0c\x00" + REAL.encode(1.5))  # error status with data
     assert not resp and resp.value is None and resp.error == get_service_status(0x0C)
     resp = cls(types.SimpleNamespace(data_type=None), head + b"\x8e\x00\x0c\x00" + b"\x01\x02")

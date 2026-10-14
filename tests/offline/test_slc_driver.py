@@ -2,12 +2,12 @@ from unittest import mock
 
 import pytest
 
-from pycomm3.cip import UINT, PortSegment
-from pycomm3.cip.pccc import PCCC_ASCII, PCCC_STRING
-from pycomm3.cip_driver import CIPDriver
-from pycomm3.exceptions import DataError, RequestError, ResponseError
-from pycomm3.packets import SendUnitDataRequestPacket, SendUnitDataResponsePacket
-from pycomm3.slc_driver import SLCDriver, _parse_file0, parse_tag, request_status, writeable_value
+from ciplink.cip import UINT, PortSegment
+from ciplink.cip.pccc import PCCC_ASCII, PCCC_STRING
+from ciplink.cip_driver import CIPDriver
+from ciplink.exceptions import DataError, RequestError, ResponseError
+from ciplink.packets import SendUnitDataRequestPacket, SendUnitDataResponsePacket
+from ciplink.slc_driver import SLCDriver, _parse_file0, parse_tag, request_status, writeable_value
 
 CONNECT_PATH = '192.168.1.100/1'
 

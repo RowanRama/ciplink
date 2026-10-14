@@ -1,4 +1,4 @@
-from pycomm3 import CIPDriver, Services, ClassCode, INT, Array, USINT
+from ciplink import CIPDriver, Services, ClassCode, INT, Array, USINT
 
 
 # Read PF525 Parameter

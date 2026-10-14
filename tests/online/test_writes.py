@@ -1,6 +1,6 @@
 import pytest
 
-from pycomm3 import RequestError
+from ciplink import RequestError
 from tests import tag_only
 from . import BASE_ATOMIC_TESTS, BASE_ATOMIC_ARRAY_TESTS, BASE_STRUCT_TESTS, _bool_array
 

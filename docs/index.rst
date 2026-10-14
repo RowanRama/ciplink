@@ -1,4 +1,4 @@
-:mod:`pycomm3` - A Python Ethernet/IP library for communicating with Allen-Bradley PLCs.
+:mod:`ciplink` - A Python Ethernet/IP library for communicating with Allen-Bradley PLCs.
 ========================================================================================
 
 

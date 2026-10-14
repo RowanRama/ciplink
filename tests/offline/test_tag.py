@@ -1,4 +1,4 @@
-from pycomm3 import Tag
+from ciplink import Tag
 
 
 def test_tag_truthiness():
