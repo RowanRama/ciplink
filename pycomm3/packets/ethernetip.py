@@ -99,6 +99,10 @@ class SendUnitDataRequestPacket(RequestPacket):
         super()._setup_message()
         self._msg.append(UINT.encode(self._sequence))
 
+    def tag_only_message(self):
+        """the message without its sequence count, as embedded in a multi-service packet"""
+        return self.build_message()[2:]
+
 
 class SendRRDataResponsePacket(ResponsePacket):
     __log = logging.getLogger(f"{__module__}.{__qualname__}")

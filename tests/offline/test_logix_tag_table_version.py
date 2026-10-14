@@ -8,7 +8,8 @@ import pytest
 from pycomm3.cip import DINT, UINT
 from pycomm3.cip_driver import CIPDriver
 from pycomm3.const import BASE_TAG_BIT
-from pycomm3.logix_driver import LogixDriver
+from pycomm3.exceptions import ResponseError
+from pycomm3.logix_driver import LogixDriver, _RELOAD_BACKOFF
 from pycomm3.packets import (
     MultiServiceRequestPacket,
     ReadTagFragmentedRequestPacket,
@@ -131,8 +132,17 @@ def connected(fake, identity=IDENTITY, **kwargs):
             mock.patch.object(CIPDriver, 'send', side_effect=fake.send), \
             mock.patch.object(LogixDriver, '_get_instance_attribute_list_service', side_effect=fake.symbols):
         assert plc.open()
+        fake.connect_packets = list(fake.packets)
         fake.packets.clear()
         yield plc
+
+
+@contextmanager
+def clock():
+    """the time.monotonic() the driver sees, ``now[0]`` is moved by the test"""
+    now = [1000.0]
+    with mock.patch('pycomm3.logix_driver.time.monotonic', side_effect=lambda: now[0]):
+        yield now
 
 
 def services(packet):
@@ -254,14 +264,104 @@ def test_packet_that_failed_as_a_whole_is_not_a_change():
     assert fake.uploads == 1 and len(sent) == 1
 
 
-def test_failed_check_counts_as_a_change():
-    # e.g. 0x05 while a download is in progress
+def test_connect_reads_the_version_twice():
+    # the read on connect is also the one before the upload, then the one after it
     fake = FakePLC(TAGS)
     with connected(fake) as plc:
+        assert plc._tag_table_version == V1
+    assert [type(p) for p in fake.connect_packets] == [TagTableVersionRequestPacket] * 2
+    assert fake.uploads == 1
+
+
+def test_failed_check_backs_off_reloads():
+    # 0x05 while a download is in progress: no reload, every read and write fails for 2 s without sending anything
+    fake = FakePLC(TAGS)
+    with connected(fake) as plc, clock() as now:
         fake.edit_at(0, TAGS, None)
-        fake.edit_at(1, TAGS, V2)  # the download ended before the reload
-        assert plc.read('a').value == 1
+        a = plc.read('a')
+        assert a.value is None and 'controller busy' in a.error
+        assert len(fake.packets) == 1 and fake.uploads == 1
+
+        fake.set(EDITED, V2)  # the download ended
+        now[0] += _RELOAD_BACKOFF - 0.1
+        assert plc.read('a').error == a.error
+        assert [r.error for r in plc.read('a', 'b')] == [a.error] * 2
+        assert plc.write('b', 20).error == a.error
+        assert plc.check_tag_table() is False
+        assert len(fake.packets) == 1 and fake.tags['b'] == (9, 2)
+
+        now[0] += 0.1
+        assert plc.read('b').value == 2  # the next reload
     assert fake.uploads == 2 and plc._tag_table_version == V2
+
+
+def test_failed_reload_backs_off():
+    fake = FakePLC(TAGS)
+    with connected(fake) as plc, clock() as now:
+        fake.set(EDITED, V2)
+        with mock.patch.object(LogixDriver, '_get_instance_attribute_list_service',
+                               side_effect=ResponseError('upload refused')):
+            b = plc.read('b')
+        assert b.value is None and 'controller busy' in b.error and 'upload refused' in b.error
+        sent = len(fake.packets)  # the read, the check before the upload
+        assert plc.read('b').error == b.error
+        assert plc.write('b', 20).error == b.error
+        assert len(fake.packets) == sent and not fake.sent(WriteTagRequestPacket)
+
+        now[0] += _RELOAD_BACKOFF
+        assert plc.read('b').value == 2
+        assert plc.write('b', 20).error is None
+    assert fake.uploads == 2 and fake.tags['b'] == (9, 20)
+
+
+def test_reload_failed_in_another_thread_is_not_tried_again_at_once():
+    # a thread that waited on the lock while another thread's reload failed keeps to the backoff
+    fake = FakePLC(TAGS)
+    with connected(fake) as plc, clock():
+        plc._back_off('reload failed - upload refused')  # by the other thread, once this one passed its check
+        assert plc._refresh_tag_table() is False
+    assert fake.packets == [] and fake.uploads == 1
+
+
+def test_download_started_during_the_connect_upload_keeps_the_tag_list():
+    # the version is not read after the upload: open() succeeds, the first read after the backoff loads it again
+    fake = FakePLC(TAGS)
+    upload = fake.symbols
+
+    def download_starts(program=None):
+        if fake.uploads == 0:
+            fake.version = None
+        return upload(program)
+
+    fake.symbols = download_starts
+    with clock() as now, connected(fake) as plc:
+        assert set(plc.tags) == set(TAGS) and plc._tag_table_version is None
+        assert 'controller busy' in plc.read('a').error and fake.packets == []
+        fake.set(EDITED, V2)  # the download ended
+        now[0] += _RELOAD_BACKOFF
+        assert plc.read('b').value == 2  # its ID now names 'x', the check loads the tag list again
+    assert fake.uploads == 2 and plc._tag_table_version == V2
+
+
+def test_failed_check_before_a_write_refuses_it():
+    fake = FakePLC(TAGS)
+    with connected(fake) as plc, clock() as now:
+        fake.set(TAGS, None)
+        assert 'controller busy' in plc.write('a', 10).error
+        assert [type(p) for p in fake.packets] == [TagTableVersionRequestPacket]
+        fake.set(TAGS, V1)
+        now[0] += _RELOAD_BACKOFF
+        assert plc.write('a', 10).error is None
+    assert fake.tags['a'] == (5, 10) and fake.uploads == 1
+
+
+def test_tag_list_is_not_uploaded_without_its_version():
+    fake = FakePLC(TAGS)
+    with connected(fake) as plc:
+        fake.set(EDITED, None)
+        with pytest.raises(ResponseError, match='Tag table version not read'):
+            plc.get_tag_list()
+        assert fake.uploads == 1 and plc.tags['b']['instance_id'] == 6
 
 
 def test_writes_are_checked_before_and_after_never_in_their_packet():

@@ -4,6 +4,7 @@ unchanged, else the symbol lists are uploaded and the templates reused.
 """
 import json
 import logging
+import tempfile
 from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest import mock
@@ -14,10 +15,10 @@ from pycomm3.cip import DINT, UDINT, UINT, Services
 from pycomm3.cip_driver import CIPDriver
 from pycomm3.const import SUCCESS
 from pycomm3.logix_driver import LogixDriver
-from pycomm3.packets import TagTableVersionRequestPacket
+from pycomm3.packets import MultiServiceRequestPacket, TagTableVersionRequestPacket
 from pycomm3.tag import Tag
 from tests.offline.test_logix_tag_list import UDT_MAKEUP, UDT_TEMPLATE, _symbol
-from tests.offline.test_logix_tag_table_version import V1, V2, version_reply
+from tests.offline.test_logix_tag_table_version import HEADER, V1, V2, cip_reply, version_reply
 
 IDENTITY = {'product_name': '1756-L83E/B', 'revision': {'major': 32, 'minor': 0}, 'status': b'00',
             'serial': 'c0ffee01'}
@@ -37,11 +38,8 @@ TEMPLATES = {0x123: (UDT_MAKEUP, UDT_TEMPLATE), 0x124: (OUTER_MAKEUP, OUTER_TEMP
 
 SYMBOL_REQUESTS = [('symbols', None), ('symbols', 'MainProgram')]
 CACHED_REQUESTS = SYMBOL_REQUESTS + [('makeup', 0x123), ('makeup', 0x124)]  # the makeups are always read
-TEMPLATE_REQUESTS = [('makeup', 0x123), ('template', 0x123), ('makeup', 0x124), ('template', 0x124)]
-UNCACHED_REQUESTS = [  # templates are fetched while each scope is isolated
-    ('symbols', None), ('makeup', 0x123), ('template', 0x123),
-    ('symbols', 'MainProgram'), ('makeup', 0x124), ('template', 0x124),
-]
+# the makeups of all scopes in one multi-service packet, then the templates
+TEMPLATE_REQUESTS = [('makeup', 0x123), ('makeup', 0x124), ('template', 0x123), ('template', 0x124)]
 
 
 def _symbols():
@@ -50,6 +48,28 @@ def _symbols():
                (4, 'udt', 0x8123), (5, 'Local:1:I', 0xC4)],
         'MainProgram': [(1, 'Routine:MainRoutine', 0x106D), (2, 'outer', 0x8124), (3, 'arr', 0x20C4, 4)],
     }
+
+
+def makeup_data(makeup):
+    """the reply data of a structure makeup read (Get_Attribute_List 4, 5, 2, 1 of a template)"""
+    return b''.join((
+        UINT.encode(4),
+        UINT.encode(4) + UINT.encode(0) + UDINT.encode(makeup['object_definition_size']['size']),
+        UINT.encode(5) + UINT.encode(0) + UDINT.encode(makeup['structure_size']['size']),
+        UINT.encode(2) + UINT.encode(0) + UINT.encode(makeup['member_count']['count']),
+        UINT.encode(1) + UINT.encode(0) + UINT.encode(makeup['structure_handle']['handle']),
+    ))
+
+
+def multi_reply(request, replies):
+    """the reply to a multi-service packet with these service replies"""
+    offsets, offset = [], 2 + 2 * len(replies)
+    for reply in replies:
+        offsets.append(UINT.encode(offset))
+        offset += len(reply)
+    status = 0x1E if any(reply[2] not in (0, 6) for reply in replies) else 0
+    data = UINT.encode(len(replies)) + b''.join(offsets) + b''.join(replies)
+    return request.response_class(request, HEADER + cip_reply(0x0A, status, data))
 
 
 class _Requests(list):
@@ -69,6 +89,10 @@ def _fake_plc(symbols=None, version=None, identity=IDENTITY):
         if isinstance(request, TagTableVersionRequestPacket):
             requests.version_reads += 1
             return version_reply(request, version)
+        if isinstance(request, MultiServiceRequestPacket):  # structure makeups
+            requests.extend(('makeup', r.instance) for r in request.requests)
+            return multi_reply(request, [cip_reply(0x03, 0, makeup_data(TEMPLATES[r.instance][0]))
+                                         for r in request.requests])
         message = request.build_message()
         scope = next((p for p in symbols if p and f'Program:{p}'.encode() in message), None)
         requests.append(('symbols', scope))
@@ -185,7 +209,7 @@ def test_changed_makeup_refetches_the_template(tmp_path):
     renamed = UDT_TEMPLATE.replace(b'\x00A\x00B\x00', b'\x00P\x00Q\x00')
     with mock.patch.dict(TEMPLATES, {0x123: (makeup, renamed)}):
         plc, requests = _upload(path)
-        assert requests == SYMBOL_REQUESTS + [('makeup', 0x123), ('template', 0x123), ('makeup', 0x124)]
+        assert requests == SYMBOL_REQUESTS + [('makeup', 0x123), ('makeup', 0x124), ('template', 0x123)]
         assert plc.data_types['MyUDT']['attributes'] == ['P', 'Q', 'Flag']
         assert plc.data_types['Outer']['internal_tags']['In']['data_type']['attributes'] == ['P', 'Q', 'Flag']
         assert _upload(path)[1] == CACHED_REQUESTS  # rewritten with the new template
@@ -201,7 +225,7 @@ def test_damaged_template_in_cache_file_uploads_again(tmp_path, caplog):
     with caplog.at_level(logging.WARNING, logger='pycomm3'):
         plc, requests = _upload(path)  # open() returned True
     assert 'its contents failed' in caplog.text
-    assert requests == SYMBOL_REQUESTS + [('makeup', 0x123)] + TEMPLATE_REQUESTS
+    assert requests == CACHED_REQUESTS + TEMPLATE_REQUESTS  # failed on the first template, after the makeups
     assert plc.tags_json == expected.tags_json
     assert plc.info == expected.info
     assert _upload(path)[1] == CACHED_REQUESTS  # rewritten
@@ -214,7 +238,9 @@ def test_other_scopes_neither_read_nor_write_the_file(tmp_path):
     with _fake_plc() as requests:
         plc.get_tag_list(program='MainProgram')
         plc.get_tag_list()
-    assert ('template', 0x124) in requests and ('template', 0x123) in requests  # uploaded as without a file
+    # uploaded as without a file, no tag table version so the templates are read again
+    assert requests == [('symbols', 'MainProgram'), ('makeup', 0x124), ('template', 0x124), ('makeup', 0x123),
+                        ('template', 0x123), ('symbols', None), ('makeup', 0x123), ('template', 0x123)]
     assert path.read_text() == text
     assert _upload(path)[1] == CACHED_REQUESTS
 
@@ -244,7 +270,7 @@ def test_no_cache_file_is_unchanged(tmp_path):
     with _fake_plc() as requests:
         assert plc.open()
         tags = plc.get_tag_list(program='*')
-    assert requests == UNCACHED_REQUESTS * 2
+    assert requests == (SYMBOL_REQUESTS + TEMPLATE_REQUESTS) * 2  # no tag table version, the templates are read again
     assert [_plain(t) for t in tags] == [_plain(t) for t in with_file.tags.values()]
     assert plc.tags_json == with_file.tags_json
     assert _plain(plc.data_types) == _plain(with_file.data_types)
@@ -259,7 +285,7 @@ def test_lazy_tags_ignore_cache_file(tmp_path):
         assert plc.open()
         assert requests == []
         plc.get_tag_list(program='*')
-    assert requests == UNCACHED_REQUESTS
+    assert requests == SYMBOL_REQUESTS + TEMPLATE_REQUESTS
     assert not path.exists()
 
 
@@ -273,7 +299,7 @@ def test_unchanged_tag_table_loads_the_tag_list_from_the_file(tmp_path, caplog):
     with caplog.at_level(logging.INFO, logger='pycomm3'):
         second, second_requests = _upload(path, version=V1)
     assert second_requests == []  # no symbol list, makeup or template upload
-    assert second_requests.version_reads == 3  # on connect, then before and after the load
+    assert second_requests.version_reads == 2  # on connect (also the one before the load), after it
     assert 'loaded the tag list from it' in caplog.text
     assert second.tags_json == first.tags_json
     assert _plain(second.data_types) == _plain(first.data_types)
@@ -323,3 +349,14 @@ def test_damaged_file_with_current_version_uploads_everything(tmp_path, caplog):
     assert plc.tags_json == expected.tags_json
     assert plc.info == expected.info
     assert _upload(path, version=V1)[1] == []  # rewritten
+
+
+def test_unchanged_cache_file_is_not_rewritten(tmp_path):
+    path = tmp_path / 'tags.json'
+    _upload(path, version=V1)
+    text = path.read_text()
+    with mock.patch('pycomm3.logix_driver.tempfile.mkstemp', wraps=tempfile.mkstemp) as mkstemp:
+        assert _upload(path, version=V1)[1] == []  # loaded from the file
+        assert not mkstemp.called and path.read_text() == text
+        assert _upload(path, version=V2)[1] == CACHED_REQUESTS  # another version is written
+        assert mkstemp.call_count == 1

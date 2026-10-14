@@ -251,7 +251,7 @@ def test_memo_follows_tag_list_and_use_instance_ids():
     plc._tags = dict(plc._tags, d=_atomic("d", 42))  # e.g. plc2._tags = plc1.tags
     assert plc._parse_tag_request("d")["request_path"].hex() == "02206b242a"
 
-    with mock.patch.object(plc, "_get_tag_list", return_value=[_atomic("d", 43)]):
+    with mock.patch.object(plc, "_upload_tag_list", return_value=[_atomic("d", 43)]):
         plc.get_tag_list()
     assert plc._parse_tag_request("d")["request_path"].hex() == "02206b242b"
 
