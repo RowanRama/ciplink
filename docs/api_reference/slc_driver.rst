@@ -1,5 +1,5 @@
 SLCDriver API
 ===============
 
-.. autoclass:: pycomm3.SLCDriver
+.. autoclass:: ciplink.SLCDriver
     :members:

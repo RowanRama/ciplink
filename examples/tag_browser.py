@@ -20,7 +20,7 @@ import tkinter.font as tkfont
 from contextlib import suppress
 from tkinter import ttk
 
-from pycomm3 import LogixDriver
+from ciplink import LogixDriver
 
 MAX_ELEMENTS = 200  # array elements read and shown per array tag
 DESC_CHUNK = 20  # descriptions read per worker job, so value reads can run in between

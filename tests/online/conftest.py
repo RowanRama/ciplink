@@ -1,5 +1,5 @@
 import pytest
-from pycomm3 import LogixDriver
+from ciplink import LogixDriver
 import os
 
 

@@ -7,13 +7,13 @@ from unittest import mock
 
 import pytest
 
-from pycomm3 import CIPDriver, CommError, LogixDriver, Tag
-from pycomm3.cip import ConnectionManagerServices
-from pycomm3.cip_driver import with_forward_open
-from pycomm3.exceptions import ResponseError
-from pycomm3.const import HEADER_SIZE, PRIORITY, TIMEOUT_TICKS
-from pycomm3.packets import ListIdentityRequestPacket, SendUnitDataRequestPacket
-from pycomm3.socket_ import Socket
+from ciplink import CIPDriver, CommError, LogixDriver, Tag
+from ciplink.cip import ConnectionManagerServices
+from ciplink.cip_driver import with_forward_open
+from ciplink.exceptions import ResponseError
+from ciplink.const import HEADER_SIZE, PRIORITY, TIMEOUT_TICKS
+from ciplink.packets import ListIdentityRequestPacket, SendUnitDataRequestPacket
+from ciplink.socket_ import Socket
 
 
 def _connected_driver(sock):
@@ -56,7 +56,7 @@ def test_send_keeps_connection_when_request_fails_to_build():
 
 
 def test_open_without_session_leaves_driver_closed():
-    with mock.patch("pycomm3.cip_driver.Socket") as mock_socket, \
+    with mock.patch("ciplink.cip_driver.Socket") as mock_socket, \
             mock.patch.object(CIPDriver, "_register_session", return_value=None):
         driver = CIPDriver("1.2.3.4")
         assert driver.open() is False
@@ -69,7 +69,7 @@ def test_open_without_session_leaves_driver_closed():
 
 
 def test_open_connect_error_leaves_driver_closed():
-    with mock.patch("pycomm3.cip_driver.Socket") as mock_socket:
+    with mock.patch("ciplink.cip_driver.Socket") as mock_socket:
         mock_socket.return_value.connect.side_effect = OSError
         driver = CIPDriver("1.2.3.4")
         with pytest.raises(CommError):
@@ -83,7 +83,7 @@ def test_open_connect_error_leaves_driver_closed():
 
 
 def test_context_manager_raises_when_open_fails():
-    with mock.patch("pycomm3.cip_driver.Socket"), \
+    with mock.patch("ciplink.cip_driver.Socket"), \
             mock.patch.object(CIPDriver, "_register_session", return_value=None):
         body_ran = False
         with pytest.raises(CommError):
@@ -123,7 +123,7 @@ def test_list_identity_skips_subclass_open_and_always_closes(identity):
 
 
 def test_list_identity_returns_empty_when_session_rejected():
-    with mock.patch("pycomm3.cip_driver.Socket") as mock_socket, \
+    with mock.patch("ciplink.cip_driver.Socket") as mock_socket, \
             mock.patch.object(CIPDriver, "_register_session", return_value=None):
         assert CIPDriver.list_identity("1.2.3.4") == {}
     mock_socket.return_value.send.assert_not_called()
@@ -219,7 +219,7 @@ def test_discover_broadcasts_once_per_address():
 
 
 def test_broadcast_discover_lets_ctrl_c_through_and_closes_socket():
-    with mock.patch("pycomm3.cip_driver.socket.socket") as mock_socket:
+    with mock.patch("ciplink.cip_driver.socket.socket") as mock_socket:
         inst = mock_socket.return_value
         inst.__enter__.return_value = inst
         inst.recv.side_effect = KeyboardInterrupt

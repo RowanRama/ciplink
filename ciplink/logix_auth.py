@@ -110,7 +110,7 @@ def _private_numbers(data):
 
 
 def _inverse(value, modulus):
-    # pow(value, -1, modulus) requires Python 3.8; support pycomm3's older Pythons.
+    # pow(value, -1, modulus) requires Python 3.8; support ciplink's older Pythons.
     previous, current = 0, 1
     remainder, next_remainder = modulus, value
     while next_remainder:

@@ -7,8 +7,8 @@ from unittest import mock
 
 import pytest
 
-from pycomm3.cip import DINT, UDINT, UINT
-from pycomm3.logix_driver import LogixDriver
+from ciplink.cip import DINT, UDINT, UINT
+from ciplink.logix_driver import LogixDriver
 from tests.offline import test_logix_tag_upload
 from tests.offline.test_logix_tag_list import _symbol
 from tests.offline.test_logix_tag_table_version import V2, cip_reply

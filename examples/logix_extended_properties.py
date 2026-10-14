@@ -1,7 +1,7 @@
 """Read-only investigation of Logix extended properties; not a supported driver API.
 
 Run from the repository root with ``python -m examples.logix_extended_properties``.
-Description's captured layout is parsed by pycomm3.logix_metadata. This
+Description's captured layout is parsed by ciplink.logix_metadata. This
 diagnostic preserves raw exchanges and does not authenticate connections.
 """
 
@@ -13,11 +13,11 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, Sequence
 
-from pycomm3 import LogixDriver
-from pycomm3.logix_metadata import build_description_request, decode_description_response
-from pycomm3.cip import ClassCode, DataTypes, Services, UINT
-from pycomm3.packets import SendUnitDataRequestPacket
-from pycomm3.packets.util import get_service_status, request_path, tag_request_path
+from ciplink import LogixDriver
+from ciplink.logix_metadata import build_description_request, decode_description_response
+from ciplink.cip import ClassCode, DataTypes, Services, UINT
+from ciplink.packets import SendUnitDataRequestPacket
+from ciplink.packets.util import get_service_status, request_path, tag_request_path
 
 
 PROPERTIES = ("Description", "EngineeringUnit", "Min", "Max", "State0", "State1")

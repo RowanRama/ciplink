@@ -3,17 +3,17 @@ from unittest import mock
 
 import pytest
 
-from pycomm3.cip import DINT, DWORD, Array
-from pycomm3.cip_driver import CIPDriver
-from pycomm3.exceptions import RequestError
-from pycomm3.logix_driver import LogixDriver
-from pycomm3.packets import (
+from ciplink.cip import DINT, DWORD, Array
+from ciplink.cip_driver import CIPDriver
+from ciplink.exceptions import RequestError
+from ciplink.logix_driver import LogixDriver
+from ciplink.packets import (
     MultiServiceRequestPacket,
     ReadModifyWriteRequestPacket,
     ReadTagFragmentedRequestPacket,
     WriteTagFragmentedRequestPacket,
 )
-from pycomm3.tag import Tag
+from ciplink.tag import Tag
 
 PROGRAM = "910c50726f6772616d3a4d61696e"  # DataSegment('Program:Main')
 UDT_VAL = "05206b2408910356616c00"  # udt (id 8) .Val
@@ -228,8 +228,8 @@ def test_parse_is_memoized_and_packets_reuse_its_path():
 
     # repeated reads and writes encode nothing, the packets use the memoized path
     _write(plc, ("udt.Val", 1), ("udt.Val.0", True))
-    with mock.patch("pycomm3.logix_driver.tag_request_path") as parse_encode, \
-            mock.patch("pycomm3.packets.logix.tag_request_path") as packet_encode:
+    with mock.patch("ciplink.logix_driver.tag_request_path") as parse_encode, \
+            mock.patch("ciplink.packets.logix.tag_request_path") as packet_encode:
         assert _read(plc, "udt.Val") == ["4c" + UDT_VAL + "0100"]
         _write(plc, ("udt.Val", 1), ("udt.Val.0", True))
     assert not parse_encode.called and not packet_encode.called
@@ -274,7 +274,7 @@ def test_lazy_reopen_starts_a_new_memo():
 def test_memo_is_bounded():
     # names that never repeat (a moving index) start the memo over instead of growing it
     plc = _plc()
-    with mock.patch("pycomm3.logix_driver._PARSE_MEMO_SIZE", 3):
+    with mock.patch("ciplink.logix_driver._PARSE_MEMO_SIZE", 3):
         for i in range(10):
             assert plc._parse_tag_request(f"arr[{i}]")["plc_tag"] == f"arr[{i}]"
         assert len(plc._parse_memo[1]) <= 3

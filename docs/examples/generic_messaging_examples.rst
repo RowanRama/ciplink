@@ -2,7 +2,7 @@
 Generic Messaging
 =================
 
-.. py:currentmodule:: pycomm3
+.. py:currentmodule:: ciplink
 
 The :meth:`LogixDriver.generic_message` works in a similar way to the MSG instruction in Logix.  It allows the user
 to perform messaging services not directly implemented in the library. It is also used internally to implement some of the

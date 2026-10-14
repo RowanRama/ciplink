@@ -3,16 +3,16 @@ from unittest.mock import Mock
 
 import pytest
 
-from pycomm3 import LogixDriver, Tag
-from pycomm3.exceptions import DataError
-from pycomm3.logix_descriptions import _member_ids, _program_id
-from pycomm3.logix_metadata import (
+from ciplink import LogixDriver, Tag
+from ciplink.exceptions import DataError
+from ciplink.logix_descriptions import _member_ids, _program_id
+from ciplink.logix_metadata import (
     build_description_index_request,
     build_description_request,
     decode_description_records,
     decode_description_response,
 )
-from pycomm3.packets import SendUnitDataResponsePacket
+from ciplink.packets import SendUnitDataResponsePacket
 from .test_logix_extended_properties import enip
 
 

@@ -7,8 +7,8 @@ from unittest.mock import Mock
 import pytest
 
 from examples.bundle_logix_metadata import render_bundle
-from pycomm3 import LogixDriver, LogixMetadataCredentials
-from pycomm3._logix_bundle_codec import (
+from ciplink import LogixDriver, LogixMetadataCredentials
+from ciplink._logix_bundle_codec import (
     _block, _decrypt, _encrypt, _poly1305, open_credentials, seal_credentials,
 )
 from .test_logix_auth import KEY, CHALLENGE, PROOF, certificate, replies
@@ -80,7 +80,7 @@ def test_wrong_decryption_key_is_rejected():
 def test_generated_module_hides_plaintext_and_reconstructs_credentials():
     source = render_bundle(certificate(), KEY)
     assert KEY.hex() not in source and certificate().hex() not in source
-    namespace = {"__name__": "pycomm3._synthetic_bundle", "__package__": "pycomm3"}
+    namespace = {"__name__": "ciplink._synthetic_bundle", "__package__": "ciplink"}
     exec(compile(source, "<synthetic-bundle>", "exec"), namespace)
     cert, private = namespace["load"]()
     assert cert == certificate() and private == KEY
@@ -89,7 +89,7 @@ def test_generated_module_hides_plaintext_and_reconstructs_credentials():
 
 def test_default_driver_uses_bundled_credentials(monkeypatch):
     module = SimpleNamespace(load=lambda: (certificate(), KEY))
-    monkeypatch.setitem(sys.modules, "pycomm3._logix_metadata_bundle", module)
+    monkeypatch.setitem(sys.modules, "ciplink._logix_metadata_bundle", module)
     plc = LogixDriver("192.168.1.100", init_tags=False)
     plc._target_is_connected = True
     requests = replies(plc)
@@ -98,7 +98,7 @@ def test_default_driver_uses_bundled_credentials(monkeypatch):
 
 
 def test_missing_bundle_sends_no_authentication_requests(monkeypatch):
-    monkeypatch.setitem(sys.modules, "pycomm3._logix_metadata_bundle", None)
+    monkeypatch.setitem(sys.modules, "ciplink._logix_metadata_bundle", None)
     plc = LogixDriver("192.168.1.100", init_tags=False)
     plc.send = Mock(side_effect=AssertionError("Unexpected network request"))
     result = plc.authenticate_metadata()

@@ -1,7 +1,7 @@
-"""Read a base tag Description with a fresh, Linx-assisted pycomm3 handshake.
+"""Read a base tag Description with a fresh, Linx-assisted ciplink handshake.
 
 Windows and the verified Linx 6.60 binary are required. The controller connection
-belongs to pycomm3; an isolated native helper computes its fresh challenge reply.
+belongs to ciplink; an isolated native helper computes its fresh challenge reply.
 No FactoryTalk UI, existing authenticated connection, or captured completion is
 used. The signed public credential must be supplied separately.
 """
@@ -16,8 +16,8 @@ import subprocess
 import threading
 from pathlib import Path
 
-from pycomm3 import LogixDriver
-from pycomm3.logix_auth import validate_metadata_certificate as validate_certificate
+from ciplink import LogixDriver
+from ciplink.logix_auth import validate_metadata_certificate as validate_certificate
 from .logix_metadata_transports import _exchange
 
 

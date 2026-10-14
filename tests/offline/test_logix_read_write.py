@@ -2,19 +2,19 @@ from unittest import mock
 
 import pytest
 
-from pycomm3.cip import DINT, Array, STATUS
-from pycomm3.cip_driver import CIPDriver
-from pycomm3.exceptions import RequestError, ResponseError
-from pycomm3.logix_driver import LogixDriver, encode_value
-from pycomm3.packets import (
+from ciplink.cip import DINT, Array, STATUS
+from ciplink.cip_driver import CIPDriver
+from ciplink.exceptions import RequestError, ResponseError
+from ciplink.logix_driver import LogixDriver, encode_value
+from ciplink.packets import (
     MultiServiceRequestPacket,
     ReadModifyWriteRequestPacket,
     ReadTagFragmentedRequestPacket,
     WriteTagRequestPacket,
     WriteTagFragmentedRequestPacket,
 )
-from pycomm3.packets.util import get_service_status
-from pycomm3.tag import Tag
+from ciplink.packets.util import get_service_status
+from ciplink.tag import Tag
 
 
 def _info(name, instance_id, elements=0):

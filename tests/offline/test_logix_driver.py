@@ -11,11 +11,11 @@ Also the vast majority of methods are private, I think that private
 methods should not be tested directly, but rather, their effects on
 public methods should be tested.
 
-pytest --cov=pycomm3 --cov-branch tests/offline/
+pytest --cov=ciplink --cov-branch tests/offline/
 ----------- coverage: platform linux, python 3.8.1-final-0 -----------
 Name                           Stmts   Miss Branch BrPart  Cover
 ----------------------------------------------------------------
-pycomm3/logix_driver.py                   798    718    346      0     7%
+ciplink/logix_driver.py                   798    718    346      0     7%
 
 We're currently at 7% test coverage, I would like to increase that to >=50%
 and then continue to do so for the rest of the modules.
@@ -24,14 +24,14 @@ from unittest import mock
 
 import pytest
 
-from pycomm3.cip_driver import CIPDriver
-from pycomm3.const import MICRO800_PREFIX, SUCCESS
-from pycomm3.exceptions import CommError, PycommError, RequestError
-from pycomm3.logix_driver import LogixDriver
-from pycomm3.packets import RequestPacket, ResponsePacket
-from pycomm3.socket_ import Socket
-from pycomm3.tag import Tag
-from pycomm3.custom_types import ModuleIdentityObject
+from ciplink.cip_driver import CIPDriver
+from ciplink.const import MICRO800_PREFIX, SUCCESS
+from ciplink.exceptions import CommError, PycommError, RequestError
+from ciplink.logix_driver import LogixDriver
+from ciplink.packets import RequestPacket, ResponsePacket
+from ciplink.socket_ import Socket
+from ciplink.tag import Tag
+from ciplink.custom_types import ModuleIdentityObject
 
 CONNECT_PATH = '192.168.1.100/1'
 
@@ -200,7 +200,7 @@ def test_logix_connected_false_on_init_with_false_init_params():
 
 def test_clx_get_plc_time_sends_packet():
     with mock.patch.object(LogixDriver, 'send') as mock_send, \
-            mock.patch('pycomm3.cip_driver.with_forward_open'):
+            mock.patch('ciplink.cip_driver.with_forward_open'):
         ld = LogixDriver(CONNECT_PATH, init_info=False, init_tags=False)
         ld.get_plc_time()
         assert mock_send.called
@@ -208,7 +208,7 @@ def test_clx_get_plc_time_sends_packet():
 
 def test_clx_set_plc_time_sends_packet():
     with mock.patch.object(LogixDriver, 'send') as mock_send, \
-            mock.patch('pycomm3.cip_driver.with_forward_open'):
+            mock.patch('ciplink.cip_driver.with_forward_open'):
         ld = LogixDriver(CONNECT_PATH, init_info=False, init_tags=False)
         ld.set_plc_time()
         assert mock_send.called

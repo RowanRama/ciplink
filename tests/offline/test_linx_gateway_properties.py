@@ -8,7 +8,7 @@ from examples.linx_gateway_properties import browse, discover, property_node_ids
 
 
 def test_ua_reader_preserves_quality_and_finds_browsed_nodes():
-    # The core pycomm3 package does not require this optional example dependency.
+    # The core ciplink package does not require this optional example dependency.
     asyncua = pytest.importorskip("asyncua")
     ua = asyncua.ua
 

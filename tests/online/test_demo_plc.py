@@ -11,7 +11,7 @@ def test_demo_plc(plc):
     assert 'status' in plc.info
     del plc.info['status']
 
-    assert 'pycomm3' in plc.info['programs']
+    assert 'ciplink' in plc.info['programs']
     del plc.info['programs']
 
     # slot types were recorded when only the last type per slot was kept, so check they are a subset
@@ -37,7 +37,7 @@ def test_set_time(plc):
 
 
 def test_discover():
-    from pycomm3 import CIPDriver
+    from ciplink import CIPDriver
     devices = CIPDriver.discover()
 
     expected = [

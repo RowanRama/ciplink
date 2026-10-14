@@ -1,5 +1,5 @@
-from pycomm3 import n_bytes
-from pycomm3.custom_types import ModuleIdentityObject
+from ciplink import n_bytes
+from ciplink.custom_types import ModuleIdentityObject
 from io import BytesIO
 
 

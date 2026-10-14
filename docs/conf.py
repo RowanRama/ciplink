@@ -14,17 +14,17 @@
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
 
-import pycomm3
+import ciplink
 
 # -- Project information -----------------------------------------------------
 
-project = 'pycomm3'
+project = 'ciplink'
 copyright = '2021, Ian Ottoway'
 author = 'Ian Ottoway'
 
 
 # The full version, including alpha/beta/rc tags
-release = pycomm3.__version__
+release = ciplink.__version__
 
 
 # -- General configuration ---------------------------------------------------

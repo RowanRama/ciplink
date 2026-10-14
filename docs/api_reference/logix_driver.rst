@@ -1,7 +1,7 @@
 LogixDriver API
 ===============
 
-.. autoclass:: pycomm3.LogixDriver
+.. autoclass:: ciplink.LogixDriver
     :members:
 
     .. automethod:: __init__

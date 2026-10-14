@@ -7,8 +7,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from pycomm3 import LogixDriver, LogixMetadataCredentials
-from pycomm3.logix_auth import _DERReader
+from ciplink import LogixDriver, LogixMetadataCredentials
+from ciplink.logix_auth import _DERReader
 from .test_logix_extended_properties import enip
 
 

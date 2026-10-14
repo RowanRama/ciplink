@@ -5,20 +5,20 @@ from unittest import mock
 
 import pytest
 
-from pycomm3 import Tag
-from pycomm3.logger import configure_default_logger, LOG_VERBOSE
+from ciplink import Tag
+from ciplink.logger import configure_default_logger, LOG_VERBOSE
 
 
 def test_star_import_skips_submodules():
     ns = {}
-    exec('from pycomm3 import *', ns)
+    exec('from ciplink import *', ns)
     assert 'map' not in ns and 'logger' not in ns and 'util' not in ns
     assert 'LogixDriver' in ns and 'DINT' in ns and 'configure_default_logger' in ns
 
 
 @pytest.fixture
 def restore_loggers():
-    loggers = [logging.getLogger(), logging.getLogger('pycomm3')]
+    loggers = [logging.getLogger(), logging.getLogger('ciplink')]
     saved = [(lg, lg.level, lg.handlers[:]) for lg in loggers]
     yield
     for lg, level, handlers in saved:
@@ -33,21 +33,21 @@ def restore_loggers():
 def test_configure_default_logger_twice_logs_once(restore_loggers, capsys, logger):
     configure_default_logger(logger=logger)
     configure_default_logger(logger=logger)
-    logging.getLogger('pycomm3').info('hello')
+    logging.getLogger('ciplink').info('hello')
     assert capsys.readouterr().out.count('hello') == 1
 
 
 def test_configure_default_logger_drops_previous_file_handler(restore_loggers, tmp_path):
     configure_default_logger(filename=str(tmp_path / 'a.log'))
     configure_default_logger()
-    assert not any(isinstance(h, logging.FileHandler) for h in logging.getLogger('pycomm3').handlers)
+    assert not any(isinstance(h, logging.FileHandler) for h in logging.getLogger('ciplink').handlers)
 
 
 def test_logger_verbose_any_arg_count():
     records = []
     h = logging.Handler(level=1)
     h.emit = records.append
-    lg = logging.getLogger('pycomm3.test_verbose')
+    lg = logging.getLogger('ciplink.test_verbose')
     lg.addHandler(h)
     lg.setLevel(LOG_VERBOSE)
     try:
@@ -86,7 +86,7 @@ def test_example_generic_messaging_led_status(capsys):
 
 
 def test_extend_codes_path_errors():
-    from pycomm3.cip import EXTEND_CODES
+    from ciplink.cip import EXTEND_CODES
     assert 'out of memory' not in EXTEND_CODES[0x04][0x0000]
     assert 'path' in EXTEND_CODES[0x04][0x0000]
     assert 'instance' in EXTEND_CODES[0x05][0x0000]

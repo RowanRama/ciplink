@@ -1,7 +1,7 @@
 """Read Logix extended properties through FactoryTalk Linx Gateway OPC UA.
 
 Requires Gateway 6.50+ with Professional activation and ``pip install asyncua``.
-This uses OPC UA for metadata; it does not authenticate a pycomm3 CIP session.
+This uses OPC UA for metadata; it does not authenticate a ciplink CIP session.
 The Gateway endpoint, FactoryTalk application scope and Linx shortcut must
 already be configured. No PLC or Gateway settings are changed by this example.
 """
@@ -50,7 +50,7 @@ async def _client(endpoint: str, security: str = None, username: str = None,
     if url.username is not None or url.password is not None:
         raise ValueError("Endpoint URLs must not contain credentials; use --username")
     client = Client(endpoint, timeout=10)
-    client.name = "pycomm3 extended-property investigation"
+    client.name = "ciplink extended-property investigation"
     if security:
         await client.set_security_string(security)
     if username:

@@ -2,14 +2,14 @@
 Data Types
 ==========
 
-.. automodule:: pycomm3.cip.data_types
+.. automodule:: ciplink.cip.data_types
     :members:
 
 ============
 Custom Types
 ============
 
-.. automodule:: pycomm3.custom_types
+.. automodule:: ciplink.custom_types
     :members:
 
 

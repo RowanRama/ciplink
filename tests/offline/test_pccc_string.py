@@ -1,5 +1,5 @@
 import pytest
-from pycomm3.cip.pccc import PCCC_STRING, PCCC_ASCII
+from ciplink.cip.pccc import PCCC_STRING, PCCC_ASCII
 
 def test_pccc_string_odd_length_padding():
     """

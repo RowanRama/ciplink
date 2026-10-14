@@ -11,12 +11,12 @@ from unittest import mock
 
 import pytest
 
-from pycomm3.cip import DINT, UDINT, UINT, Services
-from pycomm3.cip_driver import CIPDriver
-from pycomm3.const import SUCCESS
-from pycomm3.logix_driver import LogixDriver
-from pycomm3.packets import MultiServiceRequestPacket, TagTableVersionRequestPacket
-from pycomm3.tag import Tag
+from ciplink.cip import DINT, UDINT, UINT, Services
+from ciplink.cip_driver import CIPDriver
+from ciplink.const import SUCCESS
+from ciplink.logix_driver import LogixDriver
+from ciplink.packets import MultiServiceRequestPacket, TagTableVersionRequestPacket
+from ciplink.tag import Tag
 from tests.offline.test_logix_tag_list import UDT_MAKEUP, UDT_TEMPLATE, _symbol
 from tests.offline.test_logix_tag_table_version import HEADER, V1, V2, cip_reply, version_reply
 
@@ -145,7 +145,7 @@ def test_second_connect_uses_cached_templates(tmp_path, caplog):
     assert sorted(t[0] for t in saved['templates']) == [0x123, 0x124]
     assert list(tmp_path.iterdir()) == [path]  # no temp file left behind
 
-    with caplog.at_level(logging.INFO, logger='pycomm3'):
+    with caplog.at_level(logging.INFO, logger='ciplink'):
         second, second_requests = _upload(path)
     assert second_requests == CACHED_REQUESTS  # no template reads
     assert 'saved the reads of 2 templates' in caplog.text
@@ -193,7 +193,7 @@ def test_corrupt_cache_file_is_ignored(tmp_path, caplog, corrupt):
     path = tmp_path / 'tags.json'
     expected, _ = _upload(path)
     path.write_text(corrupt(path.read_text()))
-    with caplog.at_level(logging.WARNING, logger='pycomm3'):
+    with caplog.at_level(logging.WARNING, logger='ciplink'):
         plc, requests = _upload(path)
     assert 'Ignoring unreadable tag cache file' in caplog.text
     assert requests == SYMBOL_REQUESTS + TEMPLATE_REQUESTS
@@ -222,7 +222,7 @@ def test_damaged_template_in_cache_file_uploads_again(tmp_path, caplog):
     saved = json.loads(path.read_text())
     next(t for t in saved['templates'] if t[0] == 0x123)[2] = UDT_TEMPLATE.hex()[:16]
     path.write_text(json.dumps(saved))
-    with caplog.at_level(logging.WARNING, logger='pycomm3'):
+    with caplog.at_level(logging.WARNING, logger='ciplink'):
         plc, requests = _upload(path)  # open() returned True
     assert 'its contents failed' in caplog.text
     assert requests == CACHED_REQUESTS + TEMPLATE_REQUESTS  # failed on the first template, after the makeups
@@ -256,7 +256,7 @@ def test_other_scopes_neither_read_nor_write_the_file(tmp_path):
 
 def test_unwritable_cache_file_still_connects(tmp_path, caplog):
     path = tmp_path / 'missing_dir' / 'tags.json'
-    with caplog.at_level(logging.WARNING, logger='pycomm3'):
+    with caplog.at_level(logging.WARNING, logger='ciplink'):
         plc, requests = _upload(path)  # open() returned True
     assert 'Could not write tag cache file' in caplog.text
     assert requests == SYMBOL_REQUESTS + TEMPLATE_REQUESTS
@@ -296,7 +296,7 @@ def test_unchanged_tag_table_loads_the_tag_list_from_the_file(tmp_path, caplog):
     saved = json.loads(path.read_text())
     assert [saved[k] for k in ('version', 'scope', 'serial', 'table_version')] == [2, '*', 'c0ffee01', list(V1)]
 
-    with caplog.at_level(logging.INFO, logger='pycomm3'):
+    with caplog.at_level(logging.INFO, logger='ciplink'):
         second, second_requests = _upload(path, version=V1)
     assert second_requests == []  # no symbol list, makeup or template upload
     assert second_requests.version_reads == 2  # on connect (also the one before the load), after it
@@ -342,7 +342,7 @@ def test_damaged_file_with_current_version_uploads_everything(tmp_path, caplog):
     saved = json.loads(path.read_text())
     del saved['symbols'][0][1][2]['symbol_type']  # the controller's tag 'a'
     path.write_text(json.dumps(saved))
-    with caplog.at_level(logging.WARNING, logger='pycomm3'):
+    with caplog.at_level(logging.WARNING, logger='ciplink'):
         plc, requests = _upload(path, version=V1)
     assert 'its contents failed' in caplog.text
     assert requests == SYMBOL_REQUESTS + TEMPLATE_REQUESTS
@@ -355,7 +355,7 @@ def test_unchanged_cache_file_is_not_rewritten(tmp_path):
     path = tmp_path / 'tags.json'
     _upload(path, version=V1)
     text = path.read_text()
-    with mock.patch('pycomm3.logix_driver.tempfile.mkstemp', wraps=tempfile.mkstemp) as mkstemp:
+    with mock.patch('ciplink.logix_driver.tempfile.mkstemp', wraps=tempfile.mkstemp) as mkstemp:
         assert _upload(path, version=V1)[1] == []  # loaded from the file
         assert not mkstemp.called and path.read_text() == text
         assert _upload(path, version=V2)[1] == CACHED_REQUESTS  # another version is written

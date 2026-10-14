@@ -4,12 +4,12 @@ from unittest import mock
 
 import pytest
 
-from pycomm3.cip import DINT, STRING, UDINT, UINT, USINT, Services
-from pycomm3.cip_driver import CIPDriver
-from pycomm3.const import BASE_TAG_BIT, INSUFFICIENT_PACKETS, SUCCESS
-from pycomm3.exceptions import CommError, ResponseError
-from pycomm3.logix_driver import LogixDriver
-from pycomm3.packets import (
+from ciplink.cip import DINT, STRING, UDINT, UINT, USINT, Services
+from ciplink.cip_driver import CIPDriver
+from ciplink.const import BASE_TAG_BIT, INSUFFICIENT_PACKETS, SUCCESS
+from ciplink.exceptions import CommError, ResponseError
+from ciplink.logix_driver import LogixDriver
+from ciplink.packets import (
     MultiServiceRequestPacket,
     ReadModifyWriteRequestPacket,
     ReadTagFragmentedRequestPacket,
@@ -17,8 +17,8 @@ from pycomm3.packets import (
     WriteTagFragmentedRequestPacket,
     WriteTagRequestPacket,
 )
-from pycomm3.packets.logix import MultiServiceResponsePacket
-from pycomm3.tag import Tag
+from ciplink.packets.logix import MultiServiceResponsePacket
+from ciplink.tag import Tag
 
 
 def _raw_tag(name, instance_id, symbol_type=0xC4):

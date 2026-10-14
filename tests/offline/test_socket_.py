@@ -19,10 +19,10 @@ import socket
 from unittest import mock
 import struct
 
-import pycomm3
+import ciplink
 import pytest
-from pycomm3.exceptions import CommError, PycommError
-from pycomm3.socket_ import Socket
+from ciplink.exceptions import CommError, PycommError
+from ciplink.socket_ import Socket
 
 
 def test_socket_init_creates_socket():
@@ -115,9 +115,9 @@ def test_socket_send_raises_commerror_on_socketerror():
 # rather than directly in the Socket wrapper.
 DATA_LEN = 256
 DATA_LEN_BYTES = struct.pack('<HH', 0, DATA_LEN)
-NULL_HEADER_W_DATA_LEN = DATA_LEN_BYTES.ljust(pycomm3.const.HEADER_SIZE, b'\x00') # len 256
+NULL_HEADER_W_DATA_LEN = DATA_LEN_BYTES.ljust(ciplink.const.HEADER_SIZE, b'\x00') # len 256
 RECVD_BYTES = b"These are the bytes we will recv"
-FULL_RECV_MSG = (NULL_HEADER_W_DATA_LEN + RECVD_BYTES).ljust(DATA_LEN+pycomm3.const.HEADER_SIZE, b'\x00')
+FULL_RECV_MSG = (NULL_HEADER_W_DATA_LEN + RECVD_BYTES).ljust(DATA_LEN+ciplink.const.HEADER_SIZE, b'\x00')
 def test_socket_receive_calls_recv_once_when_data_ge_data_len():
     with mock.patch.object(socket.socket, 'recv') as mock_socket_recv:
         mock_socket_recv.return_value = FULL_RECV_MSG
@@ -142,9 +142,9 @@ def test_socket_receive_sets_timeout():
 def test_socket_receive_returns_correct_amount_received_bytes():
     DATA_LEN = 4352
     DATA_LEN_BYTES = struct.pack('<HH', 0, DATA_LEN)
-    NULL_HEADER_W_DATA_LEN = DATA_LEN_BYTES.ljust(pycomm3.const.HEADER_SIZE, b'\x00') # len 4352
+    NULL_HEADER_W_DATA_LEN = DATA_LEN_BYTES.ljust(ciplink.const.HEADER_SIZE, b'\x00') # len 4352
     RECVD_BYTES = b"These are the bytes we will recv"
-    FULL_RECV_MSG = (NULL_HEADER_W_DATA_LEN + RECVD_BYTES).ljust(DATA_LEN+pycomm3.const.HEADER_SIZE, b'\x00')
+    FULL_RECV_MSG = (NULL_HEADER_W_DATA_LEN + RECVD_BYTES).ljust(DATA_LEN+ciplink.const.HEADER_SIZE, b'\x00')
     with mock.patch.object(socket.socket, 'recv') as mock_socket_recv:
         mock_socket_recv.return_value = FULL_RECV_MSG
 
@@ -152,7 +152,7 @@ def test_socket_receive_returns_correct_amount_received_bytes():
         response = my_sock.receive()
 
         assert RECVD_BYTES in response
-        assert len(response) - pycomm3.const.HEADER_SIZE == DATA_LEN
+        assert len(response) - ciplink.const.HEADER_SIZE == DATA_LEN
 
 def test_socket_receive_raises_commerror_opn_socketerror():
     with mock.patch.object(socket.socket, 'recv') as mock_socket_recv:

@@ -8,7 +8,7 @@ Connection/Read Test App by GitHubDragonFly (see the screenshots here: https://g
 - The Connection, Device Discovery and Get Tags are all set to work on separate threads.
 - Double clicking the device discovery window line with the IP Address will copy that IP to the clipboard.
 - Non-traditional "Paste" option was provided for the Path and Tag entry boxes.
-- Since the addressing is in the Tag format then it follows the rules of the pycomm3 library itself.
+- Since the addressing is in the Tag format then it follows the rules of the ciplink library itself.
   For requesting multiple values use a tag format like this:
   - CT_STRINGArray[0]{5} - request 5 consecutive values from this string array starting at index 0.
   - CT_STRING; CT_DINT; CT_REAL - read each of these semicolon separated tags (this is the app's default startup option).
@@ -31,8 +31,8 @@ import platform
 import threading
 from struct import *
 
-from pycomm3 import *
-import pycomm3
+from ciplink import *
+import ciplink
 
 from tkinter import *
 import tkinter.font as tkfont
@@ -90,7 +90,7 @@ myTag = ['CT_STRING', 'CT_DINT', 'CT_REAL']
 path = '192.168.1.15/3'
 headerAdded = False
 
-ver = pycomm3.__version__
+ver = ciplink.__version__
 
 def main():
     '''
@@ -175,7 +175,7 @@ def main():
     btnDiscoverDevices = Button(frame1, text = 'Discover Devices', fg ='green', height=1, width=14, command=start_discover_devices)
     btnDiscoverDevices.pack(anchor=N, side=LEFT, padx=3, pady=3)
 
-    # if the discover() function is not included then disable the Discover Devices button (pycomm3 version 0.12.0 or lower)
+    # if the discover() function is not included then disable the Discover Devices button (ciplink version 0.12.0 or lower)
     if getattr(LogixDriver,'discover', 'not present') == 'not present':
         btnDiscoverDevices['state'] = 'disabled'
         lbDevices.insert(1, 'discover() function unavailable')
@@ -193,12 +193,12 @@ def main():
 
     #----------------------------------------------------------------------------------------
 
-    # add a frame to hold the pycomm3 version label, 'Log Tags Values' + 'Save Tags List' checkboxes and driver choices OptionMenu (combobox)
+    # add a frame to hold the ciplink version label, 'Log Tags Values' + 'Save Tags List' checkboxes and driver choices OptionMenu (combobox)
     frame2 = Frame(root, background='navy')
     frame2.pack(fill=X)
 
-    # create a label to show pycomm3 version
-    lblVersion = Label(frame2, text='pycomm3 version ' + ver, fg='grey', bg='navy', font='Helvetica 9')
+    # create a label to show ciplink version
+    lblVersion = Label(frame2, text='ciplink version ' + ver, fg='grey', bg='navy', font='Helvetica 9')
     lblVersion.pack(side=LEFT, padx=3)
 
     # add 'Log tag values' checkbox

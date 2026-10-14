@@ -10,8 +10,8 @@ import base64
 import secrets
 from pathlib import Path
 
-from pycomm3 import LogixMetadataCredentials
-from pycomm3._logix_bundle_codec import seal_credentials
+from ciplink import LogixMetadataCredentials
+from ciplink._logix_bundle_codec import seal_credentials
 
 
 def render_bundle(certificate, private_key):
@@ -57,7 +57,7 @@ def main():
     parser.add_argument("--certificate", required=True, type=Path)
     parser.add_argument("--private-key", required=True, type=Path)
     parser.add_argument("--output", type=Path,
-                        default=Path(__file__).resolve().parents[1] / "pycomm3" / "_logix_metadata_bundle.py")
+                        default=Path(__file__).resolve().parents[1] / "ciplink" / "_logix_metadata_bundle.py")
     args = parser.parse_args()
     source = render_bundle(args.certificate.read_bytes(), args.private_key.read_bytes())
     with args.output.open("x", encoding="utf-8", newline="\n") as handle:

@@ -14,11 +14,11 @@ import struct
 from pathlib import Path
 from typing import Any, Dict
 
-from pycomm3 import CIPDriver
-from pycomm3.cip import ClassCode, ConnectionManagerServices, PADDED_EPATH
-from pycomm3.const import MSG_ROUTER_PATH
-from pycomm3.logix_metadata import build_description_request
-from pycomm3.packets import SendRRDataRequestPacket, SendUnitDataRequestPacket
+from ciplink import CIPDriver
+from ciplink.cip import ClassCode, ConnectionManagerServices, PADDED_EPATH
+from ciplink.const import MSG_ROUTER_PATH
+from ciplink.logix_metadata import build_description_request
+from ciplink.packets import SendRRDataRequestPacket, SendUnitDataRequestPacket
 
 from .logix_extended_properties import decode_cip_reply, extract_cip_reply
 
