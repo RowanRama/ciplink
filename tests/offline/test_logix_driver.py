@@ -141,14 +141,15 @@ def test_logix_init_calls_get_tag_list_if_init_tags(identity):
          mock.patch.object(LogixDriver, 'get_plc_name'), \
          mock.patch.object(CIPDriver, 'open'), \
          mock.patch.object(LogixDriver, '_read_tag_table_version', return_value=(1, 1, 2, 2, 3)), \
-         mock.patch.object(LogixDriver, 'get_tag_list') as mock_tag:
+         mock.patch.object(LogixDriver, '_load_tag_list') as mock_tag:  # get_tag_list without its version read
 
         mock_identity.return_value = identity
         mock_get_info.return_value = identity
         driver = LogixDriver(CONNECT_PATH, init_info=False, init_tags=True)
         driver._target_is_connected = True
         driver.open()
-    assert mock_tag.called
+    version = (1, 1, 2, 2, 3) if driver._tag_table_detection else None
+    mock_tag.assert_called_once_with('*', True, '', version)  # the version read on connect is the one before
 
 
 def test_logix_context_manager_calls_open_and_close():
