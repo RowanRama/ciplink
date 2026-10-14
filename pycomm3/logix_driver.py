@@ -106,6 +106,8 @@ _TAG_TABLE_UPLOAD_TRIES = 3  # uploads of a tag table that keeps changing before
 _RELOAD_BACKOFF = 2.0  # seconds without tag table reloads after one failed or the controller was busy
 _SYMBOL_PAGE_REPLY = 1000  # reply bytes budgeted for a symbol list page in a multi-service packet, about 20 tags
 _MAKEUP_REPLY = 36  # reply bytes of a structure makeup in a multi-service packet: offset, header, count, 4 attributes
+_AOI_REFUSED = (0x04, 0x0F)  # IOI syntax error, permission denied: a controller's reply to reads of an AOI's locals
+_AOI_LOCAL = "AOI local tag, not externally accessible"
 _MAKEUP_ATTRIBUTES = b"".join((
     b"\x04\x00",  # Number of attributes
     b"\x04\x00",  # Template Object Definition Size UDINT
@@ -176,6 +178,22 @@ class LogixDriver(CIPDriver):
                 its contents. A missing, corrupt, older-format or unwritable file never stops the connection, it is
                 logged and the upload continues without it. Only the startup scope's upload (all programs with
                 ``init_program_tags``, else the controller) reads and writes it. Not used with ``lazy_tags``.
+                It also keeps the AOI probes below, a probe is used again while its template's makeup is unchanged.
+
+        .. note::
+
+            Add-On Instructions: a controller refuses the reads of an AOI's local tags (0x04, IOI syntax error) and
+            the read of a whole AOI that has any (0x0F, permission denied), and the template does not say which
+            members are locals.  So after the tag definitions are loaded (with ``lazy_tags`` at the first use of a
+            tag holding that AOI type), one instance of each AOI type (a struct with ``EnableIn`` and ``EnableOut``)
+            is read whole and member by member, Read Tag only, a few packets for all of them.  Only types probed
+            again are new ones or ones whose template makeup changed.  The result is the ``'aoi'`` entry of its
+            :attr:`.data_types` entry (and of ``tag['data_type']``): ``{'whole_read': bool, 'readable': [member
+            names], 'refused': [member names]}``.  A member is refused only on those two errors, any other reply
+            leaves it readable.  Reading a whole AOI that is refused returns a dict of its readable members instead
+            (read in the same call), reading or writing a refused member returns the error ``'AOI local tag, not
+            externally accessible'`` and sends nothing.  A type without an instance to probe gets no ``'aoi'``
+            entry and is read as any struct.
 
         .. tip::
 
@@ -202,7 +220,7 @@ class LogixDriver(CIPDriver):
         """
 
         super().__init__(path, *args, **kwargs)
-        self._cache = {"id:struct": {}, "id:template": {}, "id:udt": {}}
+        self._cache = {"id:struct": {}, "id:template": {}, "id:udt": {}, "id:aoi": {}}
         self._tag_cache_file = tag_cache_file
         self._lazy_tags = lazy_tags
         self._lazy_tag_lists = {}
@@ -255,6 +273,7 @@ class LogixDriver(CIPDriver):
         self._info = self.get_plc_info()
         if self._info.get("serial") != serial:  # template instance ids are the controller's, see _template_data
             self._cache["id:template"].clear()
+            self._cache["id:aoi"].clear()
         self._reload_backoff = (0.0, None)
 
         self._cfg["use_instance_ids"] = (
@@ -434,7 +453,9 @@ class LogixDriver(CIPDriver):
     @property
     def data_types(self) -> dict:
         """
-        Read-only property for access to all data type definitions uploaded from the controller.
+        Read-only property for access to all data type definitions uploaded from the controller.  The entry of an
+        AOI type has an ``'aoi'`` entry once probed: ``{'whole_read': bool, 'readable': [...], 'refused': [...]}``,
+        see the note on Add-On Instructions in :class:`LogixDriver`.
         """
         return self._data_types
 
@@ -660,6 +681,7 @@ class LogixDriver(CIPDriver):
         read_at = version and version[2:]  # the download and project timestamps, an online edit keeps them
         if not read_at or read_at != self._templates_read_at:
             self._cache["id:template"].clear()
+            self._cache["id:aoi"].clear()  # probed again with them, _probe_aois
         self._templates_read_at = read_at
         self._cache["id:udt"].clear()
         for key in ("programs", "tasks", "modules"):
@@ -670,7 +692,10 @@ class LogixDriver(CIPDriver):
         startup_scope = "*" if self._init_args["init_program_tags"] else None  # other scopes don't touch the file
         if cache and self._tag_cache_file and not self._lazy_tags and program == startup_scope:
             return self._get_tag_list_with_cache_file(program, tag_namespace_filter, version)
-        return self._isolate_scopes(self._get_symbol_lists(program), tag_namespace_filter)
+        tags = self._isolate_scopes(self._get_symbol_lists(program), tag_namespace_filter)
+        if not self._lazy_tags:  # lazy, a type is probed at its first use (_parse_new_tag_request)
+            self._probe_aois(tags)
+        return tags
 
     def _get_symbol_lists(self, program):
         """
@@ -755,6 +780,7 @@ class LogixDriver(CIPDriver):
         templates = {}
         if cached is not None and cached["symbols"] == symbols:
             templates = cached["templates"]
+            self._cache["id:aoi"].update(cached["aoi"])  # used where the makeup is unchanged, _probe_aois
         elif cached is not None:
             self.__log.info(f"Tag cache file {self._tag_cache_file} not used, it is out of date")
         if current:  # the tag table is unchanged, so are the makeups
@@ -783,13 +809,15 @@ class LogixDriver(CIPDriver):
         elif templates:
             saved = sum(1 for i in self._cache["id:udt"] if self._cache["id:template"][i] is templates.get(i))
             self.__log.info(f"Used tag cache file {self._tag_cache_file}, saved the reads of {saved} templates")
+        self._probe_aois(tags)
         self._save_tag_cache_file(program, symbols, version, cached and cached["file"])
         return tags
 
     def _load_tag_cache_file(self):
         """
         returns the tag cache file's contents, with the templates as {template instance id: (structure makeup, raw
-        template)}, or None if the file is missing, unreadable or in an older format
+        template)} and the AOI probes as {template instance id: (structure makeup, probe)} (_probe_aois), or None
+        if the file is missing, unreadable or in an older format
         """
         try:
             with open(self._tag_cache_file, encoding="utf-8") as file:
@@ -806,6 +834,10 @@ class LogixDriver(CIPDriver):
                     int(instance_id): ({k: int(makeup[k]) for k in _MAKEUP_KEYS}, bytes.fromhex(data))
                     for instance_id, makeup, data in cached["templates"]
                 },
+                "aoi": {  # none in a file written before the probes, they are probed then
+                    int(instance_id): ({k: int(makeup[k]) for k in _MAKEUP_KEYS}, aoi)
+                    for instance_id, makeup, aoi in cached.get("aoi", [])
+                },
                 "file": cached,  # as read, _save_tag_cache_file does not write the same again
             }
         except FileNotFoundError:
@@ -816,10 +848,11 @@ class LogixDriver(CIPDriver):
 
     def _save_tag_cache_file(self, program, symbols, version, previous=None):
         """
-        atomically writes the symbol lists, every template used by them, and the controller serial and tag table
-        version they were uploaded at (read before the upload, so a version still current means nothing changed);
-        not written if that is the ``previous`` contents of the file
+        atomically writes the symbol lists, every template used by them with the probes of its AOIs, and the
+        controller serial and tag table version they were uploaded at (read before the upload, so a version still
+        current means nothing changed); not written if that is the ``previous`` contents of the file
         """
+        aois = self._cache["id:aoi"]
         cached = {
             "version": _TAG_CACHE_VERSION,
             "scope": program,
@@ -830,6 +863,7 @@ class LogixDriver(CIPDriver):
                 [i, self._cache["id:template"][i][0], self._cache["id:template"][i][1].hex()]
                 for i in self._cache["id:udt"]
             ],
+            "aoi": [[i, *aois[i]] for i in self._cache["id:udt"] if self._aoi_probed(i)],
         }
         if cached == previous:
             return
@@ -1346,6 +1380,99 @@ class LogixDriver(CIPDriver):
 
         return self._cache["id:udt"][instance_id]
 
+    def _aoi_probed(self, instance_id) -> bool:
+        """the AOI template was probed at its current structure makeup"""
+        probe = self._cache["id:aoi"].get(instance_id)
+        return probe is not None and probe[0] == self._cache["id:struct"].get(instance_id)
+
+    def _probe_aois(self, tags):
+        """
+        Finds which members of each AOI data type are readable: a controller refuses the reads of an AOI's local
+        tags, and the read of a whole AOI that has any.  For each AOI type not probed yet at its current makeup, one
+        instance reachable from ``tags`` (_aoi_instances) is read whole and member by member, Read Tag only, in
+        multi-service packets.  A read refused with 0x04 (IOI syntax error) or 0x0F (permission denied) is refused,
+        any other reply or none leaves it readable.  The result goes on the data type as ``data_type['aoi']``, a type
+        with no instance gets none.  The template has no documented marker of locals, nor of AOIs (_is_aoi).
+        """
+        with self._lock:
+            wanted = {dt["name"]: i for i, dt in self._cache["id:udt"].items()
+                      if _is_aoi(dt) and not self._aoi_probed(i)}
+            instances = self._aoi_instances(tags, wanted) if wanted else {}
+            use_ids = self._cfg["use_instance_ids"]
+            requests = {}  # request: (AOI name, member or None for the whole AOI)
+            for name, (path, base_tag) in instances.items():
+                data_type = self._cache["id:udt"][wanted[name]]
+                whole = {"tag_type": "struct", "data_type": data_type, "data_type_name": name,
+                         "type_class": data_type["type_class"]}
+                reads = [(None, path, whole)]
+                reads += [(member, f"{path}.{member}", data_type["internal_tags"][member])
+                          for member in data_type["attributes"]]
+                for member, tag, info in reads:
+                    request = ReadTagRequestPacket(self._sequence, tag, 1, info, len(requests), use_ids)
+                    request.request_path = tag_request_path(tag, {"instance_id": base_tag["instance_id"]}, use_ids)
+                    requests[request] = name, member
+            # smallest replies first so they share packets, a whole AOI too big for one is sent alone (0x06, readable)
+            sized_requests = sorted(((request, _read_reply_size({"tag_info": request.tag_info, "elements": 1}))
+                                     for request in requests), key=lambda item: item[1])
+            refused = set()
+            packets = self._pack_multi_requests(sized_requests)
+            for packet in packets:
+                response = self.send(packet)
+                replies = response.responses if isinstance(packet, MultiServiceRequestPacket) else [response]
+                refused.update(reply.request for reply in replies if reply.service_status in _AOI_REFUSED)
+
+            probes = {name: {"whole_read": True, "readable": [], "refused": []} for name in instances}
+            for request, (name, member) in requests.items():
+                if member is None:
+                    probes[name]["whole_read"] = request not in refused
+                else:
+                    probes[name]["refused" if request in refused else "readable"].append(member)
+            for name, probe in probes.items():
+                self._cache["id:aoi"][wanted[name]] = self._cache["id:struct"][wanted[name]], probe
+            if probes:
+                self.__log.info(f"Probed the member access of {len(probes)} AOI types in {len(packets)} packets")
+            for i, data_type in self._cache["id:udt"].items():
+                if self._aoi_probed(i):
+                    data_type["aoi"] = self._cache["id:aoi"][i][1]
+
+    @staticmethod
+    def _aoi_instances(tags, wanted):
+        """
+        {AOI name: (tag path, its base tag)} of an instance of each ``wanted`` AOI type in ``tags``: a tag of that
+        type, else element 0 of an array tag of it, else a member of a struct tag (not through an AOI: its struct
+        members are locals); the first one found in ``tags`` order
+        """
+        nested = {}  # struct name: {AOI name: member path}, the AOIs in its members
+
+        def members(data_type):
+            if data_type["name"] not in nested:
+                found = nested[data_type["name"]] = {}
+                for attr in data_type["attributes"]:
+                    info = data_type["internal_tags"][attr]
+                    if info["tag_type"] != "struct":
+                        continue
+                    path = f".{attr}[0]" if info.get("array") else f".{attr}"
+                    if _is_aoi(info["data_type"]):
+                        found.setdefault(info["data_type"]["name"], path)
+                    else:
+                        for name, sub_path in members(info["data_type"]).items():
+                            found.setdefault(name, path + sub_path)
+            return nested[data_type["name"]]
+
+        best = {}  # AOI name: (rank, tag path, base tag)
+        for tag in tags:
+            if tag["tag_type"] != "struct" or tag["external_access"] == "None":
+                continue
+            path = tag["tag_name"] + (f"[{','.join('0' * tag['dim'])}]" if tag["dim"] else "")
+            if _is_aoi(tag["data_type"]):
+                found = {tag["data_type"]["name"]: (1 if tag["dim"] else 0, path)}
+            else:
+                found = {name: (2, path + sub_path) for name, sub_path in members(tag["data_type"]).items()}
+            for name, (rank, tag_path) in found.items():
+                if name in wanted and rank < best.get(name, (3,))[0]:
+                    best[name] = rank, tag_path, tag
+        return {name: (tag_path, tag) for name, (_, tag_path, tag) in best.items()}
+
     def authenticate_metadata(self, credentials: Optional[LogixMetadataCredentials] = None) -> Tag:
         """Authenticate the current CIP connection for experimental metadata reads.
 
@@ -1414,7 +1541,8 @@ class LogixDriver(CIPDriver):
         response size.  Will use the multi-service request to group many tags into a single packet and also will automatically
         use fragmented read requests if the response size will not fit in a single packet.  Supports arrays (specify element
         count in using curly braces (array{10}).  Also supports full structure reading (when possible), return value
-        will be a dict of {attribute name: value}.
+        will be a dict of {attribute name: value}; for an AOI whose whole read is refused, a dict of its readable
+        members (see the note on Add-On Instructions in :class:`LogixDriver`).
 
         With instance IDs, every packet starts with a check of the tag table version (fragmented reads are sent
         between two checks).  If the tag table changed since the tag definitions were loaded, e.g. by an online
@@ -1441,6 +1569,7 @@ class LogixDriver(CIPDriver):
             versions = [read_results.pop(key).value for key in list(read_results)
                         if isinstance(key, TagTableVersionRequestPacket)]
             self._merge_chunk_results(parsed_requests, read_results, "r")
+            self._merge_aoi_results(parsed_requests, read_results)
             if not self._tag_table_changed(versions, loaded_at):
                 break
             if None in versions:  # e.g. a download in progress (0x05) or the controller locked (0x10)
@@ -1500,13 +1629,59 @@ class LogixDriver(CIPDriver):
 
     def _read_build_requests(self, parsed_tags):
         sized_requests = []
-        for tag_data in self._split_large_requests(parsed_tags, "r").values():
+        for tag_data in self._split_large_requests(self._expand_aoi_reads(parsed_tags), "r").values():
             request = self._read_build_single_request(tag_data)
             if request is not None:
                 sized_requests.append((request, _read_reply_size(tag_data)))
         # reads are matched by request_id, so batch the small reads ahead of the fragmented ones
         sized_requests.sort(key=lambda item: isinstance(item[0], ReadTagFragmentedRequestPacket))
         return self._pack_multi_requests(sized_requests, self._version_checks)
+
+    def _expand_aoi_reads(self, parsed_tags):
+        """
+        The reads to send: the read of a whole AOI whose probe found it refused (_probe_aois) is replaced by the
+        reads of its readable members, merged again by _merge_aoi_results.  Reads of several elements are not.
+        """
+        expanded = {}
+        for request_id, tag_data in parsed_tags.items():
+            aoi = None if tag_data.get("error") else _aoi_probe(tag_data["tag_info"])
+            if aoi is None or aoi["whole_read"] or tag_data["bit"] is not None or tag_data["elements"] != 1:
+                expanded[request_id] = tag_data
+                continue
+            info = tag_data["tag_info"]
+            path = tag_data["plc_tag"]
+            dim = info.get("dim") or (1 if info.get("array") else 0)
+            if dim and not path.endswith("]"):  # an array without an index reads its first element
+                path += f"[{','.join('0' * dim)}]"
+            base = {"instance_id": info.get("base_instance_id", info.get("instance_id"))}
+            members = []
+            for member in aoi["readable"]:
+                member_info = info["data_type"]["internal_tags"][member]
+                plc_tag = f"{path}.{member}"
+                members.append(dict(
+                    tag_data, request_id=(request_id, member), plc_tag=plc_tag, tag_info=member_info,
+                    elements=member_info.get("array") or 1,
+                    request_path=tag_request_path(plc_tag, base, self._cfg["use_instance_ids"]),
+                ))
+            tag_data["aoi_requests"] = members
+            expanded.update((member["request_id"], member) for member in members)
+        return expanded
+
+    def _merge_aoi_results(self, parsed_tags, results):
+        """the member reads of an AOI read (_expand_aoi_reads) as its result, a dict of its readable members"""
+        for request_id, tag_data in parsed_tags.items():
+            members = tag_data.get("aoi_requests")
+            if members is None:
+                continue
+            values, error = {}, None
+            for member in members:
+                name = member["request_id"][1]
+                result = results.pop(member["request_id"], None)
+                if result is None or result.error:
+                    error = error or f'{name} - {result.error if result is not None else "No reply"}'
+                else:
+                    values[name] = result.value
+            results[request_id] = Tag(tag_data["user_tag"], values, tag_data["tag_info"]["data_type_name"], error)
 
     def _pack_multi_requests(self, sized_requests, version_checks=False):
         """
@@ -1900,6 +2075,13 @@ class LogixDriver(CIPDriver):
                 tag = base if not len(attrs) else f"{base}.{'.'.join(attrs)}"
 
             tag_info = self._get_tag_info(base, attrs)
+            if self._lazy_tags:  # the first use of an AOI type probes it
+                self._probe_aois([self._get_tag_info(base, [])])
+            for i in range(len(attrs)):  # a local tag of an AOI, or in one, is not requested
+                parent = self._get_tag_info(base, attrs[:i])
+                aoi = _aoi_probe(parent)
+                if aoi and _tag_key(parent["data_type"]["internal_tags"], attrs[i]) in aoi["refused"]:
+                    raise RequestError(_AOI_LOCAL)
             if attrs:  # a member definition, the request addresses its base tag by the base's ID
                 tag_info = {**tag_info, "base_instance_id": self._get_tag_info(base, []).get("instance_id")}
 
@@ -2110,6 +2292,16 @@ def _parse_structure_makeup_attributes(response):
 
     except Exception as err:
         raise ResponseError("failed to parse structure attributes") from err
+
+
+def _is_aoi(data_type) -> bool:
+    """an Add-On Instruction's data type: the template has no marker for it, but every AOI has EnableIn and EnableOut"""
+    return {"EnableIn", "EnableOut"} <= data_type["internal_tags"].keys()
+
+
+def _aoi_probe(tag_info):
+    """the AOI probe of a tag or member's data type (_probe_aois), None if not an AOI or not probed"""
+    return tag_info["data_type"].get("aoi") if tag_info["tag_type"] == "struct" else None
 
 
 def _nested_template_ids(data, template):
