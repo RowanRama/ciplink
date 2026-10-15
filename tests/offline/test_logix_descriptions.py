@@ -3,7 +3,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from ciplink import LogixDriver, Tag
+from ciplink import ErrorKind, LogixDriver, Tag
 from ciplink.exceptions import DataError
 from ciplink.logix_descriptions import _member_ids, _program_id
 from ciplink.logix_metadata import (
@@ -12,7 +12,7 @@ from ciplink.logix_metadata import (
     decode_description_records,
     decode_description_response,
 )
-from ciplink.packets import SendUnitDataResponsePacket
+from ciplink.packets import MultiServiceRequestPacket, SendUnitDataResponsePacket
 from .test_logix_extended_properties import enip
 
 
@@ -335,3 +335,161 @@ def test_records_with_variable_paths_and_utf8():
 def test_invalid_description_parameters(kwargs):
     with pytest.raises(ValueError):
         build_description_request(1, **kwargs)
+
+
+def controller(plc, answers=(), status=(), unanswered=False):
+    """answers each description request (by its bytes) with answers' page, or an empty page, or once with status;
+    multi-service packets get a sub-reply per request, or with unanswered a status 0x08 reply"""
+    answers, status, sent = dict(answers), dict(status), []
+
+    def answer(wire):
+        code = status.pop(wire, 0)
+        return bytes([0xD3, 0, code, 0]) + (b"" if code else answers.get(wire, page()))
+
+    def send(request):
+        sent.append(request)
+        if not isinstance(request, MultiServiceRequestPacket):
+            return request.response_class(request, enip(answer(request.build_message()[2:])))
+        if unanswered:
+            return request.response_class(request, enip(bytes([0x8A, 0, 0x08, 0])))
+        replies = [answer(sub.tag_only_message()) for sub in request.requests]
+        offsets, offset = b"", 2 + 2 * len(replies)
+        for reply in replies:
+            offsets += struct.pack("<H", offset)
+            offset += len(reply)
+        status_code = 0x1E if any(reply[2] for reply in replies) else 0
+        return request.response_class(request, enip(bytes([0x8A, 0, status_code, 0]) + struct.pack(
+            "<H", len(replies)) + offsets + b"".join(replies)))
+
+    plc.send = Mock(side_effect=send)
+    return sent
+
+
+def wires(packet):
+    requests = packet.requests if isinstance(packet, MultiServiceRequestPacket) else [packet]
+    return [request.tag_only_message() for request in requests]
+
+
+def test_batch_equals_sequential_reads(plc):
+    struct_tag(plc)
+    program_tag(plc)
+    req = build_description_request
+    answers = {
+        req(425, path="[0]"): page(record(425, "Element text", path="[0]")),
+        req(425): page(record(425, "Array text")),
+        req(425, path="[0].1"): page(record(425, "Bit text", path="[0].1")),
+        req(0x006B5ADA, class_id=0x68, owner_context=(8, 0)): page(
+            record(0x006B5ADA, "Program text", class_id=0x68, owner=(8, 0))),
+        req(657, path="[0].!0592EF20"): page(record(657, "Member text", path="[0].!0592EF20")),
+        build_description_index_request(): page(record(0x84FE0592, "Acked", class_id=0x6C, owner=(0xEF20, 0))),
+    }
+    denied = {req(425, path="[2]"): 0x0F}
+    names = ["Array[0]", "Array[1]", "Array[0].1", "Program:Test.Input", "Structs[0].Acked",
+             "Structs[1].Acked", "Scalar", "Array[30]", "Array[2]", "Missing"]
+    sent = controller(plc, answers, denied)
+    batch = plc.get_tag_descriptions(*names)
+    batch_packets = len(sent)
+    plc._cache["descriptions"].clear()
+    controller(plc, answers, denied)
+    sequential = [plc.get_tag_description(name) for name in names]
+    assert [(tag, tag.error_kind) for tag in batch] == [(tag, tag.error_kind) for tag in sequential]
+    assert [tag.value for tag in batch[:6]] == ["Element text", "Array text", "Bit text", "Program text",
+                                                 "Member text", "Acked"]
+    assert batch[6].error == "No description returned for language 0x007f"
+    assert batch[8].error == "Permission denied" and batch[8].error.status == 0x0F
+    assert batch_packets < plc.send.call_count
+
+
+def test_identical_requests_are_sent_once(plc):
+    sent = controller(plc, {build_description_request(425): page(record(425, "Array text"))})
+    results = plc.get_tag_descriptions("Array[1]", "Array[1]", "Array[2]")
+    assert [tag.value for tag in results] == ["Array text"] * 3
+    assert [tag.tag for tag in results] == ["Array[1].@Description"] * 2 + ["Array[2].@Description"]
+    assert wires(sent[0]) == [build_description_request(425, path="[1]"),
+                              build_description_request(425, path="[2]")]
+    assert wires(sent[1]) == [build_description_request(425)]
+    assert len(sent) == 2
+
+
+@pytest.mark.parametrize("own_text,rounds", [(True, 1), (False, 2)])
+def test_one_packet_per_round(plc, own_text, rounds):
+    answers = {build_description_request(425, path=f"[{i}]"): page(record(425, f"Text {i}", path=f"[{i}]"))
+               for i in range(10)} if own_text else {}
+    answers[build_description_request(425)] = page(record(425, "Array text"))
+    sent = controller(plc, answers)
+    results = plc.get_tag_descriptions(*(f"Array[{i}]" for i in range(10)))
+    assert all(results) and len(sent) == rounds
+    assert isinstance(sent[0], MultiServiceRequestPacket) and len(sent[0].requests) == 10
+
+
+def test_batch_continues_a_paged_reply_on_its_own(plc):
+    raw = record(425, "Element text", path="[12]")
+    sent = controller(plc, {
+        build_description_request(425, path="[0]"): page(record(425, "Text", path="[0]")),
+        build_description_request(425, path="[12]"): page(raw[:15], last=False),
+        build_description_request(425, path="[12]", offset=15): page(raw[15:], first=False, offset=15),
+    })
+    results = plc.get_tag_descriptions("Array[12]", "Array[0]")
+    assert [tag.value for tag in results] == ["Element text", "Text"]
+    assert wires(sent[1]) == [build_description_request(425, path="[12]", offset=15)]
+    assert len(sent) == 2
+
+
+@pytest.mark.parametrize("unanswered,code", [(False, 0x06), (False, 0x11), (True, None)])
+def test_requests_without_room_in_the_packet_are_read_alone(plc, unanswered, code):
+    element = build_description_request(425, path="[0]")
+    sent = controller(plc, {
+        element: page(record(425, "Text", path="[0]")),
+        build_description_request(425, path="[1]"): page(record(425, "Other", path="[1]")),
+    }, {} if unanswered else {element: code}, unanswered)
+    results = plc.get_tag_descriptions("Array[0]", "Array[1]")
+    assert [tag.value for tag in results] == ["Text", "Other"]
+    assert wires(sent[1]) == [element]
+    assert len(sent) == (3 if unanswered else 2)
+
+
+def test_connection_change_discards_batch(plc):
+    controller(plc, {build_description_request(425, path="[0]"): page(record(425, "Text", path="[0]"))})
+    send = plc.send.side_effect
+
+    def changed(request):
+        response = send(request)
+        plc._target_cid = b"9876"
+        return response
+
+    plc.send.side_effect = changed
+    results = plc.get_tag_descriptions("Array[0]", "Array[1]", "Array[30]")
+    assert [tag.error for tag in results[:2]] == ["Connection changed during Description read"] * 2
+    assert results[0].error_kind is ErrorKind.COMM
+    assert "outside" in results[2].error
+
+
+def test_connection_change_keeps_the_tags_finished_in_earlier_rounds(plc):
+    controller(plc, {build_description_request(425, path="[0]"): page(record(425, "Text", path="[0]"))})
+    send = plc.send.side_effect
+    calls = []
+
+    def changed_on_second_round(request):
+        response = send(request)
+        calls.append(request)
+        if len(calls) == 2:
+            plc._target_cid = b"9876"
+        return response
+
+    plc.send.side_effect = changed_on_second_round
+    results = plc.get_tag_descriptions("Array[0]", "Array[1]")
+    assert results[0].value == "Text"
+    assert results[1].error == "Connection changed during Description read"
+
+
+def test_shared_less_specific_candidate_and_its_error(plc):
+    base = build_description_request(425)
+    sent = controller(plc, {base: page(record(425, "Array text"))})
+    results = plc.get_tag_descriptions("Array", "Array[3]", "Array[4]")
+    assert [tag.value for tag in results] == ["Array text"] * 3
+    assert [wires(packet) for packet in sent] == [
+        [base, build_description_request(425, path="[3]"), build_description_request(425, path="[4]")], [base]]
+    controller(plc, status={base: 0x0F})
+    results = plc.get_tag_descriptions("Array[3]", "Array[4]", "Scalar")
+    assert [(tag.error, tag.error_kind) for tag in results[:2]] == [("Permission denied", ErrorKind.ACCESS)] * 2
+    assert results[2].error_kind is ErrorKind.NOT_FOUND

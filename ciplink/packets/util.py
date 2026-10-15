@@ -42,7 +42,8 @@ from ..cip import (
     UINT,
     USINT,
 )
-from ..const import PRIORITY, TIMEOUT_TICKS, STRUCTURE_READ_REPLY
+from ..const import PRIORITY, TIMEOUT_TICKS, STRUCTURE_READ_REPLY, SUCCESS
+from ..tag import ErrorKind, TagError
 
 __all__ = [
     "wrap_unconnected_send",
@@ -50,6 +51,9 @@ __all__ = [
     "tag_request_path",
     "get_service_status",
     "get_extended_status",
+    "get_extended_status_code",
+    "status_kind",
+    "response_error",
     "parse_read_reply",
     "dword_to_bool_array",
     "print_bytes_msg",
@@ -175,6 +179,48 @@ def get_extended_status(msg, start) -> Optional[str]:
         return None
     ext = UINT.decode(stream)  # first word is the extended code; further words are object specific
     return f"{EXTEND_CODES.get(status, {}).get(ext, 'Extended status')}  ({status:0>2x}, {ext:0>2x})"
+
+
+def get_extended_status_code(msg, start) -> Optional[int]:
+    """the first word of the extended status of the general status at msg[start], None if there is none"""
+    try:
+        return UINT.decode(msg[start + 2:start + 4]) if msg[start + 1] else None
+    except Exception:
+        return None
+
+
+_STATUS_KINDS = {
+    **dict.fromkeys((0x04, 0x05, 0x16), ErrorKind.NOT_FOUND),
+    0x0F: ErrorKind.ACCESS,
+    **dict.fromkeys((0x0C, 0x10, 0x02), ErrorKind.REFUSED),
+    **dict.fromkeys((0x03, 0x09, 0x13, 0x15, 0x20), ErrorKind.BAD_VALUE),
+    **dict.fromkeys((0x08, 0x26), ErrorKind.BAD_REQUEST),
+}
+_EXTENDED_KINDS = {  # of general status 0xFF
+    **dict.fromkeys((0x2104, 0x2105, 0x210B), ErrorKind.NOT_FOUND),
+    **dict.fromkeys((0x2107, 0x2109, 0x7), ErrorKind.BAD_VALUE),
+    **dict.fromkeys((0x2100, 0x2101, 0x2102, 0x2103), ErrorKind.ACCESS),
+    **dict.fromkeys((0x2108, 0x2106), ErrorKind.REFUSED),
+    0x210A: ErrorKind.BAD_REQUEST,
+}
+
+
+def status_kind(status: int, ext: Optional[int] = None) -> ErrorKind:
+    """the ErrorKind of a CIP general status and its first extended status word"""
+    if status == 0xFF:
+        return _EXTENDED_KINDS.get(ext, ErrorKind.DEVICE)
+    return _STATUS_KINDS.get(status, ErrorKind.DEVICE)
+
+
+def response_error(response, message: Optional[str] = None) -> TagError:
+    """the error of a failed reply as a TagError, COMM if the reply was lost or could not be parsed"""
+    message = response.error if message is None else message
+    status = response.service_status
+    if response._error is not None or response.command_status != SUCCESS or status is None:
+        return TagError(message, ErrorKind.COMM)
+    # SendRRData (0x6F) replies have the status at 42, SendUnitData and padded multi-service replies at 48
+    ext = get_extended_status_code(response.raw, 42 if response.command == b"\x6f\x00" else 48)
+    return TagError(message, status_kind(status, ext), status, ext)
 
 
 def parse_read_reply(data, data_type, elements):

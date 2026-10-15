@@ -2,6 +2,35 @@
 Release History
 ===============
 
+ciplink 0.2.0 (unreleased)
+==========================
+
+LogixDriver
+-----------
+
+- |:sparkles:| every ``read``, ``write``, ``get_tag_description`` and ``authenticate_metadata`` error is a ``TagError``,
+  a ``str`` with a ``kind`` (``ErrorKind``) and the CIP ``status`` and first extended status word ``ext`` of a
+  controller error.  ``Tag.error_kind`` is the kind, ``None`` without an error and ``OTHER`` for a plain string.
+  Kinds: ``NOT_FOUND`` (no such tag, member, element or bit), ``BAD_VALUE`` (the write value does not fit the type),
+  ``BAD_REQUEST`` (malformed request), ``ACCESS`` (privilege, AOI local tag, keyswitch or password), ``REFUSED``
+  (nothing done, retry later: reload backoff, state conflict, upload/download mode), ``TABLE_CHANGED`` (the tag table
+  changed during the request), ``COMM`` (request or reply lost or unparseable), ``DEVICE`` (any other controller
+  status) and ``OTHER``.  The error messages are unchanged.
+- |:boom:| **[Breaking]** write values are checked strictly, a value that does not fit is rejected for that tag
+  (``BAD_VALUE``, nothing is sent for it, the other tags are still written):
+
+  - an array given more values than elements (it was truncated)
+  - BOOL values other than ``True``/``False`` or the ints ``0``/``1`` (any truthy value set the bit), also for
+    BOOL arrays, bit members of structures and bits of integers
+  - ``True``/``False`` for an integer, ``REAL`` or ``LREAL``
+  - a structure dict with keys that are not members (they were ignored)
+
+  The BOOL and number checks are in the data types, so ``SLCDriver`` word writes reject ``True``/``False`` too
+  (``write('N7:0', True)``, write ``1``), bit writes like ``B3:0/1`` still take any value.
+- |:sparkles:| ``get_tag_descriptions(*tag_names)`` reads many Descriptions at once, a list of the same results as
+  ``get_tag_description`` of each tag, sending one round of multi-service packets per candidate path (element,
+  member, base) instead of one request per tag and path.  ``get_tag_description`` uses it.
+
 1.3.0 (unreleased)
 ==================
 
