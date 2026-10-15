@@ -213,6 +213,9 @@ def StructTag(
         def _encode(cls, values: Dict[str, Any]):
             # copy into a plain dict: a missing member raises (DataError) even for a defaultdict/Counter
             values = {k: v for k, v in values.items()}
+            unknown = values.keys() - {member.name for member in cls.members} - cls.bits.keys()
+            if unknown:  # e.g. a misspelled member would be silently not written
+                raise DataError(f"Unknown members: {', '.join(sorted(map(str, unknown)))}")
 
             value = bytearray(cls.size)
             for member in cls.members:

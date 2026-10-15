@@ -109,7 +109,7 @@ def _as_stream(buffer: _BufferType):
 
 
 def _bool(value) -> bool:
-    if value is None or isinstance(value, (str, bytes)):
+    if not (isinstance(value, int) and value in (0, 1)):  # only a bool or 0/1, not any truthy value
         raise TypeError(f"expected a bool, got {value!r}")
     return bool(value)
 
@@ -217,6 +217,8 @@ class ElementaryDataType(DataType):
 
     @classmethod
     def _encode(cls, value: Any) -> bytes:
+        if isinstance(value, bool):  # a bool is an int, but True written to a number is a mistake
+            raise TypeError(f"expected a number, got {value!r}")
         return pack(cls._format, value)
 
     @classmethod

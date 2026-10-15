@@ -2,6 +2,7 @@ import re
 import struct
 
 from .cip import DataTypes, Services
+from .const import INSUFFICIENT_PACKETS
 from .exceptions import RequestError, ResponseError
 from .logix_metadata import (
     build_description_index_request,
@@ -10,9 +11,11 @@ from .logix_metadata import (
     decode_description_response,
     decode_metadata_page,
 )
-from .packets import SendUnitDataRequestPacket
+from .packets import MultiServiceRequestPacket, SendUnitDataRequestPacket, response_error
+from .tag import ErrorKind, TagError
 
 
+_NO_ROOM = (INSUFFICIENT_PACKETS, 0x11)  # no room in the multi-service reply, or reply data too large
 _SEGMENT = re.compile(r"([^\[\]{}.\s]+)(?:\[([0-9]+(?:,[0-9]+){0,2})\])?")
 
 
@@ -25,23 +28,26 @@ def _cache(plc):
     return cache
 
 
-def _pages(plc, builder):
+def _pages(plc, builder, first=None):
+    """the pages of a paged reply, first is the data of its first page if it was already read"""
     pages = []
     offset = 0
     connection = (plc._session, plc._target_cid)
     for _ in range(1024):
-        request = SendUnitDataRequestPacket(plc._sequence)
-        request.add(builder(offset))
-        response = plc.send(request)
-        if not response:
-            raise ResponseError(response.error)
-        if (not plc._target_is_connected
-                or connection != (plc._session, plc._target_cid)):
-            raise ResponseError("Connection changed during Description read")
-        page = decode_metadata_page(response.data)
+        if first is None:
+            request = SendUnitDataRequestPacket(plc._sequence)
+            request.add(builder(offset))
+            response = plc.send(request)
+            if not response:
+                raise ResponseError(response_error(response))
+            _check_connection(plc, connection)
+            data = response.data
+        else:
+            data, first = first, None
+        page = decode_metadata_page(data)
         if page["first"] != (offset == 0) or page["offset"] != offset:
             raise ResponseError("Out-of-order extended description page")
-        pages.append(response.data)
+        pages.append(data)
         if page["last"]:
             return pages
         if not page["data"]:
@@ -50,11 +56,20 @@ def _pages(plc, builder):
     raise ResponseError("Extended description exceeded 1024 pages")
 
 
-def _value(plc, target, path, language, encoding):
+def _check_connection(plc, connection):
+    if not plc._target_is_connected or connection != (plc._session, plc._target_cid):
+        raise ResponseError(TagError("Connection changed during Description read", ErrorKind.COMM))
+
+
+def _request(target, path, language, offset=0):
     class_id, instance_id, a, b = target
-    pages = _pages(plc, lambda offset: build_description_request(
-        instance_id, language, offset, path=path, class_id=class_id,
-        owner_context=(a, b)))
+    return build_description_request(instance_id, language, offset, path=path, class_id=class_id,
+                                     owner_context=(a, b))
+
+
+def _value(plc, target, path, language, encoding, first=None):
+    class_id, instance_id, a, b = target
+    pages = _pages(plc, lambda offset: _request(target, path, language, offset), first)
     record = decode_description_response(pages, encoding)
     if record is not None and (
             record["class_id"] != class_id or record["instance_id"] != instance_id
@@ -84,7 +99,7 @@ def _program_id(plc, name):
                 plc._info["programs"] = programs
                 program = name
         if program is None:
-            raise RequestError("Program does not exist: " + name)
+            raise RequestError(TagError("Program does not exist: " + name, ErrorKind.NOT_FOUND))
         response = plc.generic_message(
             service=Services.get_attribute_list, class_code=0x6B,
             instance=programs[program]["instance_id"],
@@ -192,7 +207,8 @@ def _indices(definition, indices):
     return "[{}]".format(",".join(str(value) for value in values))
 
 
-def read_description(plc, tag_name, language, encoding):
+def _resolve(plc, tag_name):
+    """the description target of tag_name and its candidate (path, member) list, most specific first"""
     if not isinstance(tag_name, str) or not tag_name or "{" in tag_name or "}" in tag_name:
         raise RequestError("Specify a tag, member, or array element")
     program = None
@@ -211,7 +227,7 @@ def read_description(plc, tag_name, language, encoding):
         root = "Program:" + program + "." + root
     definition = plc.get_tag_info(root)
     if definition is None:
-        raise RequestError("Tag does not exist: " + root)
+        raise RequestError(TagError("Tag does not exist: " + root, ErrorKind.NOT_FOUND))
     steps = [(definition, parsed[0].group(2), None)]
     current = definition
     for index, match in enumerate(parsed[1:], 1):
@@ -229,7 +245,7 @@ def read_description(plc, tag_name, language, encoding):
         members = data.get("internal_tags", {}) if isinstance(data, dict) else {}
         member = next((key for key in members if key.lower() == name.lower()), None)
         if member is None:
-            raise RequestError("Tag doesn't exist - " + name)
+            raise RequestError(TagError("Tag doesn't exist - " + name, ErrorKind.NOT_FOUND))
         steps.append((members[member], indices, (current, member)))
         current = members[member]
     for index, (data, indices, member) in enumerate(steps):
@@ -257,12 +273,63 @@ def read_description(plc, tag_name, language, encoding):
         if suffix:
             path += suffix
             candidates.append((path, None))
-    for path, member in reversed(candidates):
-        value = _value(plc, target, path, language, encoding)
-        if value is not None:
-            return value
-        if member is not None:
-            value = _type_value(plc, *member, language, encoding)
-            if value is not None:
-                return value
-    return None
+    return target, candidates[::-1]
+
+
+def read_descriptions(plc, tag_names, language, encoding):
+    """
+    The Description of each tag (its text, None without one, or the exception raised for it), same as reading
+    each tag's candidates in turn, most specific first, until one has a Description.  Each round requests the next
+    candidate of every unfinished tag at once, identical requests once, in multi-service packets.  Only a reply
+    with more pages, or a request the packet had no room to answer (0x06, 0x11 or a missing reply), is read on its own.
+    """
+    connection = (plc._session, plc._target_cid)
+    results = [None] * len(tag_names)
+    pending = {}
+    for index, tag_name in enumerate(tag_names):
+        try:
+            pending[index] = _resolve(plc, tag_name)
+        except Exception as error:
+            results[index] = error
+    try:
+        while pending:
+            requests = {}
+            for key in dict.fromkeys((target, candidates[0][0]) for target, candidates in pending.values()):
+                request = SendUnitDataRequestPacket(plc._sequence)
+                request.add(_request(*key, language))
+                requests[request] = key
+            replies, embedded = {}, set()
+            for packet in plc._pack_multi_requests([(request, 256) for request in requests]):
+                if isinstance(packet, MultiServiceRequestPacket):
+                    embedded.update(packet.requests)
+                    replies.update((reply.request, reply) for reply in plc.send(packet).responses)
+                else:
+                    replies[packet] = plc.send(packet)
+            _check_connection(plc, connection)
+            values = {}
+            for request, key in requests.items():
+                reply = replies.get(request)
+                try:
+                    if request in embedded and (reply is None or reply.service_status in _NO_ROOM):
+                        values[key] = _value(plc, *key, language, encoding)
+                    elif not reply:
+                        raise ResponseError(response_error(reply))
+                    else:
+                        values[key] = _value(plc, *key, language, encoding, reply.data)
+                except Exception as error:
+                    values[key] = error
+            for index, (target, candidates) in list(pending.items()):
+                path, member = candidates.pop(0)
+                value = values[(target, path)]
+                if value is None and member is not None:
+                    try:
+                        value = _type_value(plc, *member, language, encoding)
+                    except Exception as error:
+                        value = error
+                if value is not None or not candidates:
+                    results[index] = value
+                    del pending[index]
+            _check_connection(plc, connection)
+    except Exception as error:  # e.g. the connection changed: the unfinished tags get the error
+        results = [error if index in pending else result for index, result in enumerate(results)]
+    return results

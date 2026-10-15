@@ -25,7 +25,7 @@
 from ._version import __version__, __version_info__
 from .logger import *
 from .const import *
-from .tag import Tag
+from .tag import Tag, ErrorKind, TagError
 from .exceptions import *
 from .cip import *
 from .custom_types import *

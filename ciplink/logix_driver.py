@@ -59,6 +59,7 @@ from .cip import (
     Array,
     DataType,
     ArrayType,
+    BitArrayType,
     PortSegment,
 )
 from .cip_driver import CIPDriver, with_forward_open, parse_connection_path
@@ -94,10 +95,11 @@ from .packets import (
     TagTableVersionRequestPacket,
     GenericConnectedRequestPacket,
     tag_request_path,
+    response_error,
 )
-from .tag import Tag
+from .tag import Tag, ErrorKind, TagError
 from .logix_auth import LogixMetadataCredentials
-from .logix_descriptions import read_description
+from .logix_descriptions import read_descriptions
 
 _TAG_CACHE_VERSION = 2  # bump when the tag cache file layout changes
 _MAKEUP_KEYS = ("object_definition_size", "structure_size", "member_count", "structure_handle")
@@ -382,7 +384,7 @@ class LogixDriver(CIPDriver):
 
     def _refused(self, tags):
         """the result of a read or write refused with the backoff error"""
-        error = self._reload_backoff[1]
+        error = TagError(self._reload_backoff[1], ErrorKind.REFUSED)
         results = [Tag(tag, None, None, error) for tag in tags]
         return results if len(results) > 1 else results[0]
 
@@ -1494,7 +1496,8 @@ class LogixDriver(CIPDriver):
                 name="Metadata certificate challenge", return_response_packet=True,
             )
             if not challenge:
-                raise ResponseError("Certificate challenge rejected: " + str(challenge.error))
+                raise ResponseError(response_error(challenge.value, "Certificate challenge rejected: "
+                                                   + str(challenge.error)))
             if challenge.value.raw[46:50] != bytes.fromhex("cb000000"):
                 raise ResponseError("Unexpected certificate challenge reply header")
             connection = (self._session, self._target_cid)
@@ -1507,7 +1510,8 @@ class LogixDriver(CIPDriver):
                 name="Metadata challenge completion", return_response_packet=True,
             )
             if not completion:
-                raise ResponseError("Challenge completion rejected: " + str(completion.error))
+                raise ResponseError(response_error(completion.value, "Challenge completion rejected: "
+                                                   + str(completion.error)))
             if completion.value.raw[46:50] != bytes.fromhex("cc000000"):
                 raise ResponseError("Unexpected metadata completion reply")
             credentials.validate_completion(completion.value.data)
@@ -1515,24 +1519,37 @@ class LogixDriver(CIPDriver):
                 raise ResponseError("CIP connection changed during metadata authentication")
             return Tag(name, True, "BOOL", None)
         except Exception as error:
-            return Tag(name, None, "BOOL", str(error))
+            return Tag(name, None, "BOOL", _tag_error(error, _exception_kind(error)))
 
     @with_forward_open
     def get_tag_description(self, tag_name: str, language: int = 0x007F,
                             encoding: str = "utf-8") -> Tag:
         """Read a tag, member, or array element's Description."""
-        result_name = f"{tag_name}.@Description"
-        try:
-            if self._micro800:
-                raise RequestError("Extended descriptions require a Logix controller")
+        return self.get_tag_descriptions(tag_name, language=language, encoding=encoding)[0]
+
+    @with_forward_open
+    def get_tag_descriptions(self, *tag_names: str, language: int = 0x007F,
+                             encoding: str = "utf-8") -> List[Tag]:
+        """
+        Read the Descriptions of tags, members, or array elements, a list of Tags in the order of ``tag_names``,
+        same results as ``get_tag_description`` of each but many tags share each multi-service packet.
+        """
+        if self._micro800:
+            values = [RequestError("Extended descriptions require a Logix controller")] * len(tag_names)
+        else:
             with self._lock:
-                value = read_description(self, tag_name, language, encoding)
-            if value is None:
-                return Tag(result_name, None, "STRING",
-                           "No description returned for language 0x{:04x}".format(language))
-            return Tag(result_name, value, "STRING", None)
-        except Exception as error:
-            return Tag(result_name, None, "STRING", str(error))
+                values = read_descriptions(self, tag_names, language, encoding)
+        results = []
+        for tag_name, value in zip(tag_names, values):
+            result_name = f"{tag_name}.@Description"
+            if isinstance(value, Exception):
+                results.append(Tag(result_name, None, "STRING", _tag_error(value, _exception_kind(value))))
+            elif value is None:
+                results.append(Tag(result_name, None, "STRING", TagError(
+                    "No description returned for language 0x{:04x}".format(language), ErrorKind.NOT_FOUND)))
+            else:
+                results.append(Tag(result_name, value, "STRING", None))
+        return results
 
     @with_forward_open
     def read(self, *tags: str) -> ReadWriteReturnType:
@@ -1579,7 +1596,8 @@ class LogixDriver(CIPDriver):
                 if not self._refresh_tag_table():
                     return self._refused(tags)
             else:  # no third read, the next call loads the definitions again
-                error = "Tag table changed on the controller during the read and again during its retry, discarded"
+                error = TagError("Tag table changed on the controller during the read and again during its retry, "
+                                 "discarded", ErrorKind.TABLE_CHANGED)
                 read_results = {key: Tag(result.tag, None, None, error) for key, result in read_results.items()}
 
         results = []
@@ -1620,7 +1638,7 @@ class LogixDriver(CIPDriver):
 
             except Exception as err:
                 self.__log.exception("Invalid tag request")
-                results.append(Tag(tag, None, None, f"Invalid tag request - {err!r}"))
+                results.append(Tag(tag, None, None, TagError(f"Invalid tag request - {err!r}", ErrorKind.BAD_REQUEST)))
 
         if len(tags) > 1:
             return results
@@ -1678,7 +1696,8 @@ class LogixDriver(CIPDriver):
                 name = member["request_id"][1]
                 result = results.pop(member["request_id"], None)
                 if result is None or result.error:
-                    error = error or f'{name} - {result.error if result is not None else "No reply"}'
+                    cause = result.error if result is not None else TagError("No reply", ErrorKind.COMM)
+                    error = error or _tag_error(cause, ErrorKind.OTHER, f"{name} - {cause}")
                 else:
                     values[name] = result.value
             results[request_id] = Tag(tag_data["user_tag"], values, tag_data["tag_info"]["data_type_name"], error)
@@ -1832,7 +1851,8 @@ class LogixDriver(CIPDriver):
 
         self._merge_chunk_results(parsed_requests, write_results, "w")
         if changed:
-            error = "Tag table changed on the controller during the write, it may have written another tag"
+            error = TagError("Tag table changed on the controller during the write, it may have written another tag",
+                             ErrorKind.TABLE_CHANGED)
             write_results = {key: result._replace(error=error) for key, result in write_results.items()}
         results = []
         for i, (tag, value) in enumerate(tags_values):
@@ -1859,7 +1879,7 @@ class LogixDriver(CIPDriver):
                 results.append(user_result)
             except Exception as err:
                 self.__log.exception("Invalid tag request")
-                results.append(Tag(tag, None, None, f"Invalid tag request - {err!r}"))
+                results.append(Tag(tag, None, None, TagError(f"Invalid tag request - {err!r}", ErrorKind.BAD_REQUEST)))
 
         if len(tags_values) > 1:
             return results
@@ -1895,13 +1915,17 @@ class LogixDriver(CIPDriver):
                     if partial_array:
                         values = tag_data["value"]
                         if isinstance(values, (str, bytes)) or not isinstance(values, Sequence):
-                            raise RequestError("BOOL array writes require a sequence of values")
+                            raise RequestError(TagError("BOOL array writes require a sequence of values",
+                                                        ErrorKind.BAD_VALUE))
                         if len(values) < bool_elements:
-                            raise RequestError("Insufficient data for requested BOOL elements")
-                        values = values[:bool_elements]
-                    for value in values:  # masks only check truthiness, so a string like 'False' would set the bit
-                        if value is None or isinstance(value, Sequence):
-                            raise RequestError(f"Invalid value for BOOL - {value!r}")
+                            raise RequestError(TagError("Insufficient data for requested BOOL elements",
+                                                        ErrorKind.BAD_VALUE))
+                        if len(values) > bool_elements:
+                            raise RequestError(TagError(f"Too many values for requested BOOL elements, expected "
+                                                        f"{bool_elements} and got {len(values)}", ErrorKind.BAD_VALUE))
+                    for value in values:  # masks only check truthiness, 'False' or 2.5 would set the bit
+                        if not _is_bool(value):
+                            raise RequestError(TagError(f"Invalid value for BOOL - {value!r}", ErrorKind.BAD_VALUE))
                     for index, value in enumerate(values):
                         target = tag_data["plc_tag"]
                         target_bit = bit or 0
@@ -1925,7 +1949,7 @@ class LogixDriver(CIPDriver):
                     if request is not None:
                         sized_requests.append((request, 6))  # sequence and reply header
             except RequestError as err:
-                tag_data["error"] = str(err)
+                tag_data["error"] = _tag_error(err, ErrorKind.BAD_VALUE)
 
         flush_bit_writes()
         return self._pack_multi_requests(sized_requests)
@@ -1949,7 +1973,7 @@ class LogixDriver(CIPDriver):
 
             return request
         except RequestError as err:
-            parsed_tag["error"] = f"Invalid Tag Request - {err!r}"
+            parsed_tag["error"] = _tag_error(err, ErrorKind.BAD_VALUE, f"Invalid Tag Request - {err!r}")
             self.__log.exception(f'Failed to build request for {parsed_tag["plc_tag"]} - skipping')
             return None
 
@@ -1984,7 +2008,7 @@ class LogixDriver(CIPDriver):
                 return _recurse_attrs(attrs, data["data_type"]["internal_tags"])
 
         except KeyError as err:
-            raise RequestError(f"Tag doesn't exist - {err.args[0]}")
+            raise RequestError(TagError(f"Tag doesn't exist - {err.args[0]}", ErrorKind.NOT_FOUND))
 
         except (CommError, RequestError):
             raise
@@ -1992,7 +2016,8 @@ class LogixDriver(CIPDriver):
         except Exception as err:
             _msg = f"failed to get tag data for: {base}, {attrs}"
             self.__log.exception(_msg)
-            raise RequestError(_msg) from err
+            kind = ErrorKind.COMM if isinstance(err, ResponseError) else ErrorKind.BAD_REQUEST  # e.g. a lazy load
+            raise RequestError(TagError(_msg, kind)) from err
 
     @with_forward_open
     def _load_tag_definition(self, name):
@@ -2011,7 +2036,7 @@ class LogixDriver(CIPDriver):
             if (raw_tag is None or symbol_name.startswith("__")
                     or raw_tag["symbol_type"] & 0x1000
                     or not symbol_name.startswith(self._init_args["tag_namespace_filter"])):
-                raise RequestError(f"Tag doesn't exist - {name}")
+                raise RequestError(TagError(f"Tag doesn't exist - {name}", ErrorKind.NOT_FOUND))
             name = f"Program:{program}.{symbol_name}" if program else symbol_name
             self._tags[name] = self._create_tag(name, raw_tag)
             return name
@@ -2028,7 +2053,7 @@ class LogixDriver(CIPDriver):
 
             except RequestError as err:
                 self.__log.exception(f"Failed to parse tag request: {tag}")
-                parsed["error"] = str(err)
+                parsed["error"] = _tag_error(err, ErrorKind.BAD_REQUEST)
 
             finally:
                 requests[i] = parsed
@@ -2081,7 +2106,7 @@ class LogixDriver(CIPDriver):
                 parent = self._get_tag_info(base, attrs[:i])
                 aoi = _aoi_probe(parent)
                 if aoi and _tag_key(parent["data_type"]["internal_tags"], attrs[i]) in aoi["refused"]:
-                    raise RequestError(_AOI_LOCAL)
+                    raise RequestError(TagError(_AOI_LOCAL, ErrorKind.ACCESS))
             if attrs:  # a member definition, the request addresses its base tag by the base's ID
                 tag_info = {**tag_info, "base_instance_id": self._get_tag_info(base, []).get("instance_id")}
 
@@ -2113,7 +2138,7 @@ class LogixDriver(CIPDriver):
         except (CommError, RequestError):
             raise
         except Exception as err:
-            raise RequestError(f"Failed to parse tag request {tag!r}: {err}") from err
+            raise RequestError(TagError(f"Failed to parse tag request {tag!r}: {err}", ErrorKind.BAD_REQUEST)) from err
 
     def _split_large_requests(self, parsed_tags, rw):
         """Split one-dimensional array operations at the UINT service-count limit."""
@@ -2133,7 +2158,11 @@ class LogixDriver(CIPDriver):
                 values = tag_data.get("value")
                 if rw == "w" and not isinstance(values, bytes):
                     if not isinstance(values, Sequence) or isinstance(values, str) or len(values) < count:
-                        raise RequestError("Insufficient data for requested array elements")
+                        raise RequestError(TagError("Insufficient data for requested array elements",
+                                                    ErrorKind.BAD_VALUE))
+                    if len(values) > count:
+                        raise RequestError(TagError(f"Too many values for requested elements, expected {count} and "
+                                                    f"got {len(values)}", ErrorKind.BAD_VALUE))
                 chunks = []
                 element_size = _tag_return_size({"tag_info": info, "elements": 1})
                 for offset in range(0, count, 65535):
@@ -2146,13 +2175,14 @@ class LogixDriver(CIPDriver):
                         if isinstance(values, bytes):
                             begin, end = begin * element_size, end * element_size
                             if len(values) < count * element_size:
-                                raise RequestError("Insufficient bytes for requested array elements")
+                                raise RequestError(TagError("Insufficient bytes for requested array elements",
+                                                            ErrorKind.BAD_VALUE))
                         chunk["value"] = values[begin:end]
                     chunks.append(chunk)
                     expanded[chunk_id] = chunk
                 tag_data["chunk_requests"] = chunks
             except (RequestError, ValueError) as err:
-                tag_data["error"] = str(err)
+                tag_data["error"] = _tag_error(err, ErrorKind.BAD_REQUEST)
         return expanded
 
     def _merge_chunk_results(self, parsed_tags, results, rw):
@@ -2166,7 +2196,8 @@ class LogixDriver(CIPDriver):
                 result = results.pop(chunk["request_id"], None)
                 if chunk.get("error") or result is None or result.error:
                     error = error or chunk.get("error") or (
-                        result.error if result is not None else "Missing array chunk response"
+                        result.error if result is not None
+                        else TagError("Missing array chunk response", ErrorKind.COMM)
                     )
                 elif rw == "r":
                     values.extend(result.value if isinstance(result.value, list) else [result.value])
@@ -2188,7 +2219,7 @@ class LogixDriver(CIPDriver):
             except (RequestError, ResponseError) as err:
                 self.__log.exception("Error sending request")
                 for req in subrequests:
-                    results[req.request_id] = Tag(req.tag, None, None, str(err))
+                    results[req.request_id] = Tag(req.tag, None, None, _tag_error(err, ErrorKind.COMM))
                 continue
             for resp in response.responses if multi else [response]:
                 req = resp.request
@@ -2202,9 +2233,10 @@ class LogixDriver(CIPDriver):
                 elif resp:
                     results[req.request_id] = Tag(req.tag, resp.value, resp.data_type, None)
                 else:
-                    results[req.request_id] = Tag(req.tag, None, None, resp.error)
+                    results[req.request_id] = Tag(req.tag, None, None, response_error(resp))
+            error = response_error(response) if response.error else TagError("No reply", ErrorKind.COMM)
             for req in subrequests:
-                results.setdefault(req.request_id, Tag(req.tag, None, None, response.error or "No reply"))
+                results.setdefault(req.request_id, Tag(req.tag, None, None, error))
         return results
 
     def send(self, request: RequestPacket):
@@ -2332,18 +2364,42 @@ def encode_value(parsed_tag: dict) -> bytes:
                         f"Insufficient data for requested elements, expected {value_elements} and got {len(value)}"
                     )
                 if len(value) > value_elements:
-                    value = value[:value_elements]
+                    raise RequestError(f"Too many values for requested elements, expected {value_elements} and "
+                                       f"got {len(value)}")
             elif not isinstance(value, Sequence) or isinstance(value, str):
                 value = [
                     value,
                 ]
+            elif len(value) > 1 and not issubclass(_type.element_type, BitArrayType):  # a BOOL word takes 32 values
+                raise RequestError(f"Too many values for requested elements, expected 1 and got {len(value)}")
 
             return _type.encode(value, value_elements)
 
         return _type.encode(value)
 
     except Exception as err:
-        raise RequestError(f"Unable to create a writable value - {err}") from err
+        raise RequestError(TagError(f"Unable to create a writable value - {err}", ErrorKind.BAD_VALUE)) from err
+
+
+def _is_bool(value) -> bool:
+    """a BOOL write value: a bool or the int 0 or 1"""
+    return isinstance(value, int) and value in (0, 1)
+
+
+def _exception_kind(err) -> ErrorKind:
+    """the default ErrorKind of an exception caught around a request"""
+    if isinstance(err, RequestError):
+        return ErrorKind.BAD_REQUEST
+    return ErrorKind.COMM if isinstance(err, CommError) else ErrorKind.DEVICE
+
+
+def _tag_error(err, kind: ErrorKind, message: Optional[str] = None) -> TagError:
+    """err (an exception or message) as a TagError, keeping the kind of a TagError it carries, else kind"""
+    carried = err.args[0] if isinstance(err, Exception) and err.args else err
+    message = str(err) if message is None else message
+    if isinstance(carried, TagError):
+        return TagError(message, carried.kind, carried.status, carried.ext)
+    return TagError(message, kind)
 
 
 def _tag_return_size(tag_data):
