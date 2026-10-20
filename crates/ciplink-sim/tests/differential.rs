@@ -713,13 +713,14 @@ struct Run {
 impl Run {
     fn collect(&mut self, sim: &Simulator, step: usize) {
         // The simulator logs every connection's frames in one list. UnRegisterSession is the only request without
-        // a reply, so a driver replaced in a step can send it on its old connection while the new driver's
-        // RegisterSession is already arriving on another: the two can be logged in either order. Nothing follows
-        // an UnRegisterSession on its connection, so its logical place is before the step's other frames
-        // (sort_by_key is stable).
-        let mut frames = sim.take_received();
-        frames.sort_by_key(|f| f.get(..2) != Some(&[0x66, 0x00][..]));
-        self.frames.extend(frames.into_iter().map(|f| (step, f)));
+        // a reply, so the one a replaced or dropped driver sends on its old connection can be logged at any point
+        // after it, even in a later step or scenario, depending on thread scheduling. It is left out here; its
+        // exact bytes and when it is sent are covered by the cip_driver tests.
+        let frames = sim.take_received();
+        let frames = frames
+            .into_iter()
+            .filter(|f| f.get(..2) != Some(&[0x66, 0x00][..]));
+        self.frames.extend(frames.map(|f| (step, f)));
     }
 }
 
