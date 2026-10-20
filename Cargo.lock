@@ -101,6 +101,7 @@ dependencies = [
  "indexmap",
  "log",
  "pyo3",
+ "pyo3-build-config",
 ]
 
 [[package]]

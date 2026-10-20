@@ -89,7 +89,7 @@ jobs:
         shell: bash
         env:
           BUILD: ${{ matrix.build }}
-        run: bindings/cpp/build_and_test.sh
+        run: bash bindings/cpp/build_and_test.sh
 
   dotnet:
     name: dotnet (${{ matrix.os }})
