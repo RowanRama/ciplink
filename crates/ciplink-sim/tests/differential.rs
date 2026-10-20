@@ -27,7 +27,7 @@ use ciplink::slc::driver::SlcDriver;
 use ciplink::{Error, Value};
 use ciplink_sim::{Fault, LogixConfig, Simulator, TagConfig, TypeConfig};
 use indexmap::IndexMap;
-use serde_json::{Value as Json, json};
+use serde_json::{json, Value as Json};
 
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -712,8 +712,14 @@ struct Run {
 
 impl Run {
     fn collect(&mut self, sim: &Simulator, step: usize) {
-        self.frames
-            .extend(sim.take_received().into_iter().map(|f| (step, f)));
+        // The simulator logs every connection's frames in one list. UnRegisterSession is the only request without
+        // a reply, so a driver replaced in a step can send it on its old connection while the new driver's
+        // RegisterSession is already arriving on another: the two can be logged in either order. Nothing follows
+        // an UnRegisterSession on its connection, so its logical place is before the step's other frames
+        // (sort_by_key is stable).
+        let mut frames = sim.take_received();
+        frames.sort_by_key(|f| f.get(..2) != Some(&[0x66, 0x00][..]));
+        self.frames.extend(frames.into_iter().map(|f| (step, f)));
     }
 }
 
