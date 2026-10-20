@@ -27,7 +27,7 @@ use ciplink::slc::driver::SlcDriver;
 use ciplink::{Error, Value};
 use ciplink_sim::{Fault, LogixConfig, Simulator, TagConfig, TypeConfig};
 use indexmap::IndexMap;
-use serde_json::{json, Value as Json};
+use serde_json::{Value as Json, json};
 
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
