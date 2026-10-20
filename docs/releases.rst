@@ -2,8 +2,13 @@
 Release History
 ===============
 
-ciplink 0.3.0 (unreleased)
-==========================
+ciplink 0.3.1
+=============
+
+- |:memo:| the NuGet package now has a README and links to the project and its repository.
+
+ciplink 0.3.0
+=============
 
 - |:sparkles:| the driver core is written in Rust (``crates/ciplink``) and the Python package drives it through the
   extension module ``ciplink._core``.  The Python API, the requests sent (byte for byte), the results and the error
@@ -17,8 +22,8 @@ ciplink 0.3.0 (unreleased)
   from source needs a Rust toolchain.  Driver internals the Python driver had (``_sock``, ``send``, ``_forward_open``,
   ``_read_tag``, ``encode_value``...) are gone; code that patched them must use the public API.
 
-ciplink 0.2.0 (unreleased)
-==========================
+ciplink 0.2.0
+=============
 
 LogixDriver
 -----------
