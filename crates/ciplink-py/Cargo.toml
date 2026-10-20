@@ -1,0 +1,23 @@
+[package]
+name = "ciplink-py"
+description = "Python extension module ciplink._core over the ciplink Rust core"
+publish = false
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lib]
+name = "_core"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+ciplink = { path = "../ciplink" }
+indexmap = "2"
+log = "0.4"
+pyo3 = { version = "0.30", features = ["abi3-py39"] }
+
+[features]
+extension-module = ["pyo3/extension-module"]
+default = ["extension-module"]

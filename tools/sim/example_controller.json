@@ -1,0 +1,277 @@
+{
+  "kind": "logix",
+  "identity": {
+    "vendor": 1,
+    "product_type": 14,
+    "product_code": 166,
+    "revision": [33, 11],
+    "serial": "c0ffee01",
+    "product_name": "1756-SIM/A",
+    "keyswitch": "REMOTE RUN"
+  },
+  "slot": 0,
+  "program_name": "SimPLC",
+  "modules": [
+    {
+      "slot": 1,
+      "identity": {
+        "product_type": 12,
+        "product_code": 166,
+        "revision": [11, 2],
+        "serial": "00e2c0de",
+        "product_name": "1756-EN2T/D",
+        "keyswitch": "RUN"
+      }
+    },
+    {
+      "slot": 2,
+      "identity": {
+        "product_type": 7,
+        "product_code": 7,
+        "revision": [3, 1],
+        "serial": "00b16b16",
+        "product_name": "1756-IB16/A",
+        "keyswitch": "RUN"
+      }
+    }
+  ],
+  "types": [
+    {
+      "name": "AtomicUDT",
+      "members": [
+        {"name": "bool", "type": "BOOL"},
+        {"name": "sint", "type": "SINT"},
+        {"name": "int", "type": "INT"},
+        {"name": "dint", "type": "DINT"},
+        {"name": "lint", "type": "LINT"},
+        {"name": "real", "type": "REAL"}
+      ]
+    },
+    {
+      "name": "ArrayUDT",
+      "members": [
+        {"name": "bools", "type": "BOOL", "dim": 64},
+        {"name": "sints", "type": "SINT", "dim": 8},
+        {"name": "ints", "type": "INT", "dim": 4},
+        {"name": "dints", "type": "DINT", "dim": 10},
+        {"name": "lints", "type": "LINT", "dim": 4},
+        {"name": "reals", "type": "REAL", "dim": 10}
+      ]
+    },
+    {
+      "name": "PaddedUDT",
+      "members": [
+        {"name": "bool1", "type": "BOOL"},
+        {"name": "sint", "type": "SINT"},
+        {"name": "dint1", "type": "DINT"},
+        {"name": "bool2", "type": "BOOL"},
+        {"name": "dint2", "type": "DINT"}
+      ]
+    },
+    {
+      "name": "BoolsUDT",
+      "members": [
+        {"name": "b1", "type": "BOOL"},
+        {"name": "b2", "type": "BOOL"},
+        {"name": "b3", "type": "BOOL"},
+        {"name": "b4", "type": "BOOL"},
+        {"name": "b5", "type": "BOOL"},
+        {"name": "b6", "type": "BOOL"},
+        {"name": "b7", "type": "BOOL"},
+        {"name": "b8", "type": "BOOL"},
+        {"name": "b9", "type": "BOOL"},
+        {"name": "b10", "type": "BOOL"},
+        {"name": "b11", "type": "BOOL"},
+        {"name": "b12", "type": "BOOL"},
+        {"name": "b13", "type": "BOOL"},
+        {"name": "b14", "type": "BOOL"},
+        {"name": "b15", "type": "BOOL"},
+        {"name": "b16", "type": "BOOL"},
+        {"name": "int", "type": "INT"},
+        {"name": "bb1", "type": "BOOL"},
+        {"name": "bb2", "type": "BOOL"},
+        {"name": "bb3", "type": "BOOL"},
+        {"name": "bb4", "type": "BOOL"},
+        {"name": "bb5", "type": "BOOL"},
+        {"name": "bb6", "type": "BOOL"},
+        {"name": "bb7", "type": "BOOL"},
+        {"name": "bb8", "type": "BOOL"},
+        {"name": "bb9", "type": "BOOL"},
+        {"name": "bb10", "type": "BOOL"},
+        {"name": "bb11", "type": "BOOL"},
+        {"name": "bb12", "type": "BOOL"},
+        {"name": "bb13", "type": "BOOL"},
+        {"name": "bb14", "type": "BOOL"},
+        {"name": "bb15", "type": "BOOL"},
+        {"name": "bb16", "type": "BOOL"},
+        {"name": "bb17", "type": "BOOL"},
+        {"name": "bb18", "type": "BOOL"},
+        {"name": "bb19", "type": "BOOL"},
+        {"name": "bb20", "type": "BOOL"}
+      ]
+    },
+    {"name": "STRING20", "string": 20},
+    {"name": "STRING480", "string": 480},
+    {
+      "name": "NestedUDT",
+      "members": [
+        {"name": "udt1", "type": "AtomicUDT"},
+        {"name": "udt_ary1", "type": "AtomicUDT", "dim": 5},
+        {"name": "udt2", "type": "ArrayUDT"},
+        {"name": "udt3", "type": "PaddedUDT"},
+        {"name": "str1", "type": "STRING"},
+        {"name": "str_ary1", "type": "STRING20", "dim": 3},
+        {"name": "tmr", "type": "TIMER"},
+        {"name": "udt4", "type": "BoolsUDT"}
+      ]
+    },
+    {
+      "name": "Valve",
+      "aoi": true,
+      "members": [
+        {"name": "Cmd", "type": "BOOL"},
+        {"name": "Mode", "type": "DINT"},
+        {"name": "Count", "type": "DINT", "local": true},
+        {"name": "Busy", "type": "BOOL", "local": true}
+      ]
+    },
+    {"name": "Proc", "aoi": true, "members": [{"name": "Speed", "type": "REAL"}, {"name": "Run", "type": "BOOL"}]},
+    {"name": "Holder", "members": [{"name": "V", "type": "DINT"}, {"name": "Valves", "type": "Valve", "dim": 2}]},
+    {
+      "name": "AB:1756_IF4:I:0",
+      "members": [{"name": "Fault", "type": "DINT"}, {"name": "Ch0Data", "type": "REAL"}, {"name": "Ch1Data", "type": "REAL"}]
+    },
+    {
+      "name": "AB:1756_OF4:O:0",
+      "members": [{"name": "Ch0Data", "type": "REAL"}, {"name": "Ch1Data", "type": "REAL"}]
+    }
+  ],
+  "tasks": [{"name": "MainTask"}, {"name": "Periodic"}],
+  "system_tags": [
+    {"name": "__SYSTEM_DATA"},
+    {"name": "Map:Local", "symbol_type": 4201},
+    {"name": "Cxn:Standard:1", "symbol_type": 4202}
+  ],
+  "programs": [
+    {
+      "name": "MainProgram",
+      "routines": ["MainRoutine", "Sub1"],
+      "tags": [
+        {"name": "p_dint", "type": "DINT", "value": 7},
+        {"name": "p_str", "type": "STRING", "value": "program scope"},
+        {
+          "name": "p_udt",
+          "type": "AtomicUDT",
+          "value": {"bool": true, "sint": 2, "int": 3, "dint": 4, "lint": 5, "real": 6.5}
+        },
+        {"name": "p_valve", "type": "Valve", "value": {"EnableIn": true, "Cmd": true, "Mode": 1, "Count": 9}},
+        {"name": "p_ary", "type": "INT", "dims": [10], "value": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]}
+      ]
+    },
+    {
+      "name": "SecondProgram",
+      "routines": ["MainRoutine"],
+      "tags": [
+        {"name": "counter", "type": "DINT", "value": 3},
+        {"name": "flags", "type": "BOOL", "dims": [32], "value": [true, false, true]}
+      ]
+    }
+  ],
+  "tags": [
+    {"name": "sint1", "type": "SINT", "value": 100},
+    {"name": "int1", "type": "INT", "value": -1234},
+    {"name": "dint1", "type": "DINT", "value": 2147483647},
+    {"name": "lint1", "type": "LINT", "value": -9223372036854775808},
+    {"name": "usint1", "type": "USINT", "value": 200},
+    {"name": "uint1", "type": "UINT", "value": 60000},
+    {"name": "udint1", "type": "UDINT", "value": 4000000000, "instance_id": 70000},
+    {"name": "ulint1", "type": "ULINT", "value": 18446744073709551615},
+    {"name": "real1", "type": "REAL", "value": 3.25},
+    {"name": "lreal1", "type": "LREAL", "value": 1e+100},
+    {"name": "bool1", "type": "BOOL", "value": true},
+    {"name": "bool2", "type": "BOOL", "value": false},
+    {"name": "dint_ary", "type": "DINT", "dims": [10], "value": [0, 100, 200, 300, 400, 500, 600, 700, 800, 900]},
+    {"name": "dint_2d", "type": "DINT", "dims": [3, 4], "value": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]},
+    {
+      "name": "dint_3d",
+      "type": "DINT",
+      "dims": [2, 3, 4],
+      "value": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+    },
+    {"name": "real_ary", "type": "REAL", "dims": [5], "value": [0.5, 1.5, 2.5, 3.5, 4.5]},
+    {
+      "name": "sint_ary",
+      "type": "SINT",
+      "dims": [20],
+      "value": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+    },
+    {
+      "name": "bool_ary",
+      "type": "BOOL",
+      "dims": [96],
+      "value": [true, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, true, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true]
+    },
+    {"name": "big_ary", "type": "DINT", "dims": [2000], "value": [1, 2, 3], "instance_id": 5000},
+    {"name": "str1", "type": "STRING", "value": "Hello Logix"},
+    {"name": "str20", "type": "STRING20", "value": "Lorem ipsum vivamus."},
+    {
+      "name": "str480",
+      "type": "STRING480",
+      "value": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris rhoncus elit nec mauris convallis convallis. Nunc tristique volutpat dapibus. Suspendisse potenti. Quisque eget augue vitae ante congue malesuada. Cras sed aliquam est. Integer sagittis, mauris id bibendum ornare, metus lectus accumsan ex, non egestas sem tortor at nibh. Vestibulum consectetur ex tellus. Pellentesque nisl quam, bibendum nec lectus at, tempus varius purus. Donec tristique, ipsum a ornare eleifend."
+    },
+    {"name": "str_ary", "type": "STRING", "dims": [4], "value": ["a", "bb", "", "dddd"]},
+    {
+      "name": "udt1",
+      "type": "AtomicUDT",
+      "value": {"bool": true, "sint": -1, "int": 1, "dint": 10, "lint": 100, "real": 1000.5}
+    },
+    {
+      "name": "udt2",
+      "type": "ArrayUDT",
+      "value": {
+        "bools": [false, false, false, false, false, true],
+        "sints": [0, 0, -2],
+        "ints": [0, 0, 0, 2],
+        "dints": [0, 0, 0, 0, 0, 0, 0, 0, 4],
+        "lints": [0, 0, 100],
+        "reals": [0, 88.5]
+      }
+    },
+    {
+      "name": "udt3",
+      "type": "PaddedUDT",
+      "value": {"bool1": true, "sint": 0, "dint1": -1, "bool2": false, "dint2": -1}
+    },
+    {"name": "udt4", "type": "BoolsUDT", "value": {"b4": true, "bb20": true, "int": 7}},
+    {"name": "udt_ary", "type": "AtomicUDT", "dims": [3], "value": [{}, {"dint": 5, "real": 0.25}, {"bool": true}]},
+    {
+      "name": "nested",
+      "type": "NestedUDT",
+      "value": {
+        "udt1": {"dint": 11},
+        "udt_ary1": [{}, {}, {"sint": 3}],
+        "str1": "nested",
+        "str_ary1": ["x", "y", "z"],
+        "tmr": {"PRE": 1000, "ACC": 250, "EN": true, "TT": true},
+        "udt3": {"dint1": -1},
+        "udt4": {"bb17": true}
+      }
+    },
+    {"name": "timer1", "type": "TIMER", "value": {"PRE": 5000, "ACC": 1234, "EN": true, "TT": true, "DN": false}},
+    {"name": "timers", "type": "TIMER", "dims": [3], "value": [{}, {"PRE": 1, "DN": true}, {}]},
+    {"name": "counter1", "type": "COUNTER", "value": {"PRE": 10, "ACC": 3, "CU": true}},
+    {"name": "control1", "type": "CONTROL", "value": {"LEN": 8, "POS": 2, "EN": true}},
+    {
+      "name": "valve1",
+      "type": "Valve",
+      "value": {"EnableIn": true, "EnableOut": true, "Cmd": true, "Mode": 2, "Count": 17}
+    },
+    {"name": "valves", "type": "Valve", "dims": [2], "value": [{"Mode": 1}, {"Mode": 2}]},
+    {"name": "proc1", "type": "Proc", "value": {"EnableIn": true, "Speed": 12.5, "Run": true}},
+    {"name": "holder", "type": "Holder", "value": {"V": 5, "Valves": [{"Mode": 3}, {"Mode": 4}]}},
+    {"name": "ro_dint", "type": "DINT", "value": 77, "external_access": "Read Only"},
+    {"name": "hidden_dint", "type": "DINT", "value": 88, "external_access": "None"},
+    {"name": "Local:1:I", "type": "AB:1756_IF4:I:0", "value": {"Ch0Data": 4.5, "Ch1Data": -1.25}},
+    {"name": "Local:2:O", "type": "AB:1756_OF4:O:0", "value": {"Ch0Data": 0.5}}
+  ]
+}

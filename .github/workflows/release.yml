@@ -1,37 +1,93 @@
 name: release
 
-# Push a tag like v0.1.0 to build, test and publish ciplink to PyPI.
+# Push a tag like v0.3.0 to build, test and publish ciplink: wheels and an sdist to PyPI, the ciplink crate to
+# crates.io, the C# binding to NuGet, and a GitHub release with the C header and prebuilt C libraries.
+# See "Releasing" in CONTRIBUTING.md.
 on:
   push:
     tags: ["v*"]
 
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  build:
+  version:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - name: Check the tag matches the package version
+      - name: Check the tag matches every package version
+        shell: python
         run: |
-          version=$(python -c "import re; print(re.search(r'__version__ = \"(.+)\"', open('ciplink/_version.py').read())[1])")
-          test "v$version" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME does not match version $version"; exit 1; }
-      - name: Build
+          import os, re, tomllib
+          tag = os.environ["GITHUB_REF_NAME"]
+          versions = {
+              "python/ciplink/_version.py": re.search(r'__version__ = "(.+)"', open("python/ciplink/_version.py").read())[1],
+              "Cargo.toml": tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"],
+              "Ciplink.csproj": re.search(r"<Version>(.+)</Version>", open("bindings/dotnet/Ciplink/Ciplink.csproj").read())[1],
+          }
+          bad = {f: v for f, v in versions.items() if f"v{v}" != tag}
+          if bad:
+              raise SystemExit(f"tag {tag} does not match {bad}")
+
+  # abi3 wheels (one per platform covers Python 3.9+), each tested on its own platform where the runner can run it
+  wheels:
+    needs: version
+    name: wheel ${{ matrix.target }} ${{ matrix.manylinux }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: x86_64, manylinux: auto, test: true }
+          - { os: ubuntu-latest, target: aarch64, manylinux: auto }
+          - { os: ubuntu-latest, target: x86_64, manylinux: musllinux_1_2 }
+          - { os: ubuntu-latest, target: aarch64, manylinux: musllinux_1_2 }
+          - { os: macos-latest, target: universal2-apple-darwin, test: true }
+          - { os: windows-latest, target: x64, test: true }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux }}
+          args: --release --out dist
+      - name: Install the wheel and run the public-API tests
+        if: matrix.test
+        shell: bash
         run: |
-          python -m pip install build
-          python -m build
-      - name: Install the wheel and run the offline tests
-        run: |
-          python -m pip install dist/*.whl pytest
+          python -m pip install pytest
+          python -m pip install ciplink --no-index --find-links dist --only-binary :all:
           python -m pytest tests/offline -q -p no:cacheprovider
       - uses: actions/upload-artifact@v7
         with:
-          name: dist
+          name: wheels-${{ matrix.os }}-${{ matrix.target }}-${{ matrix.manylinux }}
           path: dist/
 
-  publish:
-    needs: build
+  sdist:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheels-sdist
+          path: dist/
+
+  pypi:
+    needs: [wheels, sdist]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -39,6 +95,130 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          name: dist
+          pattern: wheels-*
+          merge-multiple: true
           path: dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
+
+  crates:
+    needs: [wheels, sdist]
+    runs-on: ubuntu-latest
+    environment: crates
+    permissions:
+      contents: read
+      id-token: write  # crates.io trusted publishing, no stored token
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Skip a version already on crates.io (the first one is published by hand, a re-run may follow a success)
+        id: published
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "ciplink") | .version')
+          status=$(curl -s -o /dev/null -w '%{http_code}' -A "ciplink-release (github.com/RowanRama/ciplink)" \
+                   "https://crates.io/api/v1/crates/ciplink/$version")
+          echo "exists=$([ "$status" = 200 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - uses: rust-lang/crates-io-auth-action@v1
+        if: steps.published.outputs.exists != 'true'
+        id: crates-auth
+      - name: cargo publish
+        if: steps.published.outputs.exists != 'true'
+        run: cargo publish -p ciplink
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates-auth.outputs.token }}
+
+  # crates/ciplink-ffi per platform: an archive for the GitHub release, and the shared library for the NuGet package
+  ffi:
+    needs: version
+    name: ffi ${{ matrix.rid }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu, rid: linux-x64, shared: libciplink.so, static: libciplink.a }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, rid: win-x64, shared: ciplink.dll, static: ciplink.lib, import: ciplink.dll.lib }
+          - { os: macos-latest, target: aarch64-apple-darwin, rid: osx-arm64, shared: libciplink.dylib, static: libciplink.a }
+          - { os: macos-latest, target: x86_64-apple-darwin, rid: osx-x64, shared: libciplink.dylib, static: libciplink.a }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: cargo build
+        run: cargo build --release -p ciplink-ffi --target ${{ matrix.target }}
+      - name: Package
+        run: |
+          built="target/${{ matrix.target }}/release"
+          name="ciplink-ffi-${GITHUB_REF_NAME}-${{ matrix.rid }}"
+          mkdir -p "out/$name/include" "out/$name/lib" "out/runtimes/${{ matrix.rid }}/native"
+          cp crates/ciplink-ffi/include/ciplink.h "out/$name/include/"
+          cp LICENSE "out/$name/"
+          for f in ${{ matrix.shared }} ${{ matrix.static }} ${{ matrix.import }}; do cp "$built/$f" "out/$name/lib/"; done
+          cp "$built/${{ matrix.shared }}" "out/runtimes/${{ matrix.rid }}/native/"
+          cd out
+          if [ "$RUNNER_OS" = Windows ]; then 7z a "$name.zip" "$name" >/dev/null; else tar -czf "$name.tar.gz" "$name"; fi
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ffi-${{ matrix.rid }}
+          path: |
+            out/*.zip
+            out/*.tar.gz
+            out/runtimes/
+          if-no-files-found: error
+
+  nuget:
+    needs: [ffi, wheels, sdist]
+    runs-on: ubuntu-latest
+    environment: nuget
+    permissions:
+      contents: read
+      id-token: write  # NuGet trusted publishing, no stored API key
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: ffi-*
+          merge-multiple: true
+          path: ffi/
+      - name: dotnet pack
+        run: dotnet pack bindings/dotnet/Ciplink -c Release -p:CiplinkRuntimesDir="$PWD/ffi/runtimes" -o nupkg
+      - name: Check the package holds every runtime
+        run: |
+          unzip -l nupkg/*.nupkg | tee contents.txt
+          for lib in win-x64/native/ciplink.dll linux-x64/native/libciplink.so osx-arm64/native/libciplink.dylib \
+                     osx-x64/native/libciplink.dylib; do
+            grep -q " runtimes/$lib$" contents.txt || { echo "missing runtimes/$lib"; exit 1; }
+          done
+      - uses: NuGet/login@v1
+        id: nuget-login
+        with:
+          user: RowanRama
+      - name: dotnet nuget push
+        run: dotnet nuget push nupkg/*.nupkg --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+
+  github-release:
+    needs: [ffi, pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: ffi-*
+          merge-multiple: true
+          path: ffi/
+      - name: Create the release
+        run: |
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes \
+            crates/ciplink-ffi/include/ciplink.h ffi/*.zip ffi/*.tar.gz
+        env:
+          GH_TOKEN: ${{ github.token }}

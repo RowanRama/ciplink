@@ -2,7 +2,7 @@ from ciplink import LogixDriver
 
 
 def find_attributes():
-    with LogixDriver('10.61.50.4/10') as plc:
+    with LogixDriver('192.0.2.10/10') as plc:
         ...  # do nothing, we're just letting the plc initialize the tag list
 
     for typ in plc.data_types:
@@ -10,12 +10,12 @@ def find_attributes():
 
 
 def tag_list_equal():
-    with LogixDriver('10.61.50.4/10') as plc:
+    with LogixDriver('192.0.2.10/10') as plc:
         tag_list = plc.get_tag_list(program='*', cache=False)
         if {tag['tag_name'] for tag in tag_list} == plc.tags.keys():
             print('They are the same!')
 
-    with LogixDriver('10.61.50.4/10', init_tags=False) as plc2:
+    with LogixDriver('192.0.2.10/10', init_tags=False) as plc2:
         plc2.get_tag_list(program='*')
 
     # tags_json leaves out the type classes, which are new objects for every upload
@@ -26,7 +26,7 @@ def tag_list_equal():
 
 
 def find_pids():
-    with LogixDriver('10.61.50.4/10') as plc:
+    with LogixDriver('192.0.2.10/10') as plc:
 
         # PIDs are structures, the data_type attribute will be a dict with data type definition.
         # For tag types of 'atomic' the data type will a string, we need to skip those first.

@@ -1,0 +1,111 @@
+name: ci
+
+# Every suite on every push and pull request.  All tests run against ciplink-sim, never a real controller.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    name: rust (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      # the differential harness runs the reference driver with `uv run --python 3.12`
+      - uses: astral-sh/setup-uv@v10.3.0
+      - name: cargo fmt
+        if: runner.os == 'Linux'
+        run: cargo fmt --all --check
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: cargo test
+        run: cargo test --workspace
+
+  python:
+    name: python ${{ matrix.python }} (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.9", "3.13"]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: maturin develop
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate 2>/dev/null || source .venv/Scripts/activate
+          python -m pip install maturin pytest
+          maturin develop --release
+          python -c "import os, sys; print(os.path.dirname(sys.executable))" >> "$GITHUB_PATH"  # later steps use the venv
+      - name: public-API tests
+        run: python -m pytest tests/offline -q -p no:cacheprovider
+      - name: binding tests (simulator checks, parity with the reference driver)
+        run: python -m pytest crates/ciplink-py/tests -q -p no:cacheprovider
+      - name: online tests against the simulator
+        run: python tools/sim/run_online_tests.py
+
+  cpp:
+    name: c++ (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: g++, os: ubuntu-latest, build: cxx }
+          - { name: msvc, os: windows-latest, build: cmake }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: build and test
+        shell: bash
+        env:
+          BUILD: ${{ matrix.build }}
+        run: bindings/cpp/build_and_test.sh
+
+  dotnet:
+    name: dotnet (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: build the native library
+        run: cargo build --release -p ciplink-ffi
+      - name: dotnet test
+        run: dotnet test bindings/dotnet

@@ -2,6 +2,21 @@
 Release History
 ===============
 
+ciplink 0.3.0 (unreleased)
+==========================
+
+- |:sparkles:| the driver core is written in Rust (``crates/ciplink``) and the Python package drives it through the
+  extension module ``ciplink._core``.  The Python API, the requests sent (byte for byte), the results and the error
+  messages are those of 0.2.0; reads and writes take a third to a quarter of the client CPU, and opening a connection
+  with a large tag list (or from the tag cache file) is four to six times faster.  The GIL is released during network
+  I/O.
+- |:sparkles:| the same core is available from C (``ciplink.h``), C++ (header-only ``ciplink.hpp``), C# (.NET 8+)
+  and Rust, see ``bindings/README.md``.
+- |:sparkles:| ``ciplink-sim``, a simulated Logix, Micro800 or SLC 500 controller for tests in any language.
+- |:boom:| **[Breaking]** the wheels are platform specific (abi3, one per platform for Python 3.9+), and installing
+  from source needs a Rust toolchain.  Driver internals the Python driver had (``_sock``, ``send``, ``_forward_open``,
+  ``_read_tag``, ``encode_value``...) are gone; code that patched them must use the public API.
+
 ciplink 0.2.0 (unreleased)
 ==========================
 

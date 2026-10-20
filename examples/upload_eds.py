@@ -11,7 +11,7 @@ def upload_eds():
     """
     Uploads the EDS and ICO files from the device and saves the files.
     """
-    with CIPDriver('192.168.1.236') as driver:
+    with CIPDriver('192.0.2.10') as driver:
         if initiate_transfer(driver):
             file_data = upload_file(driver)
             encoding = get_file_encoding(driver)

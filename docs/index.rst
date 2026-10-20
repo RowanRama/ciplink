@@ -2,9 +2,11 @@
 ========================================================================================
 
 
-.. include:: ../README.rst
-    :start-after: <<start>>
-    :end-before: <<end>>
+ciplink reads and writes tags on Allen-Bradley PLCs (ControlLogix, CompactLogix, GuardLogix, Micro800,
+SLC 500 and MicroLogix) over EtherNet/IP. Its driver core is written in Rust and shared by the Python, C, C++,
+C# and Rust APIs. These pages document the Python API; see the README in the repository for the other languages.
+
+Install with ``pip install ciplink``.
 
 
 Contents

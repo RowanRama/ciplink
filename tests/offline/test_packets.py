@@ -1,20 +1,24 @@
 import types
-from unittest import mock
 
 import pytest
 
-from ciplink import CIPDriver
-from ciplink.cip import PADDED_EPATH, REAL, STATUS, UDINT, UINT, Services
-from ciplink.const import MSG_ROUTER_PATH
+from ciplink.cip import DINT, REAL, STATUS, UDINT, UINT, Services
 from ciplink.packets import (
     GenericConnectedRequestPacket,
     GenericConnectedResponsePacket,
     GenericUnconnectedResponsePacket,
     ListIdentityResponsePacket,
+    MultiServiceRequestPacket,
+    ReadModifyWriteRequestPacket,
+    ReadTagFragmentedRequestPacket,
+    ReadTagRequestPacket,
     SendRRDataResponsePacket,
     SendUnitDataResponsePacket,
+    WriteTagFragmentedRequestPacket,
+    WriteTagRequestPacket,
 )
-from ciplink.packets.util import get_extended_status, get_service_status, request_path, tag_request_path, wrap_unconnected_send
+from ciplink.packets.logix import MultiServiceResponsePacket
+from ciplink.packets.util import get_extended_status, get_service_status, request_path, tag_request_path
 
 
 def test_request_path_bytes_value_is_one_id():
@@ -24,43 +28,6 @@ def test_request_path_bytes_value_is_one_id():
 
 def test_request_path_lists_still_pair_ids():
     assert request_path([0x93, 0x94], [1, 2]) == bytes.fromhex("042093240120942402")
-
-
-def _sent_message(func):
-    with mock.patch.object(CIPDriver, "send") as m:
-        func()
-    return m.call_args[0][0].build_message()
-
-
-def test_unconnected_generic_message_has_no_route_after_data():
-    # route path must not be appended after request_data (#279, #316)
-    driver = CIPDriver("10.0.0.5")
-    msg = _sent_message(
-        lambda: driver.generic_message(
-            service=0x10, class_code=4, instance=150, attribute=3, request_data=b"\x00" * 36, connected=False
-        )
-    )
-    assert msg == b"\x10" + request_path(4, 150, 3) + b"\x00" * 36
-
-
-def test_unconnected_send_wraps_with_route_path():
-    # unconnected_send=True still routes through the connection path
-    driver = CIPDriver("10.0.0.5/bp/0")
-    msg = _sent_message(lambda: driver.generic_message(
-        service=0x0E, class_code=1, instance=1, attribute=7, connected=False, unconnected_send=True))
-    route = PADDED_EPATH.encode(driver._cfg["cip_path"], length=True, pad_length=True)
-    assert msg == wrap_unconnected_send(b"\x0e" + request_path(1, 1, 7), route)
-
-
-def test_forward_open_and_close_still_carry_route_path():
-    driver = CIPDriver("10.0.0.5")
-    driver._session = 1
-    msg = _sent_message(driver._forward_open)
-    assert msg.endswith(PADDED_EPATH.encode(driver._cfg["cip_path"] + MSG_ROUTER_PATH, length=True))
-    msg = _sent_message(driver._forward_close)
-    assert msg.endswith(
-        PADDED_EPATH.encode(driver._cfg["cip_path"] + MSG_ROUTER_PATH, length=True, pad_length=True)
-    )
 
 
 def _encap_header(cmd, status):
@@ -142,3 +109,28 @@ def test_generic_reply_values_and_errors(cls, head, caplog):
     assert not resp and resp.value == b"\x01\x02"
     resp = cls(req, None)
     assert not resp and resp.value is None and resp.data_type is REAL
+
+
+def test_logix_request_packet_bytes():
+    info = {'tag_type': 'atomic', 'data_type': 'DINT', 'data_type_name': 'DINT', 'instance_id': 5}
+    read = ReadTagRequestPacket(1, 'd', 2, info, 0, True)
+    write = WriteTagRequestPacket(3, 'd', 1, info, 1, True, DINT.encode(7))
+    read_frag = ReadTagFragmentedRequestPacket.from_request(iter([2]), read, 8)
+    write_frag = WriteTagFragmentedRequestPacket.from_request(iter([4]), write, 4, DINT.encode(8))
+    multi = MultiServiceRequestPacket(5, [read, write])
+    rmw = ReadModifyWriteRequestPacket(6, 'd', info, 2, True)
+    rmw.set_bit(3, True, 2)
+
+    path = '0220 6b24 05'
+    assert read.build_message() == bytes.fromhex(f'0100 4c {path} 0200')
+    assert write.build_message() == bytes.fromhex(f'0300 4d {path} c400 0100 07000000')
+    assert read_frag.build_message() == bytes.fromhex(f'0200 52 {path} 0200 08000000')
+    assert write_frag.build_message() == bytes.fromhex(f'0400 53 {path} c400 0100 04000000 08000000')
+    assert multi.build_message() == bytes.fromhex(
+        f'0500 0a 0220 0224 01 0200 0600 0e00 4c {path} 0200 4d {path} c400 0100 07000000'
+    )
+    assert rmw.build_message() == bytes.fromhex(f'0600 4e {path} 0400 08000000 ffffffff')
+    assert (read_frag.type_, write_frag.type_) == ('read', 'write')
+    assert repr(MultiServiceResponsePacket(multi)) == (
+        "MultiServiceResponsePacket(service=None, command=None, error='No response data received')"
+    )

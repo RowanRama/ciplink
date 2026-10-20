@@ -2,8 +2,9 @@
 __pycache__/
 *.py[cod]
 
-# C extensions
+# C extensions (maturin develop writes _core.* into python/ciplink)
 *.so
+*.pyd
 
 *.sw[a-z]
 
@@ -76,3 +77,6 @@ tests/**/.hypothesis/
 /.venv/
 /venv*/
 /.extended-properties-results/
+
+# Rust
+/target/

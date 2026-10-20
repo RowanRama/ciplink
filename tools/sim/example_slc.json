@@ -1,0 +1,32 @@
+{
+  "kind": "slc",
+  "identity": {
+    "product_type": 14,
+    "product_code": 89,
+    "revision": [3, 1],
+    "serial": "0051c505",
+    "product_name": "1747-L552/C D/16",
+    "keyswitch": "REMOTE RUN"
+  },
+  "processor_type": "1747-L552",
+  "files": [
+    {"number": 0, "type": "O", "elements": 4, "values": [1, 2]},
+    {"number": 1, "type": "I", "elements": 4, "values": [5, -1]},
+    {"number": 2, "type": "S", "elements": 83, "values": [0, 32]},
+    {"number": 3, "type": "B", "elements": 8, "values": [10, 0, -1]},
+    {
+      "number": 4,
+      "type": "T",
+      "elements": 4,
+      "values": [{"PRE": 100, "ACC": 25, "EN": true, "TT": true}, [0, 5, 5]]
+    },
+    {"number": 5, "type": "C", "elements": 4, "values": [{"PRE": 10, "ACC": 3, "CU": true}]},
+    {"number": 6, "type": "R", "elements": 2, "values": [{"LEN": 8, "POS": 2, "EN": true}]},
+    {"number": 7, "type": "N", "elements": 100, "values": [10, 20, 30, 40, 50, -32768, 32767]},
+    {"number": 8, "type": "F", "elements": 20, "values": [1.5, -2.25, 1000.125]},
+    {"number": 9, "type": "ST", "elements": 3, "values": ["Hello SLC", "", "xyz"]},
+    {"number": 10, "type": "A", "elements": 4, "values": ["AB", "C"]},
+    {"number": 12, "type": "L", "elements": 10, "values": [100000, -5]}
+  ],
+  "datalog": ["2026/10/19,10:00:00,1,2", "2026/10/19,10:01:00,3,4"]
+}

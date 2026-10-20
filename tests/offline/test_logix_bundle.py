@@ -1,17 +1,14 @@
 """RFC 8439 vectors and synthetic credential bundles; no real credentials."""
 
-import sys
-from types import SimpleNamespace
-from unittest.mock import Mock
 
 import pytest
 
 from examples.bundle_logix_metadata import render_bundle
-from ciplink import LogixDriver, LogixMetadataCredentials
+from ciplink import LogixMetadataCredentials
 from ciplink._logix_bundle_codec import (
     _block, _decrypt, _encrypt, _poly1305, open_credentials, seal_credentials,
 )
-from .test_logix_auth import KEY, CHALLENGE, PROOF, certificate, replies
+from .test_logix_auth import KEY, CHALLENGE, PROOF, certificate
 
 
 def test_chacha20_block_rfc8439_section_2_3_2():
@@ -87,20 +84,3 @@ def test_generated_module_hides_plaintext_and_reconstructs_credentials():
     assert source != render_bundle(certificate(), KEY)
 
 
-def test_default_driver_uses_bundled_credentials(monkeypatch):
-    module = SimpleNamespace(load=lambda: (certificate(), KEY))
-    monkeypatch.setitem(sys.modules, "ciplink._logix_metadata_bundle", module)
-    plc = LogixDriver("192.168.1.100", init_tags=False)
-    plc._target_is_connected = True
-    requests = replies(plc)
-    assert plc.authenticate_metadata().value is True
-    assert len(requests) == 2
-
-
-def test_missing_bundle_sends_no_authentication_requests(monkeypatch):
-    monkeypatch.setitem(sys.modules, "ciplink._logix_metadata_bundle", None)
-    plc = LogixDriver("192.168.1.100", init_tags=False)
-    plc.send = Mock(side_effect=AssertionError("Unexpected network request"))
-    result = plc.authenticate_metadata()
-    assert not result and "bundle is missing" in result.error
-    plc.send.assert_not_called()

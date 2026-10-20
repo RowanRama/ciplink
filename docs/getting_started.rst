@@ -249,11 +249,12 @@ always configured. To configure the root logger set ``logger`` to an empty strin
 
 Produces output similar to::
 
-    2021-02-26 14:37:41,389 [DEBUG] ciplink.cip_driver.CIPDriver.open(): Opening connection to 192.168.1.236
-    2021-02-26 14:37:41,393 [DEBUG] ciplink.cip_driver.CIPDriver.send(): Sent: RegisterSessionRequestPacket(message=[b'\x01\x00', b'\x00\x00'])
-    2021-02-26 14:37:41,397 [DEBUG] ciplink.cip_driver.CIPDriver.send(): Received: RegisterSessionResponsePacket(session=184719106, error=None)
-    2021-02-26 14:37:41,398 [INFO] ciplink.cip_driver.CIPDriver._register_session(): Session=184719106 has been registered.
-    2021-02-26 14:37:41,398 [INFO] ciplink.logix_driver.LogixDriver._initialize_driver(): Initializing driver...
+    2021-02-26 14:37:41,389 [DEBUG] ciplink.cip_driver.CIPDriver.open(): Opening connection to 192.0.2.10
+    2021-02-26 14:37:41,398 [INFO] ciplink.cip_driver.CIPDriver.open(): Session=184719106 has been registered.
+    2021-02-26 14:37:41,398 [INFO] ciplink.logix_driver.LogixDriver.open(): Initializing driver...
+
+The records come from the driver core, under the same logger names as the Python driver's; the function in each
+record is the Python method that was called.
 
 
 ``ciplink`` also uses a custom logging level for verbose logging, this level also prints the contents of each
@@ -266,27 +267,11 @@ packet send and received.  If submitting a bug report, this level of logging is 
 
 Verbose output::
 
-    2021-02-26 14:42:36,752 [DEBUG] ciplink.cip_driver.CIPDriver.open(): Opening connection to 192.168.1.236
-    2021-02-26 14:42:36,765 [VERBOSE] ciplink.cip_driver.CIPDriver._send(): >>> SEND >>>
-    (0000) 65 00 04 00 00 00 00 00 00 00 00 00 5f 70 79 63     e•••••••••••_pyc
-    (0010) 6f 6d 6d 5f 00 00 00 00 01 00 00 00                 omm_••••••••
-    2021-02-26 14:42:36,766 [DEBUG] ciplink.cip_driver.CIPDriver.send(): Sent: RegisterSessionRequestPacket(message=[b'\x01\x00', b'\x00\x00'])
-    2021-02-26 14:42:36,768 [VERBOSE] ciplink.cip_driver.CIPDriver._receive(): <<< RECEIVE <<<
-    (0000) 65 00 04 00 02 98 02 0b 00 00 00 00 5f 70 79 63     e•••••••••••_pyc
-    (0010) 6f 6d 6d 5f 00 00 00 00 01 00 00 00                 omm_••••••••
-    2021-02-26 14:42:36,768 [DEBUG] ciplink.cip_driver.CIPDriver.send(): Received: RegisterSessionResponsePacket(session=184719362, error=None)
-    2021-02-26 14:42:36,769 [INFO] ciplink.cip_driver.CIPDriver._register_session(): Session=184719362 has been registered.
-    2021-02-26 14:42:36,769 [INFO] ciplink.logix_driver.LogixDriver._initialize_driver(): Initializing driver...
-    2021-02-26 14:42:36,769 [VERBOSE] ciplink.cip_driver.CIPDriver._send(): >>> SEND >>>
-    (0000) 63 00 00 00 02 98 02 0b 00 00 00 00 5f 70 79 63     c•••••••••••_pyc
-    (0010) 6f 6d 6d 5f 00 00 00 00                             omm_••••
-    2021-02-26 14:42:36,769 [DEBUG] ciplink.cip_driver.CIPDriver.send(): Sent: ListIdentityRequestPacket(message=[])
-    2021-02-26 14:42:36,771 [VERBOSE] ciplink.cip_driver.CIPDriver._receive(): <<< RECEIVE <<<
-    (0000) 63 00 45 00 02 98 02 0b 00 00 00 00 5f 70 79 63     c•E•••••••••_pyc
-    (0010) 6f 6d 6d 5f 00 00 00 00 01 00 0c 00 3f 00 01 00     omm_••••••••?•••
-    (0020) 00 02 af 12 c0 a8 01 ec 00 00 00 00 00 00 00 00     ••••••••••••••••
-    (0030) 01 00 0c 00 bf 00 14 13 30 00 90 be 1e c0 1d 31     ••••••••0••••••1
-    (0040) 37 36 39 2d 4c 32 33 45 2d 51 42 46 43 31 20 45     769-L23E-QBFC1 E
-    (0050) 74 68 65 72 6e 65 74 20 50 6f 72 74 03              thernet Port•
+    2021-02-26 14:42:36,752 [DEBUG] ciplink.cip_driver.CIPDriver.open(): Opening connection to 192.0.2.10
+    2021-02-26 14:42:36,765 [VERBOSE] ciplink.cip_driver.CIPDriver.open(): >>> SEND >>> [65, 00, 04, 00, 00, 00, 00, 00, 00, 00, 00, 00, 5f, 70, 79, 63, 6f, 6d, 6d, 5f, 00, 00, 00, 00, 01, 00, 00, 00]
+    2021-02-26 14:42:36,768 [VERBOSE] ciplink.cip_driver.CIPDriver.open(): <<< RECEIVE <<< [65, 00, 04, 00, 02, 98, 02, 0b, 00, 00, 00, 00, 5f, 70, 79, 63, 6f, 6d, 6d, 5f, 00, 00, 00, 00, 01, 00, 00, 00]
+    2021-02-26 14:42:36,769 [INFO] ciplink.cip_driver.CIPDriver.open(): Session=184719362 has been registered.
+    2021-02-26 14:42:36,769 [INFO] ciplink.logix_driver.LogixDriver.open(): Initializing driver...
+    2021-02-26 14:42:36,769 [VERBOSE] ciplink.cip_driver.CIPDriver.open(): >>> SEND >>> [63, 00, 00, 00, 02, 98, 02, 0b, 00, 00, 00, 00, 5f, 70, 79, 63, 6f, 6d, 6d, 5f, 00, 00, 00, 00]
 
 .. _logging: https://docs.python.org/3/library/logging.html

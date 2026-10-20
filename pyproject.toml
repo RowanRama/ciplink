@@ -1,12 +1,12 @@
 [build-system]
-requires = ["setuptools>=77"]
-build-backend = "setuptools.build_meta"
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
 
 [project]
 name = "ciplink"
 dynamic = ["version"]
-description = "Ethernet/IP library for Allen-Bradley PLCs, a pycomm3 fork with instance-ID reads and tag-table change detection."
-readme = "README.rst"
+description = "Ethernet/IP library for Allen-Bradley PLCs (a pycomm3 fork), with its driver core in Rust."
+readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Rowan Ramamurthy", email = "rramamurthy@factoryautomation.com" }]
@@ -17,6 +17,7 @@ classifiers = [
     "Intended Audience :: Manufacturing",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
     "Topic :: Scientific/Engineering :: Interface Engine/Protocol Translator",
     "Topic :: Scientific/Engineering :: Human Machine Interfaces",
 ]
@@ -29,11 +30,10 @@ Source = "https://github.com/RowanRama/ciplink"
 Upstream = "https://github.com/ottowayi/pycomm3"
 Documentation = "https://docs.pycomm3.dev"
 
-[tool.setuptools.dynamic]
-version = { attr = "ciplink._version.__version__" }
-
-[tool.setuptools.packages.find]
-include = ["ciplink*"]
-
-[tool.setuptools.package-data]
-ciplink = ["py.typed"]
+[tool.maturin]
+# the Python half of the package lives in python/ciplink, the extension module ciplink._core is built from the
+# ciplink-py crate; python/ (not the repo root) keeps a checkout from shadowing the installed package
+manifest-path = "crates/ciplink-py/Cargo.toml"
+python-source = "python"
+module-name = "ciplink._core"
+features = ["extension-module"]

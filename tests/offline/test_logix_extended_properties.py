@@ -31,7 +31,7 @@ def enip(cip, connected=True, extra_items=()):
 
 
 @pytest.mark.parametrize("raw", [
-    # Actual replies from a Logix controller; no property payload.
+    # Replies captured from a Logix controller; no property payload.
     "70001a00603e0040000000000000000000000000000000000000000000000200a1000400ac49b62eb10006008800d3000f00",
     "6f001400613e0040000000005f7079636f6d6d5f00000000000000000000020000000000b2000400d3000f00",
 ])
@@ -108,7 +108,7 @@ def test_probe_only_issues_read_services(monkeypatch):
 
     class ReadOnlyPLC:
         _micro800 = False
-        info = {"product_name": "Logix Controller",
+        info = {"product_name": "1756-SIM/A",
                 "revision": {"major": 33, "minor": 11}, "keyswitch": "REMOTE RUN"}
 
         def __init__(self, path, init_tags):

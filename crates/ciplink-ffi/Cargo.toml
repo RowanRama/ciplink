@@ -1,0 +1,27 @@
+[package]
+name = "ciplink-ffi"
+description = "C ABI over the ciplink Rust core (header via cbindgen), used by the C++ and C# bindings"
+publish = false
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lib]
+name = "ciplink"
+crate-type = ["cdylib", "staticlib", "lib"]
+
+[dependencies]
+ciplink-core = { package = "ciplink", path = "../ciplink" }
+indexmap = "2"
+serde_json = { version = "1", features = ["preserve_order"] }
+
+[dev-dependencies]
+ciplink-sim = { path = "../ciplink-sim" }
+
+# not `workspace = true`: the workspace forbids unsafe code, which a C ABI needs
+[lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+unwrap_used = "warn"

@@ -1,0 +1,22 @@
+[package]
+name = "ciplink-sim"
+description = "Simulated Logix and SLC controllers for testing ciplink in any language"
+publish = false
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+ciplink = { path = "../ciplink" }
+indexmap = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[[bin]]
+name = "ciplink-sim"
+path = "src/main.rs"
+
+[lints]
+workspace = true

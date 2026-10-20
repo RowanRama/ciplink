@@ -1,4 +1,3 @@
-import pytest
 from ciplink.cip.pccc import PCCC_STRING, PCCC_ASCII
 
 def test_pccc_string_odd_length_padding():

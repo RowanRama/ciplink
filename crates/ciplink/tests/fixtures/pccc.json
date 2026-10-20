@@ -1,0 +1,10737 @@
+{
+ "tables": [
+  {
+   "name": "N",
+   "code": 137,
+   "size": 2
+  },
+  {
+   "name": "B",
+   "code": 133,
+   "size": 2
+  },
+  {
+   "name": "T",
+   "code": 134,
+   "size": 6
+  },
+  {
+   "name": "C",
+   "code": 135,
+   "size": 6
+  },
+  {
+   "name": "S",
+   "code": 132,
+   "size": 2
+  },
+  {
+   "name": "F",
+   "code": 138,
+   "size": 4
+  },
+  {
+   "name": "ST",
+   "code": 141,
+   "size": 84
+  },
+  {
+   "name": "A",
+   "code": 142,
+   "size": 2
+  },
+  {
+   "name": "R",
+   "code": 136,
+   "size": 6
+  },
+  {
+   "name": "O",
+   "code": 130,
+   "size": 2
+  },
+  {
+   "name": "I",
+   "code": 131,
+   "size": 2
+  },
+  {
+   "name": "L",
+   "code": 145,
+   "size": 4
+  },
+  {
+   "name": "MG",
+   "code": 146,
+   "size": 50
+  },
+  {
+   "name": "PD",
+   "code": 147,
+   "size": 46
+  },
+  {
+   "name": "PLS",
+   "code": 148,
+   "size": 12
+  },
+  {
+   "ct": "PRE",
+   "value": 1
+  },
+  {
+   "ct": "ACC",
+   "value": 2
+  },
+  {
+   "ct": "EN",
+   "value": 15
+  },
+  {
+   "ct": "TT",
+   "value": 14
+  },
+  {
+   "ct": "DN",
+   "value": 13
+  },
+  {
+   "ct": "CU",
+   "value": 15
+  },
+  {
+   "ct": "CD",
+   "value": 14
+  },
+  {
+   "ct": "OV",
+   "value": 12
+  },
+  {
+   "ct": "UN",
+   "value": 11
+  },
+  {
+   "ct": "UA",
+   "value": 10
+  }
+ ],
+ "parse_tag": [
+  {
+   "address": "N7:0",
+   "result": {
+    "file_type": "N",
+    "file_number": 7,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "N7:0"
+   }
+  },
+  {
+   "address": "n7:0",
+   "result": {
+    "file_type": "N",
+    "file_number": 7,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "n7:0"
+   }
+  },
+  {
+   "address": "N7:255",
+   "result": {
+    "file_type": "N",
+    "file_number": 7,
+    "element_number": 255,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "N7:255"
+   }
+  },
+  {
+   "address": "N7:256",
+   "result": null
+  },
+  {
+   "address": "N7:1000",
+   "result": null
+  },
+  {
+   "address": "N0:0",
+   "result": null
+  },
+  {
+   "address": "N1:0",
+   "result": {
+    "file_type": "N",
+    "file_number": 1,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "N1:0"
+   }
+  },
+  {
+   "address": "N255:255",
+   "result": {
+    "file_type": "N",
+    "file_number": 255,
+    "element_number": 255,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "N255:255"
+   }
+  },
+  {
+   "address": "N256:0",
+   "result": null
+  },
+  {
+   "address": "N7:0/0",
+   "result": {
+    "file_type": "N",
+    "file_number": 7,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 0,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "N7:0/0"
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "result": {
+    "file_type": "N",
+    "file_number": 7,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 5,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "N7:0/5"
+   }
+  },
+  {
+   "address": "N7:0/15",
+   "result": {
+    "file_type": "N",
+    "file_number": 7,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 15,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "N7:0/15"
+   }
+  },
+  {
+   "address": "N7:0/16",
+   "result": null
+  },
+  {
+   "address": "N7:0/3x",
+   "result": null
+  },
+  {
+   "address": "N7:0{10}",
+   "result": {
+    "file_type": "N",
+    "file_number": 7,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 10,
+    "tag": "N7:0"
+   }
+  },
+  {
+   "address": "N7:0{0}",
+   "result": {
+    "file_type": "N",
+    "file_number": 7,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 0,
+    "tag": "N7:0"
+   }
+  },
+  {
+   "address": "N7:0{1}",
+   "result": {
+    "file_type": "N",
+    "file_number": 7,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "N7:0"
+   }
+  },
+  {
+   "address": "N7:0/3{2}",
+   "result": {
+    "file_type": "N",
+    "file_number": 7,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 3,
+    "address_field": 3,
+    "element_count": 2,
+    "tag": "N7:0/3"
+   }
+  },
+  {
+   "address": "N7:0{}",
+   "result": null
+  },
+  {
+   "address": "N7:0{a}",
+   "result": null
+  },
+  {
+   "address": "N7:",
+   "result": null
+  },
+  {
+   "address": "N7",
+   "result": null
+  },
+  {
+   "address": "N:0",
+   "result": null
+  },
+  {
+   "address": "N7:0 ",
+   "result": null
+  },
+  {
+   "address": " N7:0",
+   "result": null
+  },
+  {
+   "address": "N7:0000",
+   "result": null
+  },
+  {
+   "address": "N007:001",
+   "result": {
+    "file_type": "N",
+    "file_number": 7,
+    "element_number": 1,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "N007:001"
+   }
+  },
+  {
+   "address": "N7:1234",
+   "result": null
+  },
+  {
+   "address": "N1234:0",
+   "result": null
+  },
+  {
+   "address": "F8:0",
+   "result": {
+    "file_type": "F",
+    "file_number": 8,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "F8:0"
+   }
+  },
+  {
+   "address": "F8:10{4}",
+   "result": {
+    "file_type": "F",
+    "file_number": 8,
+    "element_number": 10,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 4,
+    "tag": "F8:10"
+   }
+  },
+  {
+   "address": "F8:0/3",
+   "result": {
+    "file_type": "F",
+    "file_number": 8,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 3,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "F8:0/3"
+   }
+  },
+  {
+   "address": "L9:0",
+   "result": {
+    "file_type": "L",
+    "file_number": 9,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "L9:0"
+   }
+  },
+  {
+   "address": "L9:2{3}",
+   "result": {
+    "file_type": "L",
+    "file_number": 9,
+    "element_number": 2,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 3,
+    "tag": "L9:2"
+   }
+  },
+  {
+   "address": "l9:0/31",
+   "result": null
+  },
+  {
+   "address": "L9:0/31",
+   "result": null
+  },
+  {
+   "address": "B3:0",
+   "result": {
+    "file_type": "B",
+    "file_number": 3,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "B3:0"
+   }
+  },
+  {
+   "address": "B3:0/15",
+   "result": {
+    "file_type": "B",
+    "file_number": 3,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 15,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "B3:0/15"
+   }
+  },
+  {
+   "address": "B3:1{2}",
+   "result": {
+    "file_type": "B",
+    "file_number": 3,
+    "element_number": 1,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 2,
+    "tag": "B3:1"
+   }
+  },
+  {
+   "address": "B3/0",
+   "result": {
+    "file_type": "B",
+    "file_number": 3,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 0,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "B3/0"
+   }
+  },
+  {
+   "address": "B3/10",
+   "result": {
+    "file_type": "B",
+    "file_number": 3,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 10,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "B3/10"
+   }
+  },
+  {
+   "address": "B3/17",
+   "result": {
+    "file_type": "B",
+    "file_number": 3,
+    "element_number": 1,
+    "pos_number": null,
+    "sub_element": 1,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "B3/17"
+   }
+  },
+  {
+   "address": "B3/4095",
+   "result": {
+    "file_type": "B",
+    "file_number": 3,
+    "element_number": 255,
+    "pos_number": null,
+    "sub_element": 15,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "B3/4095"
+   }
+  },
+  {
+   "address": "B3/4096",
+   "result": null
+  },
+  {
+   "address": "B3/10{2}",
+   "result": {
+    "file_type": "B",
+    "file_number": 3,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 10,
+    "address_field": 3,
+    "element_count": 2,
+    "tag": "B3/10"
+   }
+  },
+  {
+   "address": "b3/16",
+   "result": {
+    "file_type": "B",
+    "file_number": 3,
+    "element_number": 1,
+    "pos_number": null,
+    "sub_element": 0,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "b3/16"
+   }
+  },
+  {
+   "address": "B0/1",
+   "result": null
+  },
+  {
+   "address": "B256/1",
+   "result": null
+  },
+  {
+   "address": "B3/12345",
+   "result": null
+  },
+  {
+   "address": "T4:0.ACC",
+   "result": {
+    "file_type": "T",
+    "file_number": 4,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 2,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "T4:0.ACC"
+   }
+  },
+  {
+   "address": "T4:0.PRE",
+   "result": {
+    "file_type": "T",
+    "file_number": 4,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 1,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "T4:0.PRE"
+   }
+  },
+  {
+   "address": "T4:0.EN",
+   "result": {
+    "file_type": "T",
+    "file_number": 4,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 15,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "T4:0.EN"
+   }
+  },
+  {
+   "address": "T4:0.TT",
+   "result": {
+    "file_type": "T",
+    "file_number": 4,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 14,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "T4:0.TT"
+   }
+  },
+  {
+   "address": "T4:0.DN",
+   "result": {
+    "file_type": "T",
+    "file_number": 4,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 13,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "T4:0.DN"
+   }
+  },
+  {
+   "address": "t4:0.acc",
+   "result": {
+    "file_type": "T",
+    "file_number": 4,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 2,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "t4:0.acc"
+   }
+  },
+  {
+   "address": "T4:255.DN",
+   "result": {
+    "file_type": "T",
+    "file_number": 4,
+    "element_number": 255,
+    "pos_number": null,
+    "sub_element": 13,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "T4:255.DN"
+   }
+  },
+  {
+   "address": "T4:256.DN",
+   "result": null
+  },
+  {
+   "address": "T0:0.ACC",
+   "result": null
+  },
+  {
+   "address": "T4:0xACC",
+   "result": {
+    "file_type": "T",
+    "file_number": 4,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 2,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "T4:0xACC"
+   }
+  },
+  {
+   "address": "T4:0/ACC",
+   "result": {
+    "file_type": "T",
+    "file_number": 4,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 2,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "T4:0/ACC"
+   }
+  },
+  {
+   "address": "T4:0.CU",
+   "result": {
+    "file_type": "T",
+    "file_number": 4,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 15,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "T4:0.CU"
+   }
+  },
+  {
+   "address": "C5:3.ACC",
+   "result": {
+    "file_type": "C",
+    "file_number": 5,
+    "element_number": 3,
+    "pos_number": null,
+    "sub_element": 2,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "C5:3.ACC"
+   }
+  },
+  {
+   "address": "C5:0.CU",
+   "result": {
+    "file_type": "C",
+    "file_number": 5,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 15,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "C5:0.CU"
+   }
+  },
+  {
+   "address": "C5:0.CD",
+   "result": {
+    "file_type": "C",
+    "file_number": 5,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 14,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "C5:0.CD"
+   }
+  },
+  {
+   "address": "C5:0.OV",
+   "result": {
+    "file_type": "C",
+    "file_number": 5,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 12,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "C5:0.OV"
+   }
+  },
+  {
+   "address": "C5:0.UN",
+   "result": {
+    "file_type": "C",
+    "file_number": 5,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 11,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "C5:0.UN"
+   }
+  },
+  {
+   "address": "C5:0.UA",
+   "result": {
+    "file_type": "C",
+    "file_number": 5,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 10,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "C5:0.UA"
+   }
+  },
+  {
+   "address": "C5:0.DN",
+   "result": {
+    "file_type": "C",
+    "file_number": 5,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 13,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "C5:0.DN"
+   }
+  },
+  {
+   "address": "C5:0.PRE",
+   "result": {
+    "file_type": "C",
+    "file_number": 5,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 1,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "C5:0.PRE"
+   }
+  },
+  {
+   "address": "C5:0.EN",
+   "result": {
+    "file_type": "C",
+    "file_number": 5,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 15,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "C5:0.EN"
+   }
+  },
+  {
+   "address": "T4:0",
+   "result": null
+  },
+  {
+   "address": "C5:0",
+   "result": null
+  },
+  {
+   "address": "T4:0.ACC{2}",
+   "result": null
+  },
+  {
+   "address": "T4:0.XYZ",
+   "result": null
+  },
+  {
+   "address": "R6:0",
+   "result": null
+  },
+  {
+   "address": "R6:0.LEN",
+   "result": null
+  },
+  {
+   "address": "I:0",
+   "result": {
+    "file_type": "I",
+    "file_number": 1,
+    "element_number": 0,
+    "pos_number": 0,
+    "sub_element": 0,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "I:0"
+   }
+  },
+  {
+   "address": "I1:0",
+   "result": {
+    "file_type": "I",
+    "file_number": 1,
+    "element_number": 0,
+    "pos_number": 0,
+    "sub_element": 0,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "I1:0"
+   }
+  },
+  {
+   "address": "I5:0",
+   "result": {
+    "file_type": "I",
+    "file_number": 1,
+    "element_number": 0,
+    "pos_number": 0,
+    "sub_element": 0,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "I5:0"
+   }
+  },
+  {
+   "address": "O:0",
+   "result": {
+    "file_type": "O",
+    "file_number": 0,
+    "element_number": 0,
+    "pos_number": 0,
+    "sub_element": 0,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "O:0"
+   }
+  },
+  {
+   "address": "O0:3",
+   "result": {
+    "file_type": "O",
+    "file_number": 0,
+    "element_number": 3,
+    "pos_number": 0,
+    "sub_element": 0,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "O0:3"
+   }
+  },
+  {
+   "address": "o:2",
+   "result": {
+    "file_type": "O",
+    "file_number": 0,
+    "element_number": 2,
+    "pos_number": 0,
+    "sub_element": 0,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "o:2"
+   }
+  },
+  {
+   "address": "I:0/0",
+   "result": {
+    "file_type": "I",
+    "file_number": 1,
+    "element_number": 0,
+    "pos_number": 0,
+    "sub_element": 0,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "I:0/0"
+   }
+  },
+  {
+   "address": "I:0/15",
+   "result": {
+    "file_type": "I",
+    "file_number": 1,
+    "element_number": 0,
+    "pos_number": 0,
+    "sub_element": 15,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "I:0/15"
+   }
+  },
+  {
+   "address": "I:0/16",
+   "result": null
+  },
+  {
+   "address": "I:0.1",
+   "result": {
+    "file_type": "I",
+    "file_number": 1,
+    "element_number": 0,
+    "pos_number": 1,
+    "sub_element": 0,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "I:0.1"
+   }
+  },
+  {
+   "address": "I:0.1/3",
+   "result": {
+    "file_type": "I",
+    "file_number": 1,
+    "element_number": 0,
+    "pos_number": 1,
+    "sub_element": 3,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "I:0.1/3"
+   }
+  },
+  {
+   "address": "I:0.999",
+   "result": {
+    "file_type": "I",
+    "file_number": 1,
+    "element_number": 0,
+    "pos_number": 999,
+    "sub_element": 0,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "I:0.999"
+   }
+  },
+  {
+   "address": "I:0{4}",
+   "result": {
+    "file_type": "I",
+    "file_number": 1,
+    "element_number": 0,
+    "pos_number": 0,
+    "sub_element": 0,
+    "address_field": 2,
+    "element_count": 4,
+    "tag": "I:0"
+   }
+  },
+  {
+   "address": "O:0/3{2}",
+   "result": {
+    "file_type": "O",
+    "file_number": 0,
+    "element_number": 0,
+    "pos_number": 0,
+    "sub_element": 3,
+    "address_field": 3,
+    "element_count": 2,
+    "tag": "O:0/3"
+   }
+  },
+  {
+   "address": "I:256",
+   "result": null
+  },
+  {
+   "address": "I1234:0",
+   "result": null
+  },
+  {
+   "address": "I:0.1234",
+   "result": null
+  },
+  {
+   "address": "I:0/123",
+   "result": null
+  },
+  {
+   "address": "S:0",
+   "result": {
+    "file_type": "S",
+    "file_number": 2,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "S:0"
+   }
+  },
+  {
+   "address": "S:1/15",
+   "result": {
+    "file_type": "S",
+    "file_number": 2,
+    "element_number": 1,
+    "pos_number": null,
+    "sub_element": 15,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "S:1/15"
+   }
+  },
+  {
+   "address": "S:1/5",
+   "result": {
+    "file_type": "S",
+    "file_number": 2,
+    "element_number": 1,
+    "pos_number": null,
+    "sub_element": 5,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "S:1/5"
+   }
+  },
+  {
+   "address": "s:23",
+   "result": {
+    "file_type": "S",
+    "file_number": 2,
+    "element_number": 23,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "s:23"
+   }
+  },
+  {
+   "address": "S:256",
+   "result": null
+  },
+  {
+   "address": "S:1/16",
+   "result": null
+  },
+  {
+   "address": "S:0{3}",
+   "result": {
+    "file_type": "S",
+    "file_number": 2,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 3,
+    "tag": "S:0"
+   }
+  },
+  {
+   "address": "S:1/5{2}",
+   "result": {
+    "file_type": "S",
+    "file_number": 2,
+    "element_number": 1,
+    "pos_number": null,
+    "sub_element": 5,
+    "address_field": 3,
+    "element_count": 2,
+    "tag": "S:1/5{2}"
+   }
+  },
+  {
+   "address": "S2:0",
+   "result": null
+  },
+  {
+   "address": "ST9:0",
+   "result": {
+    "file_type": "ST",
+    "file_number": 9,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "ST9:0"
+   }
+  },
+  {
+   "address": "ST9:0{1}",
+   "result": {
+    "file_type": "ST",
+    "file_number": 9,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "ST9:0"
+   }
+  },
+  {
+   "address": "ST9:0{2}",
+   "result": {
+    "file_type": "ST",
+    "file_number": 9,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 2,
+    "tag": "ST9:0"
+   }
+  },
+  {
+   "address": "ST9:0{3}",
+   "result": null
+  },
+  {
+   "address": "st9:1",
+   "result": {
+    "file_type": "ST",
+    "file_number": 9,
+    "element_number": 1,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "st9:1"
+   }
+  },
+  {
+   "address": "ST9:256",
+   "result": null
+  },
+  {
+   "address": "ST0:0",
+   "result": null
+  },
+  {
+   "address": "ST9:12345",
+   "result": null
+  },
+  {
+   "address": "ST9:0/1",
+   "result": null
+  },
+  {
+   "address": "A10:0",
+   "result": {
+    "file_type": "A",
+    "file_number": 10,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "A10:0"
+   }
+  },
+  {
+   "address": "A10:0{4}",
+   "result": {
+    "file_type": "A",
+    "file_number": 10,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 4,
+    "tag": "A10:0"
+   }
+  },
+  {
+   "address": "A10:255",
+   "result": {
+    "file_type": "A",
+    "file_number": 10,
+    "element_number": 255,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "A10:255"
+   }
+  },
+  {
+   "address": "A10:256",
+   "result": null
+  },
+  {
+   "address": "A10:1234",
+   "result": null
+  },
+  {
+   "address": "a10:3",
+   "result": {
+    "file_type": "A",
+    "file_number": 10,
+    "element_number": 3,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "a10:3"
+   }
+  },
+  {
+   "address": "",
+   "result": null
+  },
+  {
+   "address": "X7:0",
+   "result": null
+  },
+  {
+   "address": "N7:-1",
+   "result": null
+  },
+  {
+   "address": "MG1:0",
+   "result": null
+  },
+  {
+   "address": "PD1:0",
+   "result": null
+  },
+  {
+   "address": "N7:0\n",
+   "result": null
+  },
+  {
+   "address": "T4:0\n",
+   "result": null
+  },
+  {
+   "address": "T4:0.ACC\n",
+   "result": null
+  },
+  {
+   "address": "T4:12ACC",
+   "result": {
+    "file_type": "T",
+    "file_number": 4,
+    "element_number": 1,
+    "pos_number": null,
+    "sub_element": 2,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "T4:12ACC"
+   }
+  },
+  {
+   "address": "T4:1234ACC",
+   "result": {
+    "file_type": "T",
+    "file_number": 4,
+    "element_number": 123,
+    "pos_number": null,
+    "sub_element": 2,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "T4:1234ACC"
+   }
+  },
+  {
+   "address": "T4:1\nACC",
+   "result": null
+  },
+  {
+   "address": "T4:300ACC",
+   "result": {
+    "file_type": "T",
+    "file_number": 4,
+    "element_number": 30,
+    "pos_number": null,
+    "sub_element": 2,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "T4:300ACC"
+   }
+  },
+  {
+   "address": "ſ:1",
+   "result": {
+    "file_type": "S",
+    "file_number": 2,
+    "element_number": 1,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "ſ:1"
+   }
+  },
+  {
+   "address": "ı:0",
+   "result": {
+    "file_type": "I",
+    "file_number": 1,
+    "element_number": 0,
+    "pos_number": 0,
+    "sub_element": 0,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "ı:0"
+   }
+  },
+  {
+   "address": "ſT9:0",
+   "result": {
+    "file_type": "ST",
+    "file_number": 9,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "ſT9:0"
+   }
+  },
+  {
+   "address": "N7:0{99}",
+   "result": {
+    "file_type": "N",
+    "file_number": 7,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 99,
+    "tag": "N7:0"
+   }
+  },
+  {
+   "address": "B3/0010",
+   "result": {
+    "file_type": "B",
+    "file_number": 3,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 10,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "B3/0010"
+   }
+  },
+  {
+   "address": "I:0.1{2}",
+   "result": {
+    "file_type": "I",
+    "file_number": 1,
+    "element_number": 0,
+    "pos_number": 1,
+    "sub_element": 0,
+    "address_field": 2,
+    "element_count": 2,
+    "tag": "I:0.1"
+   }
+  },
+  {
+   "address": "A10:0/1",
+   "result": null
+  },
+  {
+   "address": "S:1{2}",
+   "result": {
+    "file_type": "S",
+    "file_number": 2,
+    "element_number": 1,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 2,
+    "tag": "S:1"
+   }
+  },
+  {
+   "address": "S:1/5{0}",
+   "result": {
+    "file_type": "S",
+    "file_number": 2,
+    "element_number": 1,
+    "pos_number": null,
+    "sub_element": 5,
+    "address_field": 3,
+    "element_count": 0,
+    "tag": "S:1/5{0}"
+   }
+  },
+  {
+   "address": "I:0.1/3{4}",
+   "result": {
+    "file_type": "I",
+    "file_number": 1,
+    "element_number": 0,
+    "pos_number": 1,
+    "sub_element": 3,
+    "address_field": 3,
+    "element_count": 4,
+    "tag": "I:0.1/3"
+   }
+  },
+  {
+   "address": "O5:1.2/3",
+   "result": {
+    "file_type": "O",
+    "file_number": 0,
+    "element_number": 1,
+    "pos_number": 2,
+    "sub_element": 3,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "O5:1.2/3"
+   }
+  },
+  {
+   "address": "T4:0.ACCX",
+   "result": null
+  },
+  {
+   "address": "T4:0..ACC",
+   "result": null
+  },
+  {
+   "address": "T4:0.Acc",
+   "result": {
+    "file_type": "T",
+    "file_number": 4,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 2,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "T4:0.Acc"
+   }
+  },
+  {
+   "address": "c5:0.dn",
+   "result": {
+    "file_type": "C",
+    "file_number": 5,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 13,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "c5:0.dn"
+   }
+  },
+  {
+   "address": "T4:0{.ACC",
+   "result": null
+  },
+  {
+   "address": "T4:0.ACC/1",
+   "result": null
+  },
+  {
+   "address": "T4:00012ACC",
+   "result": null
+  },
+  {
+   "address": "T4:0ACC",
+   "result": null
+  },
+  {
+   "address": "T4:.ACC",
+   "result": null
+  },
+  {
+   "address": "T255:255.UA",
+   "result": {
+    "file_type": "T",
+    "file_number": 255,
+    "element_number": 255,
+    "pos_number": null,
+    "sub_element": 10,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "T255:255.UA"
+   }
+  },
+  {
+   "address": "C5:9999DN",
+   "result": null
+  },
+  {
+   "address": "N7:0/5/6",
+   "result": null
+  },
+  {
+   "address": "N7:0{1}{2}",
+   "result": null
+  },
+  {
+   "address": "N7:0/",
+   "result": null
+  },
+  {
+   "address": "N7:0/05",
+   "result": {
+    "file_type": "N",
+    "file_number": 7,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 5,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "N7:0/05"
+   }
+  },
+  {
+   "address": "N7:0/015",
+   "result": null
+  },
+  {
+   "address": "N7:0{007}",
+   "result": {
+    "file_type": "N",
+    "file_number": 7,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 7,
+    "tag": "N7:0"
+   }
+  },
+  {
+   "address": "N7:0{ 1}",
+   "result": null
+  },
+  {
+   "address": "N7:0{1 }",
+   "result": null
+  },
+  {
+   "address": "N7 :0",
+   "result": null
+  },
+  {
+   "address": "N7:0}",
+   "result": null
+  },
+  {
+   "address": "N7:0{",
+   "result": null
+  },
+  {
+   "address": "I:0./3",
+   "result": null
+  },
+  {
+   "address": "I:.1",
+   "result": null
+  },
+  {
+   "address": "I0000:0",
+   "result": null
+  },
+  {
+   "address": "O:0.1.2",
+   "result": null
+  },
+  {
+   "address": "I:0/3.1",
+   "result": null
+  },
+  {
+   "address": "I:0.1/",
+   "result": null
+  },
+  {
+   "address": "I:0.",
+   "result": null
+  },
+  {
+   "address": "O255:255.999/15",
+   "result": {
+    "file_type": "O",
+    "file_number": 0,
+    "element_number": 255,
+    "pos_number": 999,
+    "sub_element": 15,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "O255:255.999/15"
+   }
+  },
+  {
+   "address": "ST9:0{1}x",
+   "result": null
+  },
+  {
+   "address": "ST9:0{0}",
+   "result": null
+  },
+  {
+   "address": "ST9:0{01}",
+   "result": null
+  },
+  {
+   "address": "A10:0{0}",
+   "result": {
+    "file_type": "A",
+    "file_number": 10,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 0,
+    "tag": "A10:0"
+   }
+  },
+  {
+   "address": "B3/0{0}",
+   "result": {
+    "file_type": "B",
+    "file_number": 3,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 0,
+    "address_field": 3,
+    "element_count": 0,
+    "tag": "B3/0"
+   }
+  },
+  {
+   "address": "B3/",
+   "result": null
+  },
+  {
+   "address": "B3:",
+   "result": null
+  },
+  {
+   "address": "S:",
+   "result": null
+  },
+  {
+   "address": "S:1/",
+   "result": null
+  },
+  {
+   "address": "S:1/015",
+   "result": null
+  },
+  {
+   "address": "ST9:0/",
+   "result": null
+  },
+  {
+   "address": "A10:0010",
+   "result": {
+    "file_type": "A",
+    "file_number": 10,
+    "element_number": 10,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 1,
+    "tag": "A10:0010"
+   }
+  },
+  {
+   "address": "B3/4080",
+   "result": {
+    "file_type": "B",
+    "file_number": 3,
+    "element_number": 255,
+    "pos_number": null,
+    "sub_element": 0,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "B3/4080"
+   }
+  },
+  {
+   "address": "N7:255{2}",
+   "result": {
+    "file_type": "N",
+    "file_number": 7,
+    "element_number": 255,
+    "pos_number": null,
+    "sub_element": null,
+    "address_field": 2,
+    "element_count": 2,
+    "tag": "N7:255"
+   }
+  },
+  {
+   "address": "ı:0.1/3",
+   "result": {
+    "file_type": "I",
+    "file_number": 1,
+    "element_number": 0,
+    "pos_number": 1,
+    "sub_element": 3,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "ı:0.1/3"
+   }
+  },
+  {
+   "address": "ſ:1/15",
+   "result": {
+    "file_type": "S",
+    "file_number": 2,
+    "element_number": 1,
+    "pos_number": null,
+    "sub_element": 15,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "ſ:1/15"
+   }
+  },
+  {
+   "address": "B3/4095{1}",
+   "result": {
+    "file_type": "B",
+    "file_number": 3,
+    "element_number": 255,
+    "pos_number": null,
+    "sub_element": 15,
+    "address_field": 3,
+    "element_count": 1,
+    "tag": "B3/4095"
+   }
+  },
+  {
+   "address": "F8:0/15{3}",
+   "result": {
+    "file_type": "F",
+    "file_number": 8,
+    "element_number": 0,
+    "pos_number": null,
+    "sub_element": 15,
+    "address_field": 3,
+    "element_count": 3,
+    "tag": "F8:0/15"
+   }
+  }
+ ],
+ "strings": [
+  {
+   "type": "PCCC_ASCII",
+   "op": "encode",
+   "value": {
+    "str": ""
+   },
+   "result": {
+    "ok": {
+     "bytes": "2020"
+    }
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "encode",
+   "value": {
+    "str": "A"
+   },
+   "result": {
+    "ok": {
+     "bytes": "2041"
+    }
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "encode",
+   "value": {
+    "str": "AB"
+   },
+   "result": {
+    "ok": {
+     "bytes": "4241"
+    }
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "encode",
+   "value": {
+    "str": "ABC"
+   },
+   "result": {
+    "ok": {
+     "bytes": "4241"
+    }
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "encode",
+   "value": {
+    "str": "123"
+   },
+   "result": {
+    "ok": {
+     "bytes": "3231"
+    }
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "encode",
+   "value": {
+    "str": "café"
+   },
+   "result": {
+    "ok": {
+     "bytes": "6163"
+    }
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "encode",
+   "value": {
+    "str": "€"
+   },
+   "result": {
+    "err": "DataError",
+    "msg": "Error packing '€' as PCCC_ASCII"
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "encode",
+   "value": {
+    "str": "€A"
+   },
+   "result": {
+    "err": "DataError",
+    "msg": "Error packing '€A' as PCCC_ASCII"
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "encode",
+   "value": {
+    "str": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   },
+   "result": {
+    "ok": {
+     "bytes": "7878"
+    }
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "encode",
+   "value": {
+    "str": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   },
+   "result": {
+    "ok": {
+     "bytes": "7878"
+    }
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "encode",
+   "value": {
+    "str": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+   },
+   "result": {
+    "ok": {
+     "bytes": "7979"
+    }
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "encode",
+   "value": null,
+   "result": {
+    "ok": {
+     "bytes": "2020"
+    }
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "encode",
+   "value": {
+    "int": 0
+   },
+   "result": {
+    "ok": {
+     "bytes": "2020"
+    }
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "encode",
+   "value": {
+    "int": 5
+   },
+   "result": {
+    "err": "DataError",
+    "msg": "Error packing 5 as PCCC_ASCII"
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "encode",
+   "value": {
+    "bool": false
+   },
+   "result": {
+    "ok": {
+     "bytes": "2020"
+    }
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "encode",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "err": "DataError",
+    "msg": "Error packing True as PCCC_ASCII"
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "encode",
+   "value": {
+    "float": 1.5
+   },
+   "result": {
+    "err": "DataError",
+    "msg": "Error packing 1.5 as PCCC_ASCII"
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "encode",
+   "value": {
+    "bytes": "6162"
+   },
+   "result": {
+    "err": "DataError",
+    "msg": "Error packing b'ab' as PCCC_ASCII"
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "encode",
+   "value": {
+    "list": [
+     {
+      "int": 1
+     }
+    ]
+   },
+   "result": {
+    "err": "DataError",
+    "msg": "Error packing [1] as PCCC_ASCII"
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "decode",
+   "raw": "",
+   "result": {
+    "ok": {
+     "str": ""
+    }
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "decode",
+   "raw": "41",
+   "result": {
+    "ok": {
+     "str": "\u0000A"
+    }
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "decode",
+   "raw": "4241",
+   "result": {
+    "ok": {
+     "str": "AB"
+    }
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "decode",
+   "raw": "424143",
+   "result": {
+    "ok": {
+     "str": "AB"
+    }
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "decode",
+   "raw": "0041",
+   "result": {
+    "ok": {
+     "str": "A\u0000"
+    }
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "decode",
+   "raw": "e900",
+   "result": {
+    "ok": {
+     "str": "\u0000é"
+    }
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "decode",
+   "raw": "0300",
+   "result": {
+    "ok": {
+     "str": "\u0000\u0003"
+    }
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "decode",
+   "raw": "030042410043ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+   "result": {
+    "ok": {
+     "str": "\u0000\u0003"
+    }
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "decode",
+   "raw": "01",
+   "result": {
+    "ok": {
+     "str": "\u0000\u0001"
+    }
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "decode",
+   "raw": "05004241",
+   "result": {
+    "ok": {
+     "str": "\u0000\u0005"
+    }
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "decode",
+   "raw": "0000",
+   "result": {
+    "ok": {
+     "str": "\u0000\u0000"
+    }
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "decode",
+   "raw": "ffff00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "result": {
+    "ok": {
+     "str": "ÿÿ"
+    }
+   }
+  },
+  {
+   "type": "PCCC_ASCII",
+   "op": "decode",
+   "raw": "0200e96341",
+   "result": {
+    "ok": {
+     "str": "\u0000\u0002"
+    }
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "encode",
+   "value": {
+    "str": ""
+   },
+   "result": {
+    "ok": {
+     "bytes": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "encode",
+   "value": {
+    "str": "A"
+   },
+   "result": {
+    "ok": {
+     "bytes": "010000410000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "encode",
+   "value": {
+    "str": "AB"
+   },
+   "result": {
+    "ok": {
+     "bytes": "020042410000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "encode",
+   "value": {
+    "str": "ABC"
+   },
+   "result": {
+    "ok": {
+     "bytes": "030042410043000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "encode",
+   "value": {
+    "str": "123"
+   },
+   "result": {
+    "ok": {
+     "bytes": "030032310033000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "encode",
+   "value": {
+    "str": "café"
+   },
+   "result": {
+    "ok": {
+     "bytes": "04006163e966000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "encode",
+   "value": {
+    "str": "€"
+   },
+   "result": {
+    "err": "DataError",
+    "msg": "Error packing '€' as PCCC_STRING"
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "encode",
+   "value": {
+    "str": "€A"
+   },
+   "result": {
+    "err": "DataError",
+    "msg": "Error packing '€A' as PCCC_STRING"
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "encode",
+   "value": {
+    "str": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   },
+   "result": {
+    "ok": {
+     "bytes": "520078787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878"
+    }
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "encode",
+   "value": {
+    "str": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   },
+   "result": {
+    "ok": {
+     "bytes": "520078787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878"
+    }
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "encode",
+   "value": {
+    "str": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+   },
+   "result": {
+    "ok": {
+     "bytes": "510079797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979790079"
+    }
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "encode",
+   "value": null,
+   "result": {
+    "ok": {
+     "bytes": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "encode",
+   "value": {
+    "int": 0
+   },
+   "result": {
+    "ok": {
+     "bytes": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "encode",
+   "value": {
+    "int": 5
+   },
+   "result": {
+    "err": "DataError",
+    "msg": "Error packing 5 as PCCC_STRING"
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "encode",
+   "value": {
+    "bool": false
+   },
+   "result": {
+    "ok": {
+     "bytes": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "encode",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "err": "DataError",
+    "msg": "Error packing True as PCCC_STRING"
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "encode",
+   "value": {
+    "float": 1.5
+   },
+   "result": {
+    "err": "DataError",
+    "msg": "Error packing 1.5 as PCCC_STRING"
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "encode",
+   "value": {
+    "bytes": "6162"
+   },
+   "result": {
+    "err": "DataError",
+    "msg": "Error packing b'ab' as PCCC_STRING"
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "encode",
+   "value": {
+    "list": [
+     {
+      "int": 1
+     }
+    ]
+   },
+   "result": {
+    "err": "DataError",
+    "msg": "Error packing [1] as PCCC_STRING"
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "decode",
+   "raw": "",
+   "result": {
+    "err": "BufferEmptyError",
+    "msg": ""
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "decode",
+   "raw": "41",
+   "result": {
+    "err": "DataError",
+    "msg": "Error unpacking b'A' as PCCC_STRING"
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "decode",
+   "raw": "4241",
+   "result": {
+    "ok": {
+     "str": ""
+    }
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "decode",
+   "raw": "424143",
+   "result": {
+    "ok": {
+     "str": "\u0000C"
+    }
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "decode",
+   "raw": "0041",
+   "result": {
+    "ok": {
+     "str": ""
+    }
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "decode",
+   "raw": "e900",
+   "result": {
+    "ok": {
+     "str": ""
+    }
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "decode",
+   "raw": "0300",
+   "result": {
+    "ok": {
+     "str": ""
+    }
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "decode",
+   "raw": "030042410043ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+   "result": {
+    "ok": {
+     "str": "ABC"
+    }
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "decode",
+   "raw": "01",
+   "result": {
+    "err": "DataError",
+    "msg": "Error unpacking b'\\x01' as PCCC_STRING"
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "decode",
+   "raw": "05004241",
+   "result": {
+    "ok": {
+     "str": "AB"
+    }
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "decode",
+   "raw": "0000",
+   "result": {
+    "ok": {
+     "str": ""
+    }
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "decode",
+   "raw": "ffff00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "result": {
+    "ok": {
+     "str": "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
+    }
+   }
+  },
+  {
+   "type": "PCCC_STRING",
+   "op": "decode",
+   "raw": "0200e96341",
+   "result": {
+    "ok": {
+     "str": "cé"
+    }
+   }
+  }
+ ],
+ "writeable_value": [
+  {
+   "address": "N7:0",
+   "value": {
+    "int": 1
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff0100"
+    }
+   }
+  },
+  {
+   "address": "N7:0",
+   "value": {
+    "int": -1
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffffffff"
+    }
+   }
+  },
+  {
+   "address": "N7:0",
+   "value": {
+    "int": 32767
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffffff7f"
+    }
+   }
+  },
+  {
+   "address": "N7:0",
+   "value": {
+    "int": 32768
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for N7:0 from 32768 - Error packing 32768 as INT"
+   }
+  },
+  {
+   "address": "N7:0",
+   "value": {
+    "int": -32769
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for N7:0 from -32769 - Error packing -32769 as INT"
+   }
+  },
+  {
+   "address": "N7:0",
+   "value": {
+    "float": 1.5
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for N7:0 from 1.5 - Error packing 1.5 as INT"
+   }
+  },
+  {
+   "address": "N7:0",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for N7:0 from True - Error packing True as INT"
+   }
+  },
+  {
+   "address": "N7:0",
+   "value": {
+    "str": "abc"
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for N7:0 from abc - Error packing 'abc' as INT"
+   }
+  },
+  {
+   "address": "N7:0",
+   "value": null,
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for N7:0 from None - Error packing None as INT"
+   }
+  },
+  {
+   "address": "N7:0",
+   "value": {
+    "bytes": "01020304"
+   },
+   "result": {
+    "ok": {
+     "bytes": "01020304"
+    }
+   }
+  },
+  {
+   "address": "N7:0",
+   "value": {
+    "bytes": ""
+   },
+   "result": {
+    "ok": {
+     "bytes": ""
+    }
+   }
+  },
+  {
+   "address": "N7:0",
+   "value": {
+    "list": [
+     {
+      "int": 1
+     }
+    ]
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for N7:0 from [1] - Error packing [1] as INT"
+   }
+  },
+  {
+   "address": "N7:0{3}",
+   "value": {
+    "list": [
+     {
+      "int": 1
+     },
+     {
+      "int": 2
+     },
+     {
+      "int": 3
+     }
+    ]
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff010002000300"
+    }
+   }
+  },
+  {
+   "address": "N7:0{3}",
+   "value": {
+    "list": [
+     {
+      "int": 1
+     },
+     {
+      "int": 2
+     },
+     {
+      "int": 3
+     },
+     {
+      "int": 4
+     }
+    ]
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff010002000300"
+    }
+   }
+  },
+  {
+   "address": "N7:0{3}",
+   "value": {
+    "list": [
+     {
+      "int": 1
+     },
+     {
+      "int": 2
+     }
+    ]
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Insufficient data for requested elements, expected 3 and got 2"
+   }
+  },
+  {
+   "address": "N7:0{3}",
+   "value": {
+    "list": [
+     {
+      "int": 1
+     },
+     {
+      "str": "a"
+     },
+     {
+      "int": 3
+     }
+    ]
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for N7:0 from [1, 'a', 3] - Error packing 'a' as INT"
+   }
+  },
+  {
+   "address": "N7:0{3}",
+   "value": {
+    "int": 5
+   },
+   "result": {
+    "err": "TypeError",
+    "msg": "object of type 'int' has no len()"
+   }
+  },
+  {
+   "address": "N7:0{0}",
+   "value": {
+    "int": 5
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff0500"
+    }
+   }
+  },
+  {
+   "address": "N7:0{1}",
+   "value": {
+    "int": 5
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff0500"
+    }
+   }
+  },
+  {
+   "address": "N7:0{2}",
+   "value": {
+    "str": "ab"
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for N7:0 from ab - Error packing 'a' as INT"
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "20002000"
+    }
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "value": {
+    "bool": false
+   },
+   "result": {
+    "ok": {
+     "bytes": "20000000"
+    }
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "value": {
+    "int": 1
+   },
+   "result": {
+    "ok": {
+     "bytes": "20002000"
+    }
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "value": {
+    "int": 0
+   },
+   "result": {
+    "ok": {
+     "bytes": "20000000"
+    }
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "value": {
+    "str": "x"
+   },
+   "result": {
+    "ok": {
+     "bytes": "20002000"
+    }
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "value": {
+    "str": ""
+   },
+   "result": {
+    "ok": {
+     "bytes": "20000000"
+    }
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "value": {
+    "int": 7
+   },
+   "result": {
+    "ok": {
+     "bytes": "20002000"
+    }
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "value": {
+    "float": 0.0
+   },
+   "result": {
+    "ok": {
+     "bytes": "20000000"
+    }
+   }
+  },
+  {
+   "address": "N7:0/15",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "00800080"
+    }
+   }
+  },
+  {
+   "address": "N7:0/0",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "01000100"
+    }
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "value": {
+    "list": []
+   },
+   "result": {
+    "ok": {
+     "bytes": "20000000"
+    }
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "value": {
+    "list": [
+     {
+      "int": 0
+     }
+    ]
+   },
+   "result": {
+    "ok": {
+     "bytes": "20002000"
+    }
+   }
+  },
+  {
+   "address": "B3/17",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "02000200"
+    }
+   }
+  },
+  {
+   "address": "B3/17",
+   "value": {
+    "bool": false
+   },
+   "result": {
+    "ok": {
+     "bytes": "02000000"
+    }
+   }
+  },
+  {
+   "address": "B3/4095",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "00800080"
+    }
+   }
+  },
+  {
+   "address": "B3:0",
+   "value": {
+    "int": 32767
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffffff7f"
+    }
+   }
+  },
+  {
+   "address": "F8:0",
+   "value": {
+    "float": 1.5
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff0000c03f"
+    }
+   }
+  },
+  {
+   "address": "F8:0",
+   "value": {
+    "int": 1
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff0000803f"
+    }
+   }
+  },
+  {
+   "address": "F8:0",
+   "value": {
+    "float": 1e+39
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for F8:0 from 1e+39 - Error packing 1e+39 as REAL"
+   }
+  },
+  {
+   "address": "F8:0",
+   "value": {
+    "str": "x"
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for F8:0 from x - Error packing 'x' as REAL"
+   }
+  },
+  {
+   "address": "F8:0",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for F8:0 from True - Error packing True as REAL"
+   }
+  },
+  {
+   "address": "F8:0{2}",
+   "value": {
+    "list": [
+     {
+      "float": 1.5
+     },
+     {
+      "int": -2
+     }
+    ]
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff0000c03f000000c0"
+    }
+   }
+  },
+  {
+   "address": "F8:0/3",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "08000800"
+    }
+   }
+  },
+  {
+   "address": "L9:0",
+   "value": {
+    "int": 70000
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff70110100"
+    }
+   }
+  },
+  {
+   "address": "L9:0",
+   "value": {
+    "int": 2147483648
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for L9:0 from 2147483648 - Error packing 2147483648 as DINT"
+   }
+  },
+  {
+   "address": "L9:0{2}",
+   "value": {
+    "list": [
+     {
+      "int": 1
+     },
+     {
+      "int": -1
+     }
+    ]
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff01000000ffffffff"
+    }
+   }
+  },
+  {
+   "address": "L9:0/20",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "err": "AttributeError",
+    "msg": "'NoneType' object has no attribute 'get'"
+   }
+  },
+  {
+   "address": "R6:0",
+   "value": {
+    "int": 5
+   },
+   "result": {
+    "err": "AttributeError",
+    "msg": "'NoneType' object has no attribute 'get'"
+   }
+  },
+  {
+   "address": "T4:0.PRE",
+   "value": {
+    "int": 1000
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffffe803"
+    }
+   }
+  },
+  {
+   "address": "T4:0.ACC",
+   "value": {
+    "int": 7
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff0700"
+    }
+   }
+  },
+  {
+   "address": "T4:0.ACC",
+   "value": {
+    "float": 1.5
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for T4:0.ACC from 1.5 - Error packing 1.5 as INT"
+   }
+  },
+  {
+   "address": "T4:0.DN",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "00200020"
+    }
+   }
+  },
+  {
+   "address": "T4:0.EN",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "00800080"
+    }
+   }
+  },
+  {
+   "address": "T4:0.TT",
+   "value": {
+    "int": 0
+   },
+   "result": {
+    "ok": {
+     "bytes": "00400000"
+    }
+   }
+  },
+  {
+   "address": "C5:3.ACC",
+   "value": {
+    "int": 7
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff0700"
+    }
+   }
+  },
+  {
+   "address": "C5:0.CU",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "00800080"
+    }
+   }
+  },
+  {
+   "address": "C5:0.UA",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "00040004"
+    }
+   }
+  },
+  {
+   "address": "C5:0.PRE",
+   "value": {
+    "int": 40000
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for C5:0.PRE from 40000 - Error packing 40000 as INT"
+   }
+  },
+  {
+   "address": "I:0",
+   "value": {
+    "int": 3
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff0300"
+    }
+   }
+  },
+  {
+   "address": "I:0/3",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "08000800"
+    }
+   }
+  },
+  {
+   "address": "O:0.1",
+   "value": {
+    "int": 5
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff0500"
+    }
+   }
+  },
+  {
+   "address": "O:0.1/2",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "04000400"
+    }
+   }
+  },
+  {
+   "address": "O:0{2}",
+   "value": {
+    "list": [
+     {
+      "int": 1
+     },
+     {
+      "int": 2
+     }
+    ]
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff01000200"
+    }
+   }
+  },
+  {
+   "address": "S:1/5",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "20002000"
+    }
+   }
+  },
+  {
+   "address": "S:3",
+   "value": {
+    "int": 9
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff0900"
+    }
+   }
+  },
+  {
+   "address": "ST9:0",
+   "value": {
+    "str": "hello"
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff050065686c6c006f00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "address": "ST9:0",
+   "value": {
+    "str": ""
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "address": "ST9:0",
+   "value": null,
+   "result": {
+    "ok": {
+     "bytes": "ffff000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "address": "ST9:0",
+   "value": {
+    "int": 5
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for ST9:0 from 5 - Error packing 5 as PCCC_STRING"
+   }
+  },
+  {
+   "address": "ST9:0",
+   "value": {
+    "int": 0
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "address": "ST9:0",
+   "value": {
+    "str": "€"
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for ST9:0 from € - Error packing '€' as PCCC_STRING"
+   }
+  },
+  {
+   "address": "ST9:0{2}",
+   "value": {
+    "list": [
+     {
+      "str": "abc"
+     },
+     {
+      "str": "de"
+     }
+    ]
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff030062610063000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000020065640000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "address": "ST9:0{2}",
+   "value": {
+    "list": [
+     {
+      "str": "abc"
+     }
+    ]
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Insufficient data for requested elements, expected 2 and got 1"
+   }
+  },
+  {
+   "address": "ST9:0{2}",
+   "value": {
+    "str": "abc"
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff010000610000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000620000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "address": "A10:0",
+   "value": {
+    "str": "AB"
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff4241"
+    }
+   }
+  },
+  {
+   "address": "A10:0",
+   "value": {
+    "str": "A"
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff2041"
+    }
+   }
+  },
+  {
+   "address": "A10:0",
+   "value": {
+    "str": "ABC"
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff4241"
+    }
+   }
+  },
+  {
+   "address": "A10:0",
+   "value": {
+    "str": ""
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff2020"
+    }
+   }
+  },
+  {
+   "address": "A10:0",
+   "value": null,
+   "result": {
+    "ok": {
+     "bytes": "ffff2020"
+    }
+   }
+  },
+  {
+   "address": "A10:0",
+   "value": {
+    "int": 3
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for A10:0 from 3 - Error packing 3 as PCCC_ASCII"
+   }
+  },
+  {
+   "address": "A10:0{2}",
+   "value": {
+    "list": [
+     {
+      "str": "ab"
+     },
+     {
+      "str": "cd"
+     }
+    ]
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff62616463"
+    }
+   }
+  },
+  {
+   "address": "A10:0{2}",
+   "value": {
+    "str": "abcd"
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff20612062"
+    }
+   }
+  },
+  {
+   "address": "A10:0{2}",
+   "value": {
+    "str": "a"
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Insufficient data for requested elements, expected 2 and got 1"
+   }
+  },
+  {
+   "address": "ST9:0{2}",
+   "value": {
+    "str": "xy"
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff010000780000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000790000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "address": "N7:0{2}",
+   "value": {
+    "list": [
+     {
+      "bool": true
+     },
+     {
+      "bool": false
+     }
+    ]
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for N7:0 from [True, False] - Error packing True as INT"
+   }
+  },
+  {
+   "address": "N7:0{2}",
+   "value": {
+    "list": []
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Insufficient data for requested elements, expected 2 and got 0"
+   }
+  },
+  {
+   "address": "N7:0{2}",
+   "value": {
+    "str": "1"
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Insufficient data for requested elements, expected 2 and got 1"
+   }
+  },
+  {
+   "address": "N7:0{2}",
+   "value": {
+    "str": "12"
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for N7:0 from 12 - Error packing '1' as INT"
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "value": {
+    "float": -0.0
+   },
+   "result": {
+    "ok": {
+     "bytes": "20000000"
+    }
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "value": {
+    "str": "0"
+   },
+   "result": {
+    "ok": {
+     "bytes": "20002000"
+    }
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "value": {
+    "list": [
+     {
+      "list": []
+     }
+    ]
+   },
+   "result": {
+    "ok": {
+     "bytes": "20002000"
+    }
+   }
+  },
+  {
+   "address": "B3/0",
+   "value": {
+    "str": "0"
+   },
+   "result": {
+    "ok": {
+     "bytes": "01000100"
+    }
+   }
+  },
+  {
+   "address": "T4:0.PRE",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for T4:0.PRE from True - Error packing True as INT"
+   }
+  },
+  {
+   "address": "T4:0.ACC",
+   "value": {
+    "int": -1
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffffffff"
+    }
+   }
+  },
+  {
+   "address": "T4:0.ACC",
+   "value": {
+    "int": 40000
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for T4:0.ACC from 40000 - Error packing 40000 as INT"
+   }
+  },
+  {
+   "address": "T4:0.ACC",
+   "value": {
+    "str": "x"
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for T4:0.ACC from x - Error packing 'x' as INT"
+   }
+  },
+  {
+   "address": "T4:0.DN",
+   "value": {
+    "int": 0
+   },
+   "result": {
+    "ok": {
+     "bytes": "00200000"
+    }
+   }
+  },
+  {
+   "address": "I:0.1/3",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "08000800"
+    }
+   }
+  },
+  {
+   "address": "O:0.300",
+   "value": {
+    "int": 1
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff0100"
+    }
+   }
+  },
+  {
+   "address": "B3/4080",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "01000100"
+    }
+   }
+  },
+  {
+   "address": "L9:0/31",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "err": "AttributeError",
+    "msg": "'NoneType' object has no attribute 'get'"
+   }
+  },
+  {
+   "address": "S:1/5{0}",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "20002000"
+    }
+   }
+  },
+  {
+   "address": "N7:0{0}",
+   "value": {
+    "list": [
+     {
+      "int": 1
+     },
+     {
+      "int": 2
+     }
+    ]
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for N7:0 from [1, 2] - Error packing [1, 2] as INT"
+   }
+  },
+  {
+   "address": "F8:0",
+   "value": {
+    "float": -0.0
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff00000080"
+    }
+   }
+  },
+  {
+   "address": "F8:0",
+   "value": {
+    "float": "inf"
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff0000807f"
+    }
+   }
+  },
+  {
+   "address": "L9:0",
+   "value": {
+    "int": -2147483648
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff00000080"
+    }
+   }
+  },
+  {
+   "address": "L9:0",
+   "value": {
+    "int": -2147483649
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for L9:0 from -2147483649 - Error packing -2147483649 as DINT"
+   }
+  },
+  {
+   "address": "A10:0",
+   "value": {
+    "str": "€"
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for A10:0 from € - Error packing '€' as PCCC_ASCII"
+   }
+  },
+  {
+   "address": "A10:0",
+   "value": {
+    "str": "éèx"
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffffe8e9"
+    }
+   }
+  },
+  {
+   "address": "ST9:0",
+   "value": {
+    "str": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+   },
+   "result": {
+    "ok": {
+     "bytes": "ffff52007a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a"
+    }
+   }
+  }
+ ],
+ "read_request": [
+  {
+   "address": "N7:0",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20207890000"
+    }
+   }
+  },
+  {
+   "address": "n7:0",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20207890000"
+    }
+   }
+  },
+  {
+   "address": "N7:255",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a2020789ffff0000"
+    }
+   }
+  },
+  {
+   "address": "N7:256",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - N7:256"
+   }
+  },
+  {
+   "address": "N7:1000",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - N7:1000"
+   }
+  },
+  {
+   "address": "N0:0",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - N0:0"
+   }
+  },
+  {
+   "address": "N1:0",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20201890000"
+    }
+   }
+  },
+  {
+   "address": "N255:255",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a202ffff0089ffff0000"
+    }
+   }
+  },
+  {
+   "address": "N256:0",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - N256:0"
+   }
+  },
+  {
+   "address": "N7:0/0",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20207890000"
+    }
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20207890000"
+    }
+   }
+  },
+  {
+   "address": "N7:0/15",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20207890000"
+    }
+   }
+  },
+  {
+   "address": "N7:0/16",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - N7:0/16"
+   }
+  },
+  {
+   "address": "N7:0/3x",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - N7:0/3x"
+   }
+  },
+  {
+   "address": "N7:0{10}",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a21407890000"
+    }
+   }
+  },
+  {
+   "address": "N7:0{0}",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20007890000"
+    }
+   }
+  },
+  {
+   "address": "N7:0{1}",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20207890000"
+    }
+   }
+  },
+  {
+   "address": "N7:0/3{2}",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - N7:0/3{2}"
+   }
+  },
+  {
+   "address": "N7:0{}",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - N7:0{}"
+   }
+  },
+  {
+   "address": "N7:0{a}",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - N7:0{a}"
+   }
+  },
+  {
+   "address": "N7:",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - N7:"
+   }
+  },
+  {
+   "address": "N7",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - N7"
+   }
+  },
+  {
+   "address": "N:0",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - N:0"
+   }
+  },
+  {
+   "address": "N7:0 ",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - N7:0 "
+   }
+  },
+  {
+   "address": " N7:0",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() -  N7:0"
+   }
+  },
+  {
+   "address": "N7:0000",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - N7:0000"
+   }
+  },
+  {
+   "address": "N007:001",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20207890100"
+    }
+   }
+  },
+  {
+   "address": "N7:1234",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - N7:1234"
+   }
+  },
+  {
+   "address": "N1234:0",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - N1234:0"
+   }
+  },
+  {
+   "address": "F8:0",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a204088a0000"
+    }
+   }
+  },
+  {
+   "address": "F8:10{4}",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a210088a0a00"
+    }
+   }
+  },
+  {
+   "address": "F8:0/3",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a204088a0000"
+    }
+   }
+  },
+  {
+   "address": "L9:0",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20409910000"
+    }
+   }
+  },
+  {
+   "address": "L9:2{3}",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20c09910200"
+    }
+   }
+  },
+  {
+   "address": "l9:0/31",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - l9:0/31"
+   }
+  },
+  {
+   "address": "L9:0/31",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - L9:0/31"
+   }
+  },
+  {
+   "address": "B3:0",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20203850000"
+    }
+   }
+  },
+  {
+   "address": "B3:0/15",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20203850000"
+    }
+   }
+  },
+  {
+   "address": "B3:1{2}",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20403850100"
+    }
+   }
+  },
+  {
+   "address": "B3/0",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20203850000"
+    }
+   }
+  },
+  {
+   "address": "B3/10",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20203850000"
+    }
+   }
+  },
+  {
+   "address": "B3/17",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20203850100"
+    }
+   }
+  },
+  {
+   "address": "B3/4095",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a2020385ffff0000"
+    }
+   }
+  },
+  {
+   "address": "B3/4096",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - B3/4096"
+   }
+  },
+  {
+   "address": "B3/10{2}",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - B3/10{2}"
+   }
+  },
+  {
+   "address": "b3/16",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20203850100"
+    }
+   }
+  },
+  {
+   "address": "B0/1",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - B0/1"
+   }
+  },
+  {
+   "address": "B256/1",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - B256/1"
+   }
+  },
+  {
+   "address": "B3/12345",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - B3/12345"
+   }
+  },
+  {
+   "address": "T4:0.ACC",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20604860000"
+    }
+   }
+  },
+  {
+   "address": "T4:0.PRE",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20604860000"
+    }
+   }
+  },
+  {
+   "address": "T4:0.EN",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20604860000"
+    }
+   }
+  },
+  {
+   "address": "T4:0.TT",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20604860000"
+    }
+   }
+  },
+  {
+   "address": "T4:0.DN",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20604860000"
+    }
+   }
+  },
+  {
+   "address": "t4:0.acc",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20604860000"
+    }
+   }
+  },
+  {
+   "address": "T4:255.DN",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a2060486ffff0000"
+    }
+   }
+  },
+  {
+   "address": "T4:256.DN",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - T4:256.DN"
+   }
+  },
+  {
+   "address": "T0:0.ACC",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - T0:0.ACC"
+   }
+  },
+  {
+   "address": "T4:0xACC",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20604860000"
+    }
+   }
+  },
+  {
+   "address": "T4:0/ACC",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20604860000"
+    }
+   }
+  },
+  {
+   "address": "T4:0.CU",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20604860000"
+    }
+   }
+  },
+  {
+   "address": "C5:3.ACC",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20605870300"
+    }
+   }
+  },
+  {
+   "address": "C5:0.CU",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20605870000"
+    }
+   }
+  },
+  {
+   "address": "C5:0.CD",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20605870000"
+    }
+   }
+  },
+  {
+   "address": "C5:0.OV",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20605870000"
+    }
+   }
+  },
+  {
+   "address": "C5:0.UN",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20605870000"
+    }
+   }
+  },
+  {
+   "address": "C5:0.UA",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20605870000"
+    }
+   }
+  },
+  {
+   "address": "C5:0.DN",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20605870000"
+    }
+   }
+  },
+  {
+   "address": "C5:0.PRE",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20605870000"
+    }
+   }
+  },
+  {
+   "address": "C5:0.EN",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20605870000"
+    }
+   }
+  },
+  {
+   "address": "T4:0",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - T4:0"
+   }
+  },
+  {
+   "address": "C5:0",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - C5:0"
+   }
+  },
+  {
+   "address": "T4:0.ACC{2}",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - T4:0.ACC{2}"
+   }
+  },
+  {
+   "address": "T4:0.XYZ",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - T4:0.XYZ"
+   }
+  },
+  {
+   "address": "R6:0",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - R6:0"
+   }
+  },
+  {
+   "address": "R6:0.LEN",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - R6:0.LEN"
+   }
+  },
+  {
+   "address": "I:0",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20201830000"
+    }
+   }
+  },
+  {
+   "address": "I1:0",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20201830000"
+    }
+   }
+  },
+  {
+   "address": "I5:0",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20201830000"
+    }
+   }
+  },
+  {
+   "address": "O:0",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20200820000"
+    }
+   }
+  },
+  {
+   "address": "O0:3",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20200820300"
+    }
+   }
+  },
+  {
+   "address": "o:2",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20200820200"
+    }
+   }
+  },
+  {
+   "address": "I:0/0",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20201830000"
+    }
+   }
+  },
+  {
+   "address": "I:0/15",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20201830000"
+    }
+   }
+  },
+  {
+   "address": "I:0/16",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - I:0/16"
+   }
+  },
+  {
+   "address": "I:0.1",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20201830001"
+    }
+   }
+  },
+  {
+   "address": "I:0.1/3",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20201830001"
+    }
+   }
+  },
+  {
+   "address": "I:0.999",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a202018300ffe703"
+    }
+   }
+  },
+  {
+   "address": "I:0{4}",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20801830000"
+    }
+   }
+  },
+  {
+   "address": "O:0/3{2}",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - O:0/3{2}"
+   }
+  },
+  {
+   "address": "I:256",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - I:256"
+   }
+  },
+  {
+   "address": "I1234:0",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - I1234:0"
+   }
+  },
+  {
+   "address": "I:0.1234",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - I:0.1234"
+   }
+  },
+  {
+   "address": "I:0/123",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - I:0/123"
+   }
+  },
+  {
+   "address": "S:0",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20202840000"
+    }
+   }
+  },
+  {
+   "address": "S:1/15",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20202840100"
+    }
+   }
+  },
+  {
+   "address": "S:1/5",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20202840100"
+    }
+   }
+  },
+  {
+   "address": "s:23",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20202841700"
+    }
+   }
+  },
+  {
+   "address": "S:256",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - S:256"
+   }
+  },
+  {
+   "address": "S:1/16",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - S:1/16"
+   }
+  },
+  {
+   "address": "S:0{3}",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20602840000"
+    }
+   }
+  },
+  {
+   "address": "S:1/5{2}",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - S:1/5{2}"
+   }
+  },
+  {
+   "address": "S2:0",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - S2:0"
+   }
+  },
+  {
+   "address": "ST9:0",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a254098d0000"
+    }
+   }
+  },
+  {
+   "address": "ST9:0{1}",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a254098d0000"
+    }
+   }
+  },
+  {
+   "address": "ST9:0{2}",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a2a8098d0000"
+    }
+   }
+  },
+  {
+   "address": "ST9:0{3}",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - ST9:0{3}"
+   }
+  },
+  {
+   "address": "st9:1",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a254098d0100"
+    }
+   }
+  },
+  {
+   "address": "ST9:256",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - ST9:256"
+   }
+  },
+  {
+   "address": "ST0:0",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - ST0:0"
+   }
+  },
+  {
+   "address": "ST9:12345",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - ST9:12345"
+   }
+  },
+  {
+   "address": "ST9:0/1",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - ST9:0/1"
+   }
+  },
+  {
+   "address": "A10:0",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a2020a8e0000"
+    }
+   }
+  },
+  {
+   "address": "A10:0{4}",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a2080a8e0000"
+    }
+   }
+  },
+  {
+   "address": "A10:255",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a2020a8effff0000"
+    }
+   }
+  },
+  {
+   "address": "A10:256",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - A10:256"
+   }
+  },
+  {
+   "address": "A10:1234",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - A10:1234"
+   }
+  },
+  {
+   "address": "a10:3",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a2020a8e0300"
+    }
+   }
+  },
+  {
+   "address": "",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - "
+   }
+  },
+  {
+   "address": "X7:0",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - X7:0"
+   }
+  },
+  {
+   "address": "N7:-1",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - N7:-1"
+   }
+  },
+  {
+   "address": "MG1:0",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - MG1:0"
+   }
+  },
+  {
+   "address": "PD1:0",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - PD1:0"
+   }
+  },
+  {
+   "address": "N7:0\n",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - N7:0\n"
+   }
+  },
+  {
+   "address": "T4:0\n",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - T4:0\n"
+   }
+  },
+  {
+   "address": "T4:0.ACC\n",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - T4:0.ACC\n"
+   }
+  },
+  {
+   "address": "T4:12ACC",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20604860100"
+    }
+   }
+  },
+  {
+   "address": "T4:1234ACC",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20604867b00"
+    }
+   }
+  },
+  {
+   "address": "T4:1\nACC",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - T4:1\nACC"
+   }
+  },
+  {
+   "address": "T4:300ACC",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20604861e00"
+    }
+   }
+  },
+  {
+   "address": "ſ:1",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20202840100"
+    }
+   }
+  },
+  {
+   "address": "ı:0",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20201830000"
+    }
+   }
+  },
+  {
+   "address": "ſT9:0",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a254098d0000"
+    }
+   }
+  },
+  {
+   "address": "N7:0{99}",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a2c607890000"
+    }
+   }
+  },
+  {
+   "address": "B3/0010",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20203850000"
+    }
+   }
+  },
+  {
+   "address": "I:0.1{2}",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20401830001"
+    }
+   }
+  },
+  {
+   "address": "A10:0/1",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - A10:0/1"
+   }
+  },
+  {
+   "address": "S:1{2}",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20402840100"
+    }
+   }
+  },
+  {
+   "address": "S:1/5{0}",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20002840100"
+    }
+   }
+  },
+  {
+   "address": "I:0.1/3{4}",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - I:0.1/3{4}"
+   }
+  },
+  {
+   "address": "O5:1.2/3",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20200820102"
+    }
+   }
+  },
+  {
+   "address": "T4:0.ACCX",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - T4:0.ACCX"
+   }
+  },
+  {
+   "address": "T4:0..ACC",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - T4:0..ACC"
+   }
+  },
+  {
+   "address": "T4:0.Acc",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20604860000"
+    }
+   }
+  },
+  {
+   "address": "c5:0.dn",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20605870000"
+    }
+   }
+  },
+  {
+   "address": "T4:0{.ACC",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - T4:0{.ACC"
+   }
+  },
+  {
+   "address": "T4:0.ACC/1",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - T4:0.ACC/1"
+   }
+  },
+  {
+   "address": "T4:00012ACC",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - T4:00012ACC"
+   }
+  },
+  {
+   "address": "T4:0ACC",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - T4:0ACC"
+   }
+  },
+  {
+   "address": "T4:.ACC",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - T4:.ACC"
+   }
+  },
+  {
+   "address": "T255:255.UA",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a206ffff0086ffff0000"
+    }
+   }
+  },
+  {
+   "address": "C5:9999DN",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - C5:9999DN"
+   }
+  },
+  {
+   "address": "N7:0/5/6",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - N7:0/5/6"
+   }
+  },
+  {
+   "address": "N7:0{1}{2}",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - N7:0{1}{2}"
+   }
+  },
+  {
+   "address": "N7:0/",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - N7:0/"
+   }
+  },
+  {
+   "address": "N7:0/05",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20207890000"
+    }
+   }
+  },
+  {
+   "address": "N7:0/015",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - N7:0/015"
+   }
+  },
+  {
+   "address": "N7:0{007}",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20e07890000"
+    }
+   }
+  },
+  {
+   "address": "N7:0{ 1}",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - N7:0{ 1}"
+   }
+  },
+  {
+   "address": "N7:0{1 }",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - N7:0{1 }"
+   }
+  },
+  {
+   "address": "N7 :0",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - N7 :0"
+   }
+  },
+  {
+   "address": "N7:0}",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - N7:0}"
+   }
+  },
+  {
+   "address": "N7:0{",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - N7:0{"
+   }
+  },
+  {
+   "address": "I:0./3",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - I:0./3"
+   }
+  },
+  {
+   "address": "I:.1",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - I:.1"
+   }
+  },
+  {
+   "address": "I0000:0",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - I0000:0"
+   }
+  },
+  {
+   "address": "O:0.1.2",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - O:0.1.2"
+   }
+  },
+  {
+   "address": "I:0/3.1",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - I:0/3.1"
+   }
+  },
+  {
+   "address": "I:0.1/",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - I:0.1/"
+   }
+  },
+  {
+   "address": "I:0.",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - I:0."
+   }
+  },
+  {
+   "address": "O255:255.999/15",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a2020082ffff00ffe703"
+    }
+   }
+  },
+  {
+   "address": "ST9:0{1}x",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - ST9:0{1}x"
+   }
+  },
+  {
+   "address": "ST9:0{0}",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - ST9:0{0}"
+   }
+  },
+  {
+   "address": "ST9:0{01}",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - ST9:0{01}"
+   }
+  },
+  {
+   "address": "A10:0{0}",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a2000a8e0000"
+    }
+   }
+  },
+  {
+   "address": "B3/0{0}",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20003850000"
+    }
+   }
+  },
+  {
+   "address": "B3/",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - B3/"
+   }
+  },
+  {
+   "address": "B3:",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - B3:"
+   }
+  },
+  {
+   "address": "S:",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - S:"
+   }
+  },
+  {
+   "address": "S:1/",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - S:1/"
+   }
+  },
+  {
+   "address": "S:1/015",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - S:1/015"
+   }
+  },
+  {
+   "address": "ST9:0/",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - ST9:0/"
+   }
+  },
+  {
+   "address": "A10:0010",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a2020a8e0a00"
+    }
+   }
+  },
+  {
+   "address": "B3/4080",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a2020385ffff0000"
+    }
+   }
+  },
+  {
+   "address": "N7:255{2}",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a2040789ffff0000"
+    }
+   }
+  },
+  {
+   "address": "ı:0.1/3",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20201830001"
+    }
+   }
+  },
+  {
+   "address": "ſ:1/15",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a20202840100"
+    }
+   }
+  },
+  {
+   "address": "B3/4095{1}",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a2020385ffff0000"
+    }
+   }
+  },
+  {
+   "address": "F8:0/15{3}",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - F8:0/15{3}"
+   }
+  },
+  {
+   "address": "N7:0{127}",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a2fe07890000"
+    }
+   }
+  },
+  {
+   "address": "N7:0{128}",
+   "result": {
+    "err": "DataError",
+    "msg": "Error packing 256 as USINT"
+   }
+  },
+  {
+   "address": "ST9:0{3}",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - ST9:0{3}"
+   }
+  },
+  {
+   "address": "T4:0{42}",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - T4:0{42}"
+   }
+  },
+  {
+   "address": "T4:0{43}",
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to read() - T4:0{43}"
+   }
+  },
+  {
+   "address": "F8:0{63}",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a2fc088a0000"
+    }
+   }
+  },
+  {
+   "address": "F8:0{64}",
+   "result": {
+    "err": "DataError",
+    "msg": "Error packing 256 as USINT"
+   }
+  },
+  {
+   "address": "I:0.300",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a202018300ff2c01"
+    }
+   }
+  },
+  {
+   "address": "I:0.255",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a202018300ffff00"
+    }
+   }
+  },
+  {
+   "address": "I:0.254",
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a202018300fe"
+    }
+   }
+  }
+ ],
+ "write_request": [
+  {
+   "address": "N7:0",
+   "value": {
+    "int": 1
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab0207890000ffff0100"
+    }
+   }
+  },
+  {
+   "address": "N7:0",
+   "value": {
+    "int": -1
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab0207890000ffffffff"
+    }
+   }
+  },
+  {
+   "address": "N7:0",
+   "value": {
+    "int": 32767
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab0207890000ffffff7f"
+    }
+   }
+  },
+  {
+   "address": "N7:0",
+   "value": {
+    "int": 32768
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for N7:0 from 32768 - Error packing 32768 as INT"
+   }
+  },
+  {
+   "address": "N7:0",
+   "value": {
+    "int": -32769
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for N7:0 from -32769 - Error packing -32769 as INT"
+   }
+  },
+  {
+   "address": "N7:0",
+   "value": {
+    "float": 1.5
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for N7:0 from 1.5 - Error packing 1.5 as INT"
+   }
+  },
+  {
+   "address": "N7:0",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for N7:0 from True - Error packing True as INT"
+   }
+  },
+  {
+   "address": "N7:0",
+   "value": {
+    "str": "abc"
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for N7:0 from abc - Error packing 'abc' as INT"
+   }
+  },
+  {
+   "address": "N7:0",
+   "value": null,
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for N7:0 from None - Error packing None as INT"
+   }
+  },
+  {
+   "address": "N7:0",
+   "value": {
+    "bytes": "01020304"
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020789000001020304"
+    }
+   }
+  },
+  {
+   "address": "N7:0",
+   "value": {
+    "bytes": ""
+   },
+   "result": {
+    "err": "DataError",
+    "msg": "Error packing -2 as USINT"
+   }
+  },
+  {
+   "address": "N7:0",
+   "value": {
+    "list": [
+     {
+      "int": 1
+     }
+    ]
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for N7:0 from [1] - Error packing [1] as INT"
+   }
+  },
+  {
+   "address": "N7:0{3}",
+   "value": {
+    "list": [
+     {
+      "int": 1
+     },
+     {
+      "int": 2
+     },
+     {
+      "int": 3
+     }
+    ]
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab0607890000ffff010002000300"
+    }
+   }
+  },
+  {
+   "address": "N7:0{3}",
+   "value": {
+    "list": [
+     {
+      "int": 1
+     },
+     {
+      "int": 2
+     },
+     {
+      "int": 3
+     },
+     {
+      "int": 4
+     }
+    ]
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab0607890000ffff010002000300"
+    }
+   }
+  },
+  {
+   "address": "N7:0{3}",
+   "value": {
+    "list": [
+     {
+      "int": 1
+     },
+     {
+      "int": 2
+     }
+    ]
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Insufficient data for requested elements, expected 3 and got 2"
+   }
+  },
+  {
+   "address": "N7:0{3}",
+   "value": {
+    "list": [
+     {
+      "int": 1
+     },
+     {
+      "str": "a"
+     },
+     {
+      "int": 3
+     }
+    ]
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for N7:0 from [1, 'a', 3] - Error packing 'a' as INT"
+   }
+  },
+  {
+   "address": "N7:0{3}",
+   "value": {
+    "int": 5
+   },
+   "result": {
+    "err": "TypeError",
+    "msg": "object of type 'int' has no len()"
+   }
+  },
+  {
+   "address": "N7:0{0}",
+   "value": {
+    "int": 5
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab0207890000ffff0500"
+    }
+   }
+  },
+  {
+   "address": "N7:0{1}",
+   "value": {
+    "int": 5
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab0207890000ffff0500"
+    }
+   }
+  },
+  {
+   "address": "N7:0{2}",
+   "value": {
+    "str": "ab"
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for N7:0 from ab - Error packing 'a' as INT"
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020789000020002000"
+    }
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "value": {
+    "bool": false
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020789000020000000"
+    }
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "value": {
+    "int": 1
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020789000020002000"
+    }
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "value": {
+    "int": 0
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020789000020000000"
+    }
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "value": {
+    "str": "x"
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020789000020002000"
+    }
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "value": {
+    "str": ""
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020789000020000000"
+    }
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "value": {
+    "int": 7
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020789000020002000"
+    }
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "value": {
+    "float": 0.0
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020789000020000000"
+    }
+   }
+  },
+  {
+   "address": "N7:0/15",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020789000000800080"
+    }
+   }
+  },
+  {
+   "address": "N7:0/0",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020789000001000100"
+    }
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "value": {
+    "list": []
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020789000020000000"
+    }
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "value": {
+    "list": [
+     {
+      "int": 0
+     }
+    ]
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020789000020002000"
+    }
+   }
+  },
+  {
+   "address": "B3/17",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020385010002000200"
+    }
+   }
+  },
+  {
+   "address": "B3/17",
+   "value": {
+    "bool": false
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020385010002000000"
+    }
+   }
+  },
+  {
+   "address": "B3/4095",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020385ffff000000800080"
+    }
+   }
+  },
+  {
+   "address": "B3:0",
+   "value": {
+    "int": 32767
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab0203850000ffffff7f"
+    }
+   }
+  },
+  {
+   "address": "F8:0",
+   "value": {
+    "float": 1.5
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab04088a0000ffff0000c03f"
+    }
+   }
+  },
+  {
+   "address": "F8:0",
+   "value": {
+    "int": 1
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab04088a0000ffff0000803f"
+    }
+   }
+  },
+  {
+   "address": "F8:0",
+   "value": {
+    "float": 1e+39
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for F8:0 from 1e+39 - Error packing 1e+39 as REAL"
+   }
+  },
+  {
+   "address": "F8:0",
+   "value": {
+    "str": "x"
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for F8:0 from x - Error packing 'x' as REAL"
+   }
+  },
+  {
+   "address": "F8:0",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for F8:0 from True - Error packing True as REAL"
+   }
+  },
+  {
+   "address": "F8:0{2}",
+   "value": {
+    "list": [
+     {
+      "float": 1.5
+     },
+     {
+      "int": -2
+     }
+    ]
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab08088a0000ffff0000c03f000000c0"
+    }
+   }
+  },
+  {
+   "address": "F8:0/3",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab02088a000008000800"
+    }
+   }
+  },
+  {
+   "address": "L9:0",
+   "value": {
+    "int": 70000
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab0409910000ffff70110100"
+    }
+   }
+  },
+  {
+   "address": "L9:0",
+   "value": {
+    "int": 2147483648
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for L9:0 from 2147483648 - Error packing 2147483648 as DINT"
+   }
+  },
+  {
+   "address": "L9:0{2}",
+   "value": {
+    "list": [
+     {
+      "int": 1
+     },
+     {
+      "int": -1
+     }
+    ]
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab0809910000ffff01000000ffffffff"
+    }
+   }
+  },
+  {
+   "address": "L9:0/20",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to write() - L9:0/20"
+   }
+  },
+  {
+   "address": "R6:0",
+   "value": {
+    "int": 5
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to write() - R6:0"
+   }
+  },
+  {
+   "address": "T4:0.PRE",
+   "value": {
+    "int": 1000
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab0204860001ffffe803"
+    }
+   }
+  },
+  {
+   "address": "T4:0.ACC",
+   "value": {
+    "int": 7
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab0204860002ffff0700"
+    }
+   }
+  },
+  {
+   "address": "T4:0.ACC",
+   "value": {
+    "float": 1.5
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for T4:0.ACC from 1.5 - Error packing 1.5 as INT"
+   }
+  },
+  {
+   "address": "T4:0.DN",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020486000000200020"
+    }
+   }
+  },
+  {
+   "address": "T4:0.EN",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020486000000800080"
+    }
+   }
+  },
+  {
+   "address": "T4:0.TT",
+   "value": {
+    "int": 0
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020486000000400000"
+    }
+   }
+  },
+  {
+   "address": "C5:3.ACC",
+   "value": {
+    "int": 7
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab0205870302ffff0700"
+    }
+   }
+  },
+  {
+   "address": "C5:0.CU",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020587000000800080"
+    }
+   }
+  },
+  {
+   "address": "C5:0.UA",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020587000000040004"
+    }
+   }
+  },
+  {
+   "address": "C5:0.PRE",
+   "value": {
+    "int": 40000
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for C5:0.PRE from 40000 - Error packing 40000 as INT"
+   }
+  },
+  {
+   "address": "I:0",
+   "value": {
+    "int": 3
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab0201830000ffff0300"
+    }
+   }
+  },
+  {
+   "address": "I:0/3",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020183000008000800"
+    }
+   }
+  },
+  {
+   "address": "O:0.1",
+   "value": {
+    "int": 5
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab0200820001ffff0500"
+    }
+   }
+  },
+  {
+   "address": "O:0.1/2",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020082000104000400"
+    }
+   }
+  },
+  {
+   "address": "O:0{2}",
+   "value": {
+    "list": [
+     {
+      "int": 1
+     },
+     {
+      "int": 2
+     }
+    ]
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab0400820000ffff01000200"
+    }
+   }
+  },
+  {
+   "address": "S:1/5",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020284010020002000"
+    }
+   }
+  },
+  {
+   "address": "S:3",
+   "value": {
+    "int": 9
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab0202840300ffff0900"
+    }
+   }
+  },
+  {
+   "address": "ST9:0",
+   "value": {
+    "str": "hello"
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab54098d0000ffff050065686c6c006f00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "address": "ST9:0",
+   "value": {
+    "str": ""
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab54098d0000ffff000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "address": "ST9:0",
+   "value": null,
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab54098d0000ffff000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "address": "ST9:0",
+   "value": {
+    "int": 5
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for ST9:0 from 5 - Error packing 5 as PCCC_STRING"
+   }
+  },
+  {
+   "address": "ST9:0",
+   "value": {
+    "int": 0
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab54098d0000ffff000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "address": "ST9:0",
+   "value": {
+    "str": "€"
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for ST9:0 from € - Error packing '€' as PCCC_STRING"
+   }
+  },
+  {
+   "address": "ST9:0{2}",
+   "value": {
+    "list": [
+     {
+      "str": "abc"
+     },
+     {
+      "str": "de"
+     }
+    ]
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100aba8098d0000ffff030062610063000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000020065640000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "address": "ST9:0{2}",
+   "value": {
+    "list": [
+     {
+      "str": "abc"
+     }
+    ]
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Insufficient data for requested elements, expected 2 and got 1"
+   }
+  },
+  {
+   "address": "ST9:0{2}",
+   "value": {
+    "str": "abc"
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100aba8098d0000ffff010000610000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000620000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "address": "A10:0",
+   "value": {
+    "str": "AB"
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020a8e0000ffff4241"
+    }
+   }
+  },
+  {
+   "address": "A10:0",
+   "value": {
+    "str": "A"
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020a8e0000ffff2041"
+    }
+   }
+  },
+  {
+   "address": "A10:0",
+   "value": {
+    "str": "ABC"
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020a8e0000ffff4241"
+    }
+   }
+  },
+  {
+   "address": "A10:0",
+   "value": {
+    "str": ""
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020a8e0000ffff2020"
+    }
+   }
+  },
+  {
+   "address": "A10:0",
+   "value": null,
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020a8e0000ffff2020"
+    }
+   }
+  },
+  {
+   "address": "A10:0",
+   "value": {
+    "int": 3
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for A10:0 from 3 - Error packing 3 as PCCC_ASCII"
+   }
+  },
+  {
+   "address": "A10:0{2}",
+   "value": {
+    "list": [
+     {
+      "str": "ab"
+     },
+     {
+      "str": "cd"
+     }
+    ]
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab040a8e0000ffff62616463"
+    }
+   }
+  },
+  {
+   "address": "A10:0{2}",
+   "value": {
+    "str": "abcd"
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab040a8e0000ffff20612062"
+    }
+   }
+  },
+  {
+   "address": "A10:0{2}",
+   "value": {
+    "str": "a"
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Insufficient data for requested elements, expected 2 and got 1"
+   }
+  },
+  {
+   "address": "ST9:0{2}",
+   "value": {
+    "str": "xy"
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100aba8098d0000ffff010000780000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000790000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "address": "N7:0{2}",
+   "value": {
+    "list": [
+     {
+      "bool": true
+     },
+     {
+      "bool": false
+     }
+    ]
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for N7:0 from [True, False] - Error packing True as INT"
+   }
+  },
+  {
+   "address": "N7:0{2}",
+   "value": {
+    "list": []
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Insufficient data for requested elements, expected 2 and got 0"
+   }
+  },
+  {
+   "address": "N7:0{2}",
+   "value": {
+    "str": "1"
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Insufficient data for requested elements, expected 2 and got 1"
+   }
+  },
+  {
+   "address": "N7:0{2}",
+   "value": {
+    "str": "12"
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for N7:0 from 12 - Error packing '1' as INT"
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "value": {
+    "float": -0.0
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020789000020000000"
+    }
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "value": {
+    "str": "0"
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020789000020002000"
+    }
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "value": {
+    "list": [
+     {
+      "list": []
+     }
+    ]
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020789000020002000"
+    }
+   }
+  },
+  {
+   "address": "B3/0",
+   "value": {
+    "str": "0"
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020385000001000100"
+    }
+   }
+  },
+  {
+   "address": "T4:0.PRE",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for T4:0.PRE from True - Error packing True as INT"
+   }
+  },
+  {
+   "address": "T4:0.ACC",
+   "value": {
+    "int": -1
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab0204860002ffffffff"
+    }
+   }
+  },
+  {
+   "address": "T4:0.ACC",
+   "value": {
+    "int": 40000
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for T4:0.ACC from 40000 - Error packing 40000 as INT"
+   }
+  },
+  {
+   "address": "T4:0.ACC",
+   "value": {
+    "str": "x"
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for T4:0.ACC from x - Error packing 'x' as INT"
+   }
+  },
+  {
+   "address": "T4:0.DN",
+   "value": {
+    "int": 0
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020486000000200000"
+    }
+   }
+  },
+  {
+   "address": "I:0.1/3",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020183000108000800"
+    }
+   }
+  },
+  {
+   "address": "O:0.300",
+   "value": {
+    "int": 1
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab02008200ff2c01ffff0100"
+    }
+   }
+  },
+  {
+   "address": "B3/4080",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020385ffff000001000100"
+    }
+   }
+  },
+  {
+   "address": "L9:0/31",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to write() - L9:0/31"
+   }
+  },
+  {
+   "address": "S:1/5{0}",
+   "value": {
+    "bool": true
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020284010020002000"
+    }
+   }
+  },
+  {
+   "address": "N7:0{0}",
+   "value": {
+    "list": [
+     {
+      "int": 1
+     },
+     {
+      "int": 2
+     }
+    ]
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for N7:0 from [1, 2] - Error packing [1, 2] as INT"
+   }
+  },
+  {
+   "address": "F8:0",
+   "value": {
+    "float": -0.0
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab04088a0000ffff00000080"
+    }
+   }
+  },
+  {
+   "address": "F8:0",
+   "value": {
+    "float": "inf"
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab04088a0000ffff0000807f"
+    }
+   }
+  },
+  {
+   "address": "L9:0",
+   "value": {
+    "int": -2147483648
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab0409910000ffff00000080"
+    }
+   }
+  },
+  {
+   "address": "L9:0",
+   "value": {
+    "int": -2147483649
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for L9:0 from -2147483649 - Error packing -2147483649 as DINT"
+   }
+  },
+  {
+   "address": "A10:0",
+   "value": {
+    "str": "€"
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Failed to create a writeable value for A10:0 from € - Error packing '€' as PCCC_ASCII"
+   }
+  },
+  {
+   "address": "A10:0",
+   "value": {
+    "str": "éèx"
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab020a8e0000ffffe8e9"
+    }
+   }
+  },
+  {
+   "address": "ST9:0",
+   "value": {
+    "str": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab54098d0000ffff52007a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a"
+    }
+   }
+  },
+  {
+   "address": "N7:0/3{2}",
+   "value": {
+    "list": [
+     {
+      "int": 1
+     },
+     {
+      "int": 1
+     }
+    ]
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to write() - N7:0/3{2}"
+   }
+  },
+  {
+   "address": "X7:0",
+   "value": {
+    "int": 1
+   },
+   "result": {
+    "err": "RequestError",
+    "msg": "Error parsing the tag passed to write() - X7:0"
+   }
+  },
+  {
+   "address": "N7:0{200}",
+   "value": {
+    "list": [
+     {
+      "int": 0
+     },
+     {
+      "int": 1
+     },
+     {
+      "int": 2
+     },
+     {
+      "int": 3
+     },
+     {
+      "int": 4
+     },
+     {
+      "int": 5
+     },
+     {
+      "int": 6
+     },
+     {
+      "int": 7
+     },
+     {
+      "int": 8
+     },
+     {
+      "int": 9
+     },
+     {
+      "int": 10
+     },
+     {
+      "int": 11
+     },
+     {
+      "int": 12
+     },
+     {
+      "int": 13
+     },
+     {
+      "int": 14
+     },
+     {
+      "int": 15
+     },
+     {
+      "int": 16
+     },
+     {
+      "int": 17
+     },
+     {
+      "int": 18
+     },
+     {
+      "int": 19
+     },
+     {
+      "int": 20
+     },
+     {
+      "int": 21
+     },
+     {
+      "int": 22
+     },
+     {
+      "int": 23
+     },
+     {
+      "int": 24
+     },
+     {
+      "int": 25
+     },
+     {
+      "int": 26
+     },
+     {
+      "int": 27
+     },
+     {
+      "int": 28
+     },
+     {
+      "int": 29
+     },
+     {
+      "int": 30
+     },
+     {
+      "int": 31
+     },
+     {
+      "int": 32
+     },
+     {
+      "int": 33
+     },
+     {
+      "int": 34
+     },
+     {
+      "int": 35
+     },
+     {
+      "int": 36
+     },
+     {
+      "int": 37
+     },
+     {
+      "int": 38
+     },
+     {
+      "int": 39
+     },
+     {
+      "int": 40
+     },
+     {
+      "int": 41
+     },
+     {
+      "int": 42
+     },
+     {
+      "int": 43
+     },
+     {
+      "int": 44
+     },
+     {
+      "int": 45
+     },
+     {
+      "int": 46
+     },
+     {
+      "int": 47
+     },
+     {
+      "int": 48
+     },
+     {
+      "int": 49
+     },
+     {
+      "int": 50
+     },
+     {
+      "int": 51
+     },
+     {
+      "int": 52
+     },
+     {
+      "int": 53
+     },
+     {
+      "int": 54
+     },
+     {
+      "int": 55
+     },
+     {
+      "int": 56
+     },
+     {
+      "int": 57
+     },
+     {
+      "int": 58
+     },
+     {
+      "int": 59
+     },
+     {
+      "int": 60
+     },
+     {
+      "int": 61
+     },
+     {
+      "int": 62
+     },
+     {
+      "int": 63
+     },
+     {
+      "int": 64
+     },
+     {
+      "int": 65
+     },
+     {
+      "int": 66
+     },
+     {
+      "int": 67
+     },
+     {
+      "int": 68
+     },
+     {
+      "int": 69
+     },
+     {
+      "int": 70
+     },
+     {
+      "int": 71
+     },
+     {
+      "int": 72
+     },
+     {
+      "int": 73
+     },
+     {
+      "int": 74
+     },
+     {
+      "int": 75
+     },
+     {
+      "int": 76
+     },
+     {
+      "int": 77
+     },
+     {
+      "int": 78
+     },
+     {
+      "int": 79
+     },
+     {
+      "int": 80
+     },
+     {
+      "int": 81
+     },
+     {
+      "int": 82
+     },
+     {
+      "int": 83
+     },
+     {
+      "int": 84
+     },
+     {
+      "int": 85
+     },
+     {
+      "int": 86
+     },
+     {
+      "int": 87
+     },
+     {
+      "int": 88
+     },
+     {
+      "int": 89
+     },
+     {
+      "int": 90
+     },
+     {
+      "int": 91
+     },
+     {
+      "int": 92
+     },
+     {
+      "int": 93
+     },
+     {
+      "int": 94
+     },
+     {
+      "int": 95
+     },
+     {
+      "int": 96
+     },
+     {
+      "int": 97
+     },
+     {
+      "int": 98
+     },
+     {
+      "int": 99
+     },
+     {
+      "int": 100
+     },
+     {
+      "int": 101
+     },
+     {
+      "int": 102
+     },
+     {
+      "int": 103
+     },
+     {
+      "int": 104
+     },
+     {
+      "int": 105
+     },
+     {
+      "int": 106
+     },
+     {
+      "int": 107
+     },
+     {
+      "int": 108
+     },
+     {
+      "int": 109
+     },
+     {
+      "int": 110
+     },
+     {
+      "int": 111
+     },
+     {
+      "int": 112
+     },
+     {
+      "int": 113
+     },
+     {
+      "int": 114
+     },
+     {
+      "int": 115
+     },
+     {
+      "int": 116
+     },
+     {
+      "int": 117
+     },
+     {
+      "int": 118
+     },
+     {
+      "int": 119
+     },
+     {
+      "int": 120
+     },
+     {
+      "int": 121
+     },
+     {
+      "int": 122
+     },
+     {
+      "int": 123
+     },
+     {
+      "int": 124
+     },
+     {
+      "int": 125
+     },
+     {
+      "int": 126
+     },
+     {
+      "int": 127
+     },
+     {
+      "int": 128
+     },
+     {
+      "int": 129
+     },
+     {
+      "int": 130
+     },
+     {
+      "int": 131
+     },
+     {
+      "int": 132
+     },
+     {
+      "int": 133
+     },
+     {
+      "int": 134
+     },
+     {
+      "int": 135
+     },
+     {
+      "int": 136
+     },
+     {
+      "int": 137
+     },
+     {
+      "int": 138
+     },
+     {
+      "int": 139
+     },
+     {
+      "int": 140
+     },
+     {
+      "int": 141
+     },
+     {
+      "int": 142
+     },
+     {
+      "int": 143
+     },
+     {
+      "int": 144
+     },
+     {
+      "int": 145
+     },
+     {
+      "int": 146
+     },
+     {
+      "int": 147
+     },
+     {
+      "int": 148
+     },
+     {
+      "int": 149
+     },
+     {
+      "int": 150
+     },
+     {
+      "int": 151
+     },
+     {
+      "int": 152
+     },
+     {
+      "int": 153
+     },
+     {
+      "int": 154
+     },
+     {
+      "int": 155
+     },
+     {
+      "int": 156
+     },
+     {
+      "int": 157
+     },
+     {
+      "int": 158
+     },
+     {
+      "int": 159
+     },
+     {
+      "int": 160
+     },
+     {
+      "int": 161
+     },
+     {
+      "int": 162
+     },
+     {
+      "int": 163
+     },
+     {
+      "int": 164
+     },
+     {
+      "int": 165
+     },
+     {
+      "int": 166
+     },
+     {
+      "int": 167
+     },
+     {
+      "int": 168
+     },
+     {
+      "int": 169
+     },
+     {
+      "int": 170
+     },
+     {
+      "int": 171
+     },
+     {
+      "int": 172
+     },
+     {
+      "int": 173
+     },
+     {
+      "int": 174
+     },
+     {
+      "int": 175
+     },
+     {
+      "int": 176
+     },
+     {
+      "int": 177
+     },
+     {
+      "int": 178
+     },
+     {
+      "int": 179
+     },
+     {
+      "int": 180
+     },
+     {
+      "int": 181
+     },
+     {
+      "int": 182
+     },
+     {
+      "int": 183
+     },
+     {
+      "int": 184
+     },
+     {
+      "int": 185
+     },
+     {
+      "int": 186
+     },
+     {
+      "int": 187
+     },
+     {
+      "int": 188
+     },
+     {
+      "int": 189
+     },
+     {
+      "int": 190
+     },
+     {
+      "int": 191
+     },
+     {
+      "int": 192
+     },
+     {
+      "int": 193
+     },
+     {
+      "int": 194
+     },
+     {
+      "int": 195
+     },
+     {
+      "int": 196
+     },
+     {
+      "int": 197
+     },
+     {
+      "int": 198
+     },
+     {
+      "int": 199
+     }
+    ]
+   },
+   "result": {
+    "err": "DataError",
+    "msg": "Error packing 400 as USINT"
+   }
+  },
+  {
+   "address": "N7:0{127}",
+   "value": {
+    "list": [
+     {
+      "int": 0
+     },
+     {
+      "int": 1
+     },
+     {
+      "int": 2
+     },
+     {
+      "int": 3
+     },
+     {
+      "int": 4
+     },
+     {
+      "int": 5
+     },
+     {
+      "int": 6
+     },
+     {
+      "int": 7
+     },
+     {
+      "int": 8
+     },
+     {
+      "int": 9
+     },
+     {
+      "int": 10
+     },
+     {
+      "int": 11
+     },
+     {
+      "int": 12
+     },
+     {
+      "int": 13
+     },
+     {
+      "int": 14
+     },
+     {
+      "int": 15
+     },
+     {
+      "int": 16
+     },
+     {
+      "int": 17
+     },
+     {
+      "int": 18
+     },
+     {
+      "int": 19
+     },
+     {
+      "int": 20
+     },
+     {
+      "int": 21
+     },
+     {
+      "int": 22
+     },
+     {
+      "int": 23
+     },
+     {
+      "int": 24
+     },
+     {
+      "int": 25
+     },
+     {
+      "int": 26
+     },
+     {
+      "int": 27
+     },
+     {
+      "int": 28
+     },
+     {
+      "int": 29
+     },
+     {
+      "int": 30
+     },
+     {
+      "int": 31
+     },
+     {
+      "int": 32
+     },
+     {
+      "int": 33
+     },
+     {
+      "int": 34
+     },
+     {
+      "int": 35
+     },
+     {
+      "int": 36
+     },
+     {
+      "int": 37
+     },
+     {
+      "int": 38
+     },
+     {
+      "int": 39
+     },
+     {
+      "int": 40
+     },
+     {
+      "int": 41
+     },
+     {
+      "int": 42
+     },
+     {
+      "int": 43
+     },
+     {
+      "int": 44
+     },
+     {
+      "int": 45
+     },
+     {
+      "int": 46
+     },
+     {
+      "int": 47
+     },
+     {
+      "int": 48
+     },
+     {
+      "int": 49
+     },
+     {
+      "int": 50
+     },
+     {
+      "int": 51
+     },
+     {
+      "int": 52
+     },
+     {
+      "int": 53
+     },
+     {
+      "int": 54
+     },
+     {
+      "int": 55
+     },
+     {
+      "int": 56
+     },
+     {
+      "int": 57
+     },
+     {
+      "int": 58
+     },
+     {
+      "int": 59
+     },
+     {
+      "int": 60
+     },
+     {
+      "int": 61
+     },
+     {
+      "int": 62
+     },
+     {
+      "int": 63
+     },
+     {
+      "int": 64
+     },
+     {
+      "int": 65
+     },
+     {
+      "int": 66
+     },
+     {
+      "int": 67
+     },
+     {
+      "int": 68
+     },
+     {
+      "int": 69
+     },
+     {
+      "int": 70
+     },
+     {
+      "int": 71
+     },
+     {
+      "int": 72
+     },
+     {
+      "int": 73
+     },
+     {
+      "int": 74
+     },
+     {
+      "int": 75
+     },
+     {
+      "int": 76
+     },
+     {
+      "int": 77
+     },
+     {
+      "int": 78
+     },
+     {
+      "int": 79
+     },
+     {
+      "int": 80
+     },
+     {
+      "int": 81
+     },
+     {
+      "int": 82
+     },
+     {
+      "int": 83
+     },
+     {
+      "int": 84
+     },
+     {
+      "int": 85
+     },
+     {
+      "int": 86
+     },
+     {
+      "int": 87
+     },
+     {
+      "int": 88
+     },
+     {
+      "int": 89
+     },
+     {
+      "int": 90
+     },
+     {
+      "int": 91
+     },
+     {
+      "int": 92
+     },
+     {
+      "int": 93
+     },
+     {
+      "int": 94
+     },
+     {
+      "int": 95
+     },
+     {
+      "int": 96
+     },
+     {
+      "int": 97
+     },
+     {
+      "int": 98
+     },
+     {
+      "int": 99
+     },
+     {
+      "int": 100
+     },
+     {
+      "int": 101
+     },
+     {
+      "int": 102
+     },
+     {
+      "int": 103
+     },
+     {
+      "int": 104
+     },
+     {
+      "int": 105
+     },
+     {
+      "int": 106
+     },
+     {
+      "int": 107
+     },
+     {
+      "int": 108
+     },
+     {
+      "int": 109
+     },
+     {
+      "int": 110
+     },
+     {
+      "int": 111
+     },
+     {
+      "int": 112
+     },
+     {
+      "int": 113
+     },
+     {
+      "int": 114
+     },
+     {
+      "int": 115
+     },
+     {
+      "int": 116
+     },
+     {
+      "int": 117
+     },
+     {
+      "int": 118
+     },
+     {
+      "int": 119
+     },
+     {
+      "int": 120
+     },
+     {
+      "int": 121
+     },
+     {
+      "int": 122
+     },
+     {
+      "int": 123
+     },
+     {
+      "int": 124
+     },
+     {
+      "int": 125
+     },
+     {
+      "int": 126
+     }
+    ]
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100abfe07890000ffff00000100020003000400050006000700080009000a000b000c000d000e000f0010001100120013001400150016001700180019001a001b001c001d001e001f0020002100220023002400250026002700280029002a002b002c002d002e002f0030003100320033003400350036003700380039003a003b003c003d003e003f0040004100420043004400450046004700480049004a004b004c004d004e004f0050005100520053005400550056005700580059005a005b005c005d005e005f0060006100620063006400650066006700680069006a006b006c006d006e006f0070007100720073007400750076007700780079007a007b007c007d007e00"
+    }
+   }
+  },
+  {
+   "address": "N7:0{128}",
+   "value": {
+    "list": [
+     {
+      "int": 0
+     },
+     {
+      "int": 1
+     },
+     {
+      "int": 2
+     },
+     {
+      "int": 3
+     },
+     {
+      "int": 4
+     },
+     {
+      "int": 5
+     },
+     {
+      "int": 6
+     },
+     {
+      "int": 7
+     },
+     {
+      "int": 8
+     },
+     {
+      "int": 9
+     },
+     {
+      "int": 10
+     },
+     {
+      "int": 11
+     },
+     {
+      "int": 12
+     },
+     {
+      "int": 13
+     },
+     {
+      "int": 14
+     },
+     {
+      "int": 15
+     },
+     {
+      "int": 16
+     },
+     {
+      "int": 17
+     },
+     {
+      "int": 18
+     },
+     {
+      "int": 19
+     },
+     {
+      "int": 20
+     },
+     {
+      "int": 21
+     },
+     {
+      "int": 22
+     },
+     {
+      "int": 23
+     },
+     {
+      "int": 24
+     },
+     {
+      "int": 25
+     },
+     {
+      "int": 26
+     },
+     {
+      "int": 27
+     },
+     {
+      "int": 28
+     },
+     {
+      "int": 29
+     },
+     {
+      "int": 30
+     },
+     {
+      "int": 31
+     },
+     {
+      "int": 32
+     },
+     {
+      "int": 33
+     },
+     {
+      "int": 34
+     },
+     {
+      "int": 35
+     },
+     {
+      "int": 36
+     },
+     {
+      "int": 37
+     },
+     {
+      "int": 38
+     },
+     {
+      "int": 39
+     },
+     {
+      "int": 40
+     },
+     {
+      "int": 41
+     },
+     {
+      "int": 42
+     },
+     {
+      "int": 43
+     },
+     {
+      "int": 44
+     },
+     {
+      "int": 45
+     },
+     {
+      "int": 46
+     },
+     {
+      "int": 47
+     },
+     {
+      "int": 48
+     },
+     {
+      "int": 49
+     },
+     {
+      "int": 50
+     },
+     {
+      "int": 51
+     },
+     {
+      "int": 52
+     },
+     {
+      "int": 53
+     },
+     {
+      "int": 54
+     },
+     {
+      "int": 55
+     },
+     {
+      "int": 56
+     },
+     {
+      "int": 57
+     },
+     {
+      "int": 58
+     },
+     {
+      "int": 59
+     },
+     {
+      "int": 60
+     },
+     {
+      "int": 61
+     },
+     {
+      "int": 62
+     },
+     {
+      "int": 63
+     },
+     {
+      "int": 64
+     },
+     {
+      "int": 65
+     },
+     {
+      "int": 66
+     },
+     {
+      "int": 67
+     },
+     {
+      "int": 68
+     },
+     {
+      "int": 69
+     },
+     {
+      "int": 70
+     },
+     {
+      "int": 71
+     },
+     {
+      "int": 72
+     },
+     {
+      "int": 73
+     },
+     {
+      "int": 74
+     },
+     {
+      "int": 75
+     },
+     {
+      "int": 76
+     },
+     {
+      "int": 77
+     },
+     {
+      "int": 78
+     },
+     {
+      "int": 79
+     },
+     {
+      "int": 80
+     },
+     {
+      "int": 81
+     },
+     {
+      "int": 82
+     },
+     {
+      "int": 83
+     },
+     {
+      "int": 84
+     },
+     {
+      "int": 85
+     },
+     {
+      "int": 86
+     },
+     {
+      "int": 87
+     },
+     {
+      "int": 88
+     },
+     {
+      "int": 89
+     },
+     {
+      "int": 90
+     },
+     {
+      "int": 91
+     },
+     {
+      "int": 92
+     },
+     {
+      "int": 93
+     },
+     {
+      "int": 94
+     },
+     {
+      "int": 95
+     },
+     {
+      "int": 96
+     },
+     {
+      "int": 97
+     },
+     {
+      "int": 98
+     },
+     {
+      "int": 99
+     },
+     {
+      "int": 100
+     },
+     {
+      "int": 101
+     },
+     {
+      "int": 102
+     },
+     {
+      "int": 103
+     },
+     {
+      "int": 104
+     },
+     {
+      "int": 105
+     },
+     {
+      "int": 106
+     },
+     {
+      "int": 107
+     },
+     {
+      "int": 108
+     },
+     {
+      "int": 109
+     },
+     {
+      "int": 110
+     },
+     {
+      "int": 111
+     },
+     {
+      "int": 112
+     },
+     {
+      "int": 113
+     },
+     {
+      "int": 114
+     },
+     {
+      "int": 115
+     },
+     {
+      "int": 116
+     },
+     {
+      "int": 117
+     },
+     {
+      "int": 118
+     },
+     {
+      "int": 119
+     },
+     {
+      "int": 120
+     },
+     {
+      "int": 121
+     },
+     {
+      "int": 122
+     },
+     {
+      "int": 123
+     },
+     {
+      "int": 124
+     },
+     {
+      "int": 125
+     },
+     {
+      "int": 126
+     },
+     {
+      "int": 127
+     }
+    ]
+   },
+   "result": {
+    "err": "DataError",
+    "msg": "Error packing 256 as USINT"
+   }
+  },
+  {
+   "address": "I:0.300",
+   "value": {
+    "int": 1
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab02018300ff2c01ffff0100"
+    }
+   }
+  },
+  {
+   "address": "N7:0",
+   "value": {
+    "bytes": "01"
+   },
+   "result": {
+    "err": "DataError",
+    "msg": "Error packing -1 as USINT"
+   }
+  },
+  {
+   "address": "N7:0",
+   "value": {
+    "bytes": "0102"
+   },
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100ab00078900000102"
+    }
+   }
+  }
+ ],
+ "read_reply": [
+  {
+   "address": "N7:0",
+   "data": "0100",
+   "result": {
+    "ok": {
+     "int": 1
+    }
+   }
+  },
+  {
+   "address": "N7:0",
+   "data": "ffff",
+   "result": {
+    "ok": {
+     "int": -1
+    }
+   }
+  },
+  {
+   "address": "N7:0",
+   "data": "010002000300",
+   "result": {
+    "ok": {
+     "list": [
+      {
+       "int": 1
+      },
+      {
+       "int": 2
+      },
+      {
+       "int": 3
+      }
+     ]
+    }
+   }
+  },
+  {
+   "address": "N7:0",
+   "data": "",
+   "result": {
+    "err": "ResponseError",
+    "msg": "Failed parsing tag read reply"
+   }
+  },
+  {
+   "address": "N7:0",
+   "data": "01",
+   "result": {
+    "err": "ResponseError",
+    "msg": "Failed parsing tag read reply"
+   }
+  },
+  {
+   "address": "N7:0",
+   "data": "010002",
+   "result": {
+    "err": "ResponseError",
+    "msg": "Failed parsing tag read reply"
+   }
+  },
+  {
+   "address": "N7:0{3}",
+   "data": "010002000300",
+   "result": {
+    "ok": {
+     "list": [
+      {
+       "int": 1
+      },
+      {
+       "int": 2
+      },
+      {
+       "int": 3
+      }
+     ]
+    }
+   }
+  },
+  {
+   "address": "N7:0{3}",
+   "data": "0100",
+   "result": {
+    "ok": {
+     "int": 1
+    }
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "data": "2000",
+   "result": {
+    "ok": {
+     "bool": true
+    }
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "data": "dfff",
+   "result": {
+    "ok": {
+     "bool": false
+    }
+   }
+  },
+  {
+   "address": "N7:0/15",
+   "data": "0080",
+   "result": {
+    "ok": {
+     "bool": true
+    }
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "data": "",
+   "result": {
+    "err": "ResponseError",
+    "msg": "Failed parsing tag read reply"
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "data": "20",
+   "result": {
+    "err": "ResponseError",
+    "msg": "Failed parsing tag read reply"
+   }
+  },
+  {
+   "address": "N7:0/5",
+   "data": "20000000",
+   "result": {
+    "ok": {
+     "bool": true
+    }
+   }
+  },
+  {
+   "address": "B3/17",
+   "data": "0200",
+   "result": {
+    "ok": {
+     "bool": true
+    }
+   }
+  },
+  {
+   "address": "B3/17",
+   "data": "0000",
+   "result": {
+    "ok": {
+     "bool": false
+    }
+   }
+  },
+  {
+   "address": "B3/4095",
+   "data": "0080",
+   "result": {
+    "ok": {
+     "bool": true
+    }
+   }
+  },
+  {
+   "address": "F8:0",
+   "data": "0000c03f",
+   "result": {
+    "ok": {
+     "float": 1.5
+    }
+   }
+  },
+  {
+   "address": "F8:0{2}",
+   "data": "0000c03f000080bf",
+   "result": {
+    "ok": {
+     "list": [
+      {
+       "float": 1.5
+      },
+      {
+       "float": -1.0
+      }
+     ]
+    }
+   }
+  },
+  {
+   "address": "F8:0",
+   "data": "0000c0",
+   "result": {
+    "err": "ResponseError",
+    "msg": "Failed parsing tag read reply"
+   }
+  },
+  {
+   "address": "F8:0/3",
+   "data": "08000000",
+   "result": {
+    "err": "ResponseError",
+    "msg": "Failed parsing tag read reply"
+   }
+  },
+  {
+   "address": "L9:0",
+   "data": "70110100",
+   "result": {
+    "ok": {
+     "int": 70000
+    }
+   }
+  },
+  {
+   "address": "L9:0/16",
+   "data": "00000100",
+   "result": {
+    "err": "ResponseError",
+    "msg": "Failed parsing tag read reply"
+   }
+  },
+  {
+   "address": "R6:0",
+   "data": "010002000300",
+   "result": {
+    "err": "ResponseError",
+    "msg": "Failed parsing tag read reply"
+   }
+  },
+  {
+   "address": "R6:0",
+   "data": "010002000300040005000600",
+   "result": {
+    "err": "ResponseError",
+    "msg": "Failed parsing tag read reply"
+   }
+  },
+  {
+   "address": "T4:0.ACC",
+   "data": "00a0e8030700",
+   "result": {
+    "ok": {
+     "int": 7
+    }
+   }
+  },
+  {
+   "address": "T4:0.PRE",
+   "data": "00a0e8030700",
+   "result": {
+    "ok": {
+     "int": 1000
+    }
+   }
+  },
+  {
+   "address": "T4:0.DN",
+   "data": "00a0e8030700",
+   "result": {
+    "ok": {
+     "bool": true
+    }
+   }
+  },
+  {
+   "address": "T4:0.TT",
+   "data": "00a0e8030700",
+   "result": {
+    "ok": {
+     "bool": false
+    }
+   }
+  },
+  {
+   "address": "T4:0.EN",
+   "data": "00a0e8030700",
+   "result": {
+    "ok": {
+     "bool": true
+    }
+   }
+  },
+  {
+   "address": "T4:0.ACC",
+   "data": "00a0e803",
+   "result": {
+    "err": "ResponseError",
+    "msg": "Failed parsing tag read reply"
+   }
+  },
+  {
+   "address": "T4:0.PRE",
+   "data": "00a0",
+   "result": {
+    "err": "ResponseError",
+    "msg": "Failed parsing tag read reply"
+   }
+  },
+  {
+   "address": "T4:0.ACC",
+   "data": "00a0e80307",
+   "result": {
+    "err": "ResponseError",
+    "msg": "Failed parsing tag read reply"
+   }
+  },
+  {
+   "address": "C5:0.CU",
+   "data": "008000000000",
+   "result": {
+    "ok": {
+     "bool": true
+    }
+   }
+  },
+  {
+   "address": "C5:0.UA",
+   "data": "000400000000",
+   "result": {
+    "ok": {
+     "bool": true
+    }
+   }
+  },
+  {
+   "address": "T4:0",
+   "data": "00a0e8030700",
+   "result": {
+    "err": "ResponseError",
+    "msg": "Failed parsing tag read reply"
+   }
+  },
+  {
+   "address": "T4:0{2}",
+   "data": "00a0e8030700010002000300",
+   "result": {
+    "err": "ResponseError",
+    "msg": "Failed parsing tag read reply"
+   }
+  },
+  {
+   "address": "I:0/3",
+   "data": "0800",
+   "result": {
+    "ok": {
+     "bool": true
+    }
+   }
+  },
+  {
+   "address": "O:0.1",
+   "data": "0500",
+   "result": {
+    "ok": {
+     "int": 5
+    }
+   }
+  },
+  {
+   "address": "S:1/5",
+   "data": "2000",
+   "result": {
+    "ok": {
+     "bool": true
+    }
+   }
+  },
+  {
+   "address": "S:3",
+   "data": "0900",
+   "result": {
+    "ok": {
+     "int": 9
+    }
+   }
+  },
+  {
+   "address": "ST9:0",
+   "data": "050065686c6c006f00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "result": {
+    "ok": {
+     "str": "hello"
+    }
+   }
+  },
+  {
+   "address": "ST9:0",
+   "data": "050065686c6c006f00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "result": {
+    "ok": {
+     "str": "hello"
+    }
+   }
+  },
+  {
+   "address": "ST9:0{2}",
+   "data": "030062610063000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000020065640000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "result": {
+    "ok": {
+     "list": [
+      {
+       "str": "abc"
+      },
+      {
+       "str": "de"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "address": "ST9:0",
+   "data": "030042410043",
+   "result": {
+    "ok": {
+     "str": "ABC"
+    }
+   }
+  },
+  {
+   "address": "ST9:0",
+   "data": "03",
+   "result": {
+    "err": "ResponseError",
+    "msg": "Failed parsing tag read reply"
+   }
+  },
+  {
+   "address": "ST9:0",
+   "data": "02006261000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001",
+   "result": {
+    "err": "ResponseError",
+    "msg": "Failed parsing tag read reply"
+   }
+  },
+  {
+   "address": "A10:0",
+   "data": "4241",
+   "result": {
+    "ok": {
+     "str": "AB"
+    }
+   }
+  },
+  {
+   "address": "A10:0{2}",
+   "data": "42414443",
+   "result": {
+    "ok": {
+     "list": [
+      {
+       "str": "AB"
+      },
+      {
+       "str": "CD"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "address": "A10:0",
+   "data": "42",
+   "result": {
+    "ok": {
+     "str": "\u0000B"
+    }
+   }
+  },
+  {
+   "address": "A10:0",
+   "data": "424143",
+   "result": {
+    "ok": {
+     "list": [
+      {
+       "str": "AB"
+      },
+      {
+       "str": "\u0000C"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "address": "A10:0",
+   "data": "e900",
+   "result": {
+    "ok": {
+     "str": "\u0000é"
+    }
+   }
+  }
+ ],
+ "request_status": [
+  {
+   "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "result": "Unknown Status"
+  },
+  {
+   "raw": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "result": null
+  },
+  {
+   "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "result": null
+  },
+  {
+   "raw": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010",
+   "result": "Illegal Command or Format, Address may not exist or not enough elements in data file"
+  },
+  {
+   "raw": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000007",
+   "result": "Illegal Command or Format, Address may not exist or not enough elements in data file"
+  },
+  {
+   "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000f00000",
+   "result": "Error code in EXT STS Byte"
+  },
+  {
+   "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000f0000007",
+   "result": "Error code in EXT STS Byte (EXT STS 0x07)"
+  },
+  {
+   "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000f000000708",
+   "result": "Error code in EXT STS Byte (EXT STS 0x07)"
+  },
+  {
+   "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000550000",
+   "result": "Unknown Status (0x55)"
+  },
+  {
+   "raw": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001",
+   "result": "Unknown Status (0x01)"
+  },
+  {
+   "raw": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000090",
+   "result": "Remote node cannot buffer command"
+  },
+  {
+   "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ff",
+   "result": "Unknown Status (0xff)"
+  },
+  {
+   "raw": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000020",
+   "result": "PLC Has a Problem and Will Not Communicate"
+  },
+  {
+   "raw": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000030",
+   "result": "Remote Node Host is Missing, Disconnected, or Shut Down"
+  },
+  {
+   "raw": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040",
+   "result": "Host Could Not Complete Function Due To Hardware Fault"
+  },
+  {
+   "raw": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000050",
+   "result": "Addressing problem or Memory Protect Rungs"
+  },
+  {
+   "raw": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000060",
+   "result": "Function not allows due to command protection selection"
+  },
+  {
+   "raw": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000070",
+   "result": "Processor is in Program mode"
+  },
+  {
+   "raw": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000080",
+   "result": "Compatibility mode file missing or communication zone problem"
+  }
+ ],
+ "processor_type_request": [
+  {
+   "request": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710600010003"
+    }
+   }
+  }
+ ],
+ "processor_type_reply": [
+  {
+   "raw": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000313736362d4c4543202020000000",
+   "result": {
+    "str": "1766-LEC"
+   }
+  },
+  {
+   "raw": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000313734372d4c3535322020",
+   "result": {
+    "str": "1747-L552"
+   }
+  },
+  {
+   "raw": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002020313736332d4c31361f",
+   "result": {
+    "str": "1763-L16"
+   }
+  },
+  {
+   "raw": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001c0b41c3a9fffe42202085",
+   "result": {
+    "str": "AéB"
+   }
+  },
+  {
+   "raw": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000fffe",
+   "result": null
+  },
+  {
+   "raw": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000202020",
+   "result": null
+  },
+  {
+   "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "result": null
+  },
+  {
+   "raw": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003137",
+   "result": {
+    "str": "17"
+   }
+  },
+  {
+   "raw": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000000000000313736362d4c4543202020",
+   "result": null
+  },
+  {
+   "raw": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e282ac3132333435363738e282",
+   "result": {
+    "str": "€12345678"
+   }
+  },
+  {
+   "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000041c2a0",
+   "result": {
+    "str": "A"
+   }
+  }
+ ],
+ "datalog_request": [
+  {
+   "queue": 0,
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401074d00a14ec3300f003000a26d00a50000"
+    }
+   }
+  },
+  {
+   "queue": 1,
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401074d00a14ec3300f003000a26d00a50100"
+    }
+   }
+  },
+  {
+   "queue": 5,
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401074d00a14ec3300f003000a26d00a50500"
+    }
+   }
+  },
+  {
+   "queue": 255,
+   "result": {
+    "ok": {
+     "bytes": "4b0220672401074d00a14ec3300f003000a26d00a5ff00"
+    }
+   }
+  },
+  {
+   "queue": 256,
+   "result": {
+    "err": "DataError",
+    "msg": "Error packing 256 as USINT"
+   }
+  },
+  {
+   "queue": -1,
+   "result": {
+    "err": "DataError",
+    "msg": "Error packing -1 as USINT"
+   }
+  }
+ ],
+ "datalog_reply": [
+  {
+   "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000616263",
+   "result": {
+    "str": "abc"
+   }
+  },
+  {
+   "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000fffe",
+   "result": {
+    "bytes": "fffe"
+   }
+  },
+  {
+   "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000636166c3a9",
+   "result": {
+    "str": "café"
+   }
+  },
+  {
+   "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "result": {
+    "str": ""
+   }
+  },
+  {
+   "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000616263",
+   "result": null
+  }
+ ],
+ "sys0_info": [
+  {
+   "plc_type": "1761-L16",
+   "result": {
+    "dict": [
+     [
+      "file_position",
+      {
+       "int": 93
+      }
+     ],
+     [
+      "row_size",
+      {
+       "int": 8
+      }
+     ],
+     [
+      "file_type",
+      {
+       "bytes": "00"
+      }
+     ],
+     [
+      "size_element",
+      {
+       "bytes": "23"
+      }
+     ],
+     [
+      "size_len",
+      {
+       "bytes": "04"
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "plc_type": "1763-L16",
+   "result": {
+    "dict": [
+     [
+      "file_position",
+      {
+       "int": 233
+      }
+     ],
+     [
+      "row_size",
+      {
+       "int": 10
+      }
+     ],
+     [
+      "file_type",
+      {
+       "bytes": "02"
+      }
+     ],
+     [
+      "size_element",
+      {
+       "bytes": "28"
+      }
+     ],
+     [
+      "size_len",
+      {
+       "bytes": "08"
+      }
+     ],
+     [
+      "size_const",
+      {
+       "int": 19968
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "plc_type": "1762-L24",
+   "result": {
+    "dict": [
+     [
+      "file_position",
+      {
+       "int": 233
+      }
+     ],
+     [
+      "row_size",
+      {
+       "int": 10
+      }
+     ],
+     [
+      "file_type",
+      {
+       "bytes": "02"
+      }
+     ],
+     [
+      "size_element",
+      {
+       "bytes": "28"
+      }
+     ],
+     [
+      "size_len",
+      {
+       "bytes": "08"
+      }
+     ],
+     [
+      "size_const",
+      {
+       "int": 19968
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "plc_type": "1764-LSP",
+   "result": {
+    "dict": [
+     [
+      "file_position",
+      {
+       "int": 233
+      }
+     ],
+     [
+      "row_size",
+      {
+       "int": 10
+      }
+     ],
+     [
+      "file_type",
+      {
+       "bytes": "02"
+      }
+     ],
+     [
+      "size_element",
+      {
+       "bytes": "28"
+      }
+     ],
+     [
+      "size_len",
+      {
+       "bytes": "08"
+      }
+     ],
+     [
+      "size_const",
+      {
+       "int": 19968
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "plc_type": "1766-LEC",
+   "result": {
+    "dict": [
+     [
+      "file_position",
+      {
+       "int": 233
+      }
+     ],
+     [
+      "row_size",
+      {
+       "int": 10
+      }
+     ],
+     [
+      "file_type",
+      {
+       "bytes": "03"
+      }
+     ],
+     [
+      "size_element",
+      {
+       "bytes": "2b"
+      }
+     ],
+     [
+      "size_len",
+      {
+       "bytes": "08"
+      }
+     ],
+     [
+      "size_const",
+      {
+       "int": 19968
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "plc_type": "1747-L552",
+   "result": {
+    "dict": [
+     [
+      "file_position",
+      {
+       "int": 79
+      }
+     ],
+     [
+      "row_size",
+      {
+       "int": 10
+      }
+     ],
+     [
+      "file_type",
+      {
+       "bytes": "01"
+      }
+     ],
+     [
+      "size_element",
+      {
+       "bytes": "23"
+      }
+     ],
+     [
+      "size_len",
+      {
+       "bytes": "04"
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "plc_type": "",
+   "result": {
+    "dict": [
+     [
+      "file_position",
+      {
+       "int": 79
+      }
+     ],
+     [
+      "row_size",
+      {
+       "int": 10
+      }
+     ],
+     [
+      "file_type",
+      {
+       "bytes": "01"
+      }
+     ],
+     [
+      "size_element",
+      {
+       "bytes": "23"
+      }
+     ],
+     [
+      "size_len",
+      {
+       "bytes": "04"
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "plc_type": "176",
+   "result": {
+    "dict": [
+     [
+      "file_position",
+      {
+       "int": 79
+      }
+     ],
+     [
+      "row_size",
+      {
+       "int": 10
+      }
+     ],
+     [
+      "file_type",
+      {
+       "bytes": "01"
+      }
+     ],
+     [
+      "size_element",
+      {
+       "bytes": "23"
+      }
+     ],
+     [
+      "size_len",
+      {
+       "bytes": "04"
+      }
+     ]
+    ]
+   }
+  },
+  {
+   "plc_type": "1766",
+   "result": {
+    "dict": [
+     [
+      "file_position",
+      {
+       "int": 233
+      }
+     ],
+     [
+      "row_size",
+      {
+       "int": 10
+      }
+     ],
+     [
+      "file_type",
+      {
+       "bytes": "03"
+      }
+     ],
+     [
+      "size_element",
+      {
+       "bytes": "2b"
+      }
+     ],
+     [
+      "size_len",
+      {
+       "bytes": "08"
+      }
+     ],
+     [
+      "size_const",
+      {
+       "int": 19968
+      }
+     ]
+    ]
+   }
+  }
+ ],
+ "file_directory_size": [
+  {
+   "plc_type": "1761-L16",
+   "request": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a104000023"
+    }
+   },
+   "replies": [
+    {
+     "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000204e",
+     "result": {
+      "int": 20000
+     }
+    },
+    {
+     "raw": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006400",
+     "result": {
+      "int": 100
+     }
+    },
+    {
+     "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+     "result": null
+    },
+    {
+     "raw": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001",
+     "result": null
+    },
+    {
+     "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000204e",
+     "result": null
+    },
+    {
+     "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ffff01",
+     "result": {
+      "int": 65535
+     }
+    }
+   ]
+  },
+  {
+   "plc_type": "1763-L16",
+   "request": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a108000228"
+    }
+   },
+   "replies": [
+    {
+     "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000204e",
+     "result": {
+      "int": 32
+     }
+    },
+    {
+     "raw": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006400",
+     "result": {
+      "int": -19868
+     }
+    },
+    {
+     "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+     "result": null
+    },
+    {
+     "raw": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001",
+     "result": null
+    },
+    {
+     "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000204e",
+     "result": null
+    },
+    {
+     "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ffff01",
+     "result": {
+      "int": 45567
+     }
+    }
+   ]
+  },
+  {
+   "plc_type": "1762-L24",
+   "request": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a108000228"
+    }
+   },
+   "replies": [
+    {
+     "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000204e",
+     "result": {
+      "int": 32
+     }
+    },
+    {
+     "raw": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006400",
+     "result": {
+      "int": -19868
+     }
+    },
+    {
+     "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+     "result": null
+    },
+    {
+     "raw": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001",
+     "result": null
+    },
+    {
+     "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000204e",
+     "result": null
+    },
+    {
+     "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ffff01",
+     "result": {
+      "int": 45567
+     }
+    }
+   ]
+  },
+  {
+   "plc_type": "1764-LSP",
+   "request": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a108000228"
+    }
+   },
+   "replies": [
+    {
+     "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000204e",
+     "result": {
+      "int": 32
+     }
+    },
+    {
+     "raw": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006400",
+     "result": {
+      "int": -19868
+     }
+    },
+    {
+     "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+     "result": null
+    },
+    {
+     "raw": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001",
+     "result": null
+    },
+    {
+     "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000204e",
+     "result": null
+    },
+    {
+     "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ffff01",
+     "result": {
+      "int": 45567
+     }
+    }
+   ]
+  },
+  {
+   "plc_type": "1766-LEC",
+   "request": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a10800032b"
+    }
+   },
+   "replies": [
+    {
+     "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000204e",
+     "result": {
+      "int": 32
+     }
+    },
+    {
+     "raw": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006400",
+     "result": {
+      "int": -19868
+     }
+    },
+    {
+     "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+     "result": null
+    },
+    {
+     "raw": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001",
+     "result": null
+    },
+    {
+     "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000204e",
+     "result": null
+    },
+    {
+     "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ffff01",
+     "result": {
+      "int": 45567
+     }
+    }
+   ]
+  },
+  {
+   "plc_type": "1747-L552",
+   "request": {
+    "ok": {
+     "bytes": "4b0220672401070910091019710f000100a104000123"
+    }
+   },
+   "replies": [
+    {
+     "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000204e",
+     "result": {
+      "int": 20000
+     }
+    },
+    {
+     "raw": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006400",
+     "result": {
+      "int": 100
+     }
+    },
+    {
+     "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+     "result": null
+    },
+    {
+     "raw": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001",
+     "result": null
+    },
+    {
+     "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000204e",
+     "result": null
+    },
+    {
+     "raw": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ffff01",
+     "result": {
+      "int": 65535
+     }
+    }
+   ]
+  }
+ ],
+ "file_directory_read": [
+  {
+   "size": 520,
+   "file_type": "01",
+   "reply_lengths": [
+    510,
+    10
+   ],
+   "requests": [
+    "4b0220672401070910091019710f000100a150000100",
+    "4b0220672401070910091019710f000300a10a0001ffff00"
+   ],
+   "result": {
+    "ok": {
+     "bytes": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "size": 80,
+   "file_type": "02",
+   "reply_lengths": [
+    80
+   ],
+   "requests": [
+    "4b0220672401070910091019710f000100a150000200"
+   ],
+   "result": {
+    "ok": {
+     "bytes": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "size": 160,
+   "file_type": "03",
+   "reply_lengths": [
+    80,
+    80
+   ],
+   "requests": [
+    "4b0220672401070910091019710f000100a150000300",
+    "4b0220672401070910091019710f000300a150000328"
+   ],
+   "result": {
+    "ok": {
+     "bytes": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "size": 5,
+   "file_type": "01",
+   "reply_lengths": [
+    5
+   ],
+   "requests": [
+    "4b0220672401070910091019710f000100a105000100"
+   ],
+   "result": {
+    "ok": {
+     "bytes": "0000000000"
+    }
+   }
+  },
+  {
+   "size": 200,
+   "file_type": "01",
+   "reply_lengths": [
+    80,
+    80,
+    40
+   ],
+   "requests": [
+    "4b0220672401070910091019710f000100a150000100",
+    "4b0220672401070910091019710f000300a150000128",
+    "4b0220672401070910091019710f000500a128000150"
+   ],
+   "result": {
+    "ok": {
+     "bytes": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "size": 81,
+   "file_type": "01",
+   "reply_lengths": [
+    80,
+    1
+   ],
+   "requests": [
+    "4b0220672401070910091019710f000100a150000100",
+    "4b0220672401070910091019710f000300a101000128"
+   ],
+   "result": {
+    "ok": {
+     "bytes": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "size": 0,
+   "file_type": "01",
+   "reply_lengths": [],
+   "requests": [],
+   "result": {
+    "ok": {
+     "bytes": ""
+    }
+   }
+  },
+  {
+   "size": -5,
+   "file_type": "01",
+   "reply_lengths": [],
+   "requests": [],
+   "result": {
+    "ok": {
+     "bytes": ""
+    }
+   }
+  },
+  {
+   "size": 10,
+   "file_type": "01",
+   "reply_lengths": [
+    3,
+    3,
+    4
+   ],
+   "requests": [
+    "4b0220672401070910091019710f000100a10a000100",
+    "4b0220672401070910091019710f000300a107000101",
+    "4b0220672401070910091019710f000500a104000102"
+   ],
+   "result": {
+    "ok": {
+     "bytes": "00000000000000000000"
+    }
+   }
+  },
+  {
+   "size": 600,
+   "file_type": "01",
+   "reply_lengths": [
+    600
+   ],
+   "requests": [
+    "4b0220672401070910091019710f000100a150000100"
+   ],
+   "result": {
+    "ok": {
+     "bytes": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "size": 512,
+   "file_type": "01",
+   "reply_lengths": [
+    510,
+    2
+   ],
+   "requests": [
+    "4b0220672401070910091019710f000100a150000100",
+    "4b0220672401070910091019710f000300a1020001ffff00"
+   ],
+   "result": {
+    "ok": {
+     "bytes": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+   }
+  },
+  {
+   "size": 10,
+   "file_type": "01",
+   "reply_lengths": [],
+   "requests": [],
+   "status_error": true,
+   "result": {
+    "err": "ResponseError",
+    "msg": "Error reading File 0 contents: Illegal Command or Format, Address may not exist or not enough elements in data file"
+   }
+  }
+ ],
+ "parse_file0": [
+  {
+   "file_position": 0,
+   "row_size": 10,
+   "data": "831400000000000000008414000000000000000085140000000000000000891400000000000000008a14000000000000000086140000000000000000",
+   "result": {
+    "ok": {
+     "dict": [
+      [
+       "I1",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 10
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 20
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "S2",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 10
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 20
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "B3",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 10
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 20
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "N4",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 10
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 20
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "F5",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 5
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 20
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "T6",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 3
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 20
+          }
+         ]
+        ]
+       }
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "file_position": 0,
+   "row_size": 10,
+   "data": "82140000000000000000831400000000000000008414000000000000000081000000000000000000891400000000000000008a140000000000000000",
+   "result": {
+    "ok": {
+     "dict": [
+      [
+       "O0",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 10
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 20
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "I1",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 10
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 20
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "S2",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 10
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 20
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "N4",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 10
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 20
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "F5",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 5
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 20
+          }
+         ]
+        ]
+       }
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "file_position": 0,
+   "row_size": 10,
+   "data": "82060000000000000000830600000000000000008442000000000000000085020000000000000000861e0000000000000000870c00000000000000008812000000000000000089c800000000000000008a2800000000000000008da800000000000000008e0400000000000000009108000000000000000092640000000000000000935c000000000000000094180000000000000000000500000000000000009907000000000000000089030000000000000000",
+   "result": {
+    "ok": {
+     "dict": [
+      [
+       "O0",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 3
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 6
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "I1",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 3
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 6
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "S2",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 33
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 66
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "B3",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 1
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 2
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "T4",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 5
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 30
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "C5",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 2
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 12
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "R6",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 3
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 18
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "N7",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 100
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 200
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "F8",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 10
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 40
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "ST9",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 2
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 168
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "A10",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 2
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 4
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "L11",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 2
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 8
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "MG12",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 2
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 100
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "PD13",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 2
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 92
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "PLS14",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 2
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 24
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "N15",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 1
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 3
+          }
+         ]
+        ]
+       }
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "file_position": 4,
+   "row_size": 8,
+   "data": "aabbccdd82020000000000008302000000000000890a000000000000",
+   "result": {
+    "ok": {
+     "dict": [
+      [
+       "O0",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 1
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 2
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "I1",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 1
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 2
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "N2",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 5
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 10
+          }
+         ]
+        ]
+       }
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "file_position": 3,
+   "row_size": 10,
+   "data": "000000890a000000000000000089",
+   "result": {
+    "err": "BufferEmptyError",
+    "msg": ""
+   }
+  },
+  {
+   "file_position": 3,
+   "row_size": 10,
+   "data": "000000890a00000000000000008901",
+   "result": {
+    "err": "DataError",
+    "msg": "Error unpacking b'\\x01' as UINT"
+   }
+  },
+  {
+   "file_position": 3,
+   "row_size": 10,
+   "data": "000000890a000000000000000000",
+   "result": {
+    "ok": {
+     "dict": [
+      [
+       "N0",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 5
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 10
+          }
+         ]
+        ]
+       }
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "file_position": 50,
+   "row_size": 10,
+   "data": "890a0000000000000000",
+   "result": {
+    "ok": {
+     "dict": []
+    }
+   }
+  },
+  {
+   "file_position": 0,
+   "row_size": 10,
+   "data": "",
+   "result": {
+    "ok": {
+     "dict": []
+    }
+   }
+  },
+  {
+   "file_position": 0,
+   "row_size": 10,
+   "data": "830200000000000000008304000000000000000082020000000000000000",
+   "result": {
+    "ok": {
+     "dict": [
+      [
+       "I1",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 1
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 2
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "I2",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 2
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 4
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "O3",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 1
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 2
+          }
+         ]
+        ]
+       }
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "file_position": 0,
+   "row_size": 10,
+   "data": "810000000000000000008302000000000000000084030000000000000000",
+   "result": {
+    "ok": {
+     "dict": [
+      [
+       "I1",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 1
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 2
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "S2",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 1
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 3
+          }
+         ]
+        ]
+       }
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "file_position": 0,
+   "row_size": 10,
+   "data": "840200000000000000008302000000000000000081000000000000000000810000000000000000008d550000000000000000",
+   "result": {
+    "ok": {
+     "dict": [
+      [
+       "S0",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 1
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 2
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "I1",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 1
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 2
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "ST4",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 1
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 85
+          }
+         ]
+        ]
+       }
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "file_position": 0,
+   "row_size": 3,
+   "data": "89ffff8a0700923100",
+   "result": {
+    "ok": {
+     "dict": [
+      [
+       "N0",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 32767
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 65535
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "F1",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 1
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 7
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "MG2",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 0
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 49
+          }
+         ]
+        ]
+       }
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "file_position": 0,
+   "row_size": 1,
+   "data": "890100",
+   "result": {
+    "ok": {
+     "dict": [
+      [
+       "N0",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 0
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 1
+          }
+         ]
+        ]
+       }
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "file_position": 0,
+   "row_size": 2,
+   "data": "89050089",
+   "result": {
+    "ok": {
+     "dict": [
+      [
+       "N0",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 2
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 5
+          }
+         ]
+        ]
+       }
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "file_position": 1,
+   "row_size": 10,
+   "data": "838302000000000000000089020000000000000000",
+   "result": {
+    "ok": {
+     "dict": [
+      [
+       "I1",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 1
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 2
+          }
+         ]
+        ]
+       }
+      ],
+      [
+       "N2",
+       {
+        "dict": [
+         [
+          "elements",
+          {
+           "int": 1
+          }
+         ],
+         [
+          "length",
+          {
+           "int": 2
+          }
+         ]
+        ]
+       }
+      ]
+     ]
+    }
+   }
+  }
+ ],
+ "get_bit": [
+  {
+   "value": 0,
+   "idx": 0,
+   "result": false
+  },
+  {
+   "value": 0,
+   "idx": 1,
+   "result": false
+  },
+  {
+   "value": 0,
+   "idx": 5,
+   "result": false
+  },
+  {
+   "value": 0,
+   "idx": 15,
+   "result": false
+  },
+  {
+   "value": 0,
+   "idx": 31,
+   "result": false
+  },
+  {
+   "value": 1,
+   "idx": 0,
+   "result": true
+  },
+  {
+   "value": 1,
+   "idx": 1,
+   "result": false
+  },
+  {
+   "value": 1,
+   "idx": 5,
+   "result": false
+  },
+  {
+   "value": 1,
+   "idx": 15,
+   "result": false
+  },
+  {
+   "value": 1,
+   "idx": 31,
+   "result": false
+  },
+  {
+   "value": 32,
+   "idx": 0,
+   "result": false
+  },
+  {
+   "value": 32,
+   "idx": 1,
+   "result": false
+  },
+  {
+   "value": 32,
+   "idx": 5,
+   "result": true
+  },
+  {
+   "value": 32,
+   "idx": 15,
+   "result": false
+  },
+  {
+   "value": 32,
+   "idx": 31,
+   "result": false
+  },
+  {
+   "value": -1,
+   "idx": 0,
+   "result": true
+  },
+  {
+   "value": -1,
+   "idx": 1,
+   "result": true
+  },
+  {
+   "value": -1,
+   "idx": 5,
+   "result": true
+  },
+  {
+   "value": -1,
+   "idx": 15,
+   "result": true
+  },
+  {
+   "value": -1,
+   "idx": 31,
+   "result": true
+  },
+  {
+   "value": 32768,
+   "idx": 0,
+   "result": false
+  },
+  {
+   "value": 32768,
+   "idx": 1,
+   "result": false
+  },
+  {
+   "value": 32768,
+   "idx": 5,
+   "result": false
+  },
+  {
+   "value": 32768,
+   "idx": 15,
+   "result": true
+  },
+  {
+   "value": 32768,
+   "idx": 31,
+   "result": false
+  },
+  {
+   "value": -32768,
+   "idx": 0,
+   "result": false
+  },
+  {
+   "value": -32768,
+   "idx": 1,
+   "result": false
+  },
+  {
+   "value": -32768,
+   "idx": 5,
+   "result": false
+  },
+  {
+   "value": -32768,
+   "idx": 15,
+   "result": true
+  },
+  {
+   "value": -32768,
+   "idx": 31,
+   "result": true
+  },
+  {
+   "value": 2147483647,
+   "idx": 0,
+   "result": true
+  },
+  {
+   "value": 2147483647,
+   "idx": 1,
+   "result": true
+  },
+  {
+   "value": 2147483647,
+   "idx": 5,
+   "result": true
+  },
+  {
+   "value": 2147483647,
+   "idx": 15,
+   "result": true
+  },
+  {
+   "value": 2147483647,
+   "idx": 31,
+   "result": false
+  }
+ ]
+}

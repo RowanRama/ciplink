@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <!-- LibraryImport's generated marshalling code is unsafe -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RootNamespace>Ciplink</RootNamespace>
+    <!-- not "Ciplink": Windows file names ignore case, and Ciplink.dll would overwrite the native ciplink.dll -->
+    <AssemblyName>Ciplink.Net</AssemblyName>
+
+    <PackageId>Ciplink</PackageId>
+    <Version>0.3.0</Version>
+    <Authors>Rowan Rama</Authors>
+    <Description>.NET binding for ciplink, an EtherNet/IP (CIP) driver for Allen-Bradley ControlLogix, CompactLogix, Micro800 and SLC/MicroLogix PLCs.</Description>
+    <PackageTags>ethernetip;cip;plc;logix;allen-bradley</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+
+    <!-- The native library of crates/ciplink-ffi for this machine (the cargo release build), copied next to
+         the assembly and packed under runtimes/<this RID>/native/.  Override with /p:CiplinkNativeLib=path.
+         A release pack sets /p:CiplinkRuntimesDir=dir instead, a folder laid out as <rid>/native/<library> for every
+         platform, which is packed as runtimes/ unchanged. -->
+    <CiplinkNativeName Condition="$([MSBuild]::IsOSPlatform('Windows'))">ciplink.dll</CiplinkNativeName>
+    <CiplinkNativeName Condition="$([MSBuild]::IsOSPlatform('OSX'))">libciplink.dylib</CiplinkNativeName>
+    <CiplinkNativeName Condition="'$(CiplinkNativeName)' == ''">libciplink.so</CiplinkNativeName>
+    <CiplinkNativeLib Condition="'$(CiplinkNativeLib)' == ''">$(MSBuildThisFileDirectory)../../../target/release/$(CiplinkNativeName)</CiplinkNativeLib>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Ciplink.Tests" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(CiplinkRuntimesDir)' == ''">
+    <!-- copied next to the assembly for project references, and packed where NuGet resolves native assets -->
+    <None Include="$(CiplinkNativeLib)" Link="$(CiplinkNativeName)" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="runtimes/$(NETCoreSdkRuntimeIdentifier)/native/" Visible="false" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(CiplinkRuntimesDir)' != ''">
+    <None Include="$(CiplinkRuntimesDir)/**/*" Pack="true" PackagePath="runtimes/" Visible="false" />
+  </ItemGroup>
+
+  <Target Name="CheckCiplinkNativeLib" BeforeTargets="Build;Pack" Condition="'$(CiplinkRuntimesDir)' == ''">
+    <Error Condition="!Exists('$(CiplinkNativeLib)')" Text="$(CiplinkNativeName) not found at $(CiplinkNativeLib). Run 'cargo build --release -p ciplink-ffi' in the repository root first." />
+  </Target>
+
+</Project>

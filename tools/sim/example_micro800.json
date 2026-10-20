@@ -1,0 +1,20 @@
+{
+  "kind": "logix",
+  "micro800": true,
+  "identity": {
+    "product_type": 14,
+    "product_code": 191,
+    "revision": [12, 11],
+    "serial": "8008135a",
+    "product_name": "2080-LC50-48QWB",
+    "keyswitch": "REMOTE RUN"
+  },
+  "program_name": "Micro850",
+  "tags": [
+    {"name": "m_dint", "type": "DINT", "value": 42},
+    {"name": "m_real", "type": "REAL", "value": 2.5},
+    {"name": "m_bool", "type": "BOOL", "value": true},
+    {"name": "m_ary", "type": "INT", "dims": [5], "value": [1, 2, 3, 4, 5]},
+    {"name": "m_uint", "type": "UINT", "value": 65535}
+  ]
+}

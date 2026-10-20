@@ -1,0 +1,23 @@
+[workspace]
+resolver = "3"
+members = ["crates/ciplink", "crates/ciplink-sim", "crates/ciplink-py", "crates/ciplink-ffi"]
+
+[workspace.package]
+version = "0.3.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+authors = ["Rowan Ramamurthy <rramamurthy@factoryautomation.com>"]
+repository = "https://github.com/RowanRama/ciplink"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+unwrap_used = "warn"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

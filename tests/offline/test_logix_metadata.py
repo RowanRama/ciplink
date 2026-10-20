@@ -3,7 +3,6 @@
 import json
 import struct
 from pathlib import Path
-from unittest.mock import Mock
 
 import pytest
 
@@ -16,8 +15,6 @@ from ciplink.logix_metadata import (
     decode_description_response,
     decode_metadata_page,
 )
-from ciplink.packets import SendUnitDataResponsePacket
-from .test_logix_extended_properties import enip
 
 
 CAPTURE = json.loads(Path(__file__).with_name("logix_metadata_capture.json").read_text(encoding="utf-8"))
@@ -112,63 +109,3 @@ def plc():
     return driver
 
 
-def mock_responses(plc, payloads, status=0):
-    payloads = iter(payloads)
-    requests = []
-
-    def send(request):
-        cip = request.build_message()[2:]
-        requests.append(cip)
-        assert cip[0] == 0x53  # Only the captured read service is issued.
-        reply = bytes([0xD3, 0, status, 0]) + next(payloads)
-        return SendUnitDataResponsePacket(request, enip(reply))
-
-    plc.send = Mock(side_effect=send)
-    return requests
-
-
-def test_reader_decodes_the_capture(plc):
-    requests = mock_responses(plc, [PAGE])
-    result = plc.get_tag_description("zzzTestTag")
-    assert result
-    assert result.tag == "zzzTestTag.@Description"
-    assert result.type == "STRING"
-    assert result.value == "HERE I AM WORLD"
-    assert requests[0].hex() == DESCRIPTION["request_cip_hex"]
-
-
-def test_reader_preserves_permission_denied_and_does_not_retry(plc):
-    mock_responses(plc, [b""], status=0x0F)
-    result = plc.get_tag_description("zzzTestTag")
-    assert not result and result.value is None
-    assert result.error == "Permission denied"
-    assert plc.send.call_count == 1
-
-
-def test_reader_handles_continuations(plc):
-    raw = PAGE[8:]
-    requests = mock_responses(plc, [page(raw[:40], last=False),
-                                    page(raw[40:], first=False, offset=40)])
-    assert plc.get_tag_description("zzzTestTag").value == "HERE I AM WORLD"
-    assert requests[1] == build_description_request(1063, offset=40)
-
-
-def test_reader_rejects_mismatched_target(plc):
-    wrong = bytearray(PAGE)
-    struct.pack_into("<I", wrong, 10, 99)
-    mock_responses(plc, [bytes(wrong)])
-    result = plc.get_tag_description("zzzTestTag")
-    assert not result and "different tag/language" in result.error
-
-
-def test_reader_reports_missing_language(plc):
-    mock_responses(plc, [bytes.fromhex(CAPTURE["missing_description_page_hex"])])
-    result = plc.get_tag_description("zzzTestTag", language=0x0409)
-    assert not result and "No description" in result.error
-
-
-@pytest.mark.parametrize("tag", ["NoSuchTag", "Program:Main.Tag", "Tag.Member", "Tag[0]"])
-def test_reader_rejects_unsupported_tag_addresses_without_a_read(plc, tag):
-    plc.send = Mock(side_effect=AssertionError("Must not issue a PLC read"))
-    assert not plc.get_tag_description(tag)
-    plc.send.assert_not_called()

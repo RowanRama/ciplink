@@ -21,7 +21,7 @@ import struct
 
 import ciplink
 import pytest
-from ciplink.exceptions import CommError, PycommError
+from ciplink.exceptions import CommError
 from ciplink.socket_ import Socket
 
 

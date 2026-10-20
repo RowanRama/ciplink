@@ -87,7 +87,7 @@ class update_thread(threading.Thread):
 
 # startup default values
 myTag = ['CT_STRING', 'CT_DINT', 'CT_REAL']
-path = '192.168.1.15/3'
+path = '192.0.2.15/3'
 headerAdded = False
 
 ver = ciplink.__version__
@@ -351,7 +351,7 @@ def driver_selector(*args):
     if driverSelection.get() == 'SLCDriver':
         selectedPath.set('192.168.1.10')
     else:
-        selectedPath.set('192.168.1.15/3')
+        selectedPath.set('192.0.2.15/3')
 
     lbPLCMessage.delete(0, 'end') #clear the connection message listbox
     lbPLCError.delete(0, 'end') #clear the error message listbox

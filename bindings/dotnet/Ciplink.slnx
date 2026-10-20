@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="Ciplink.Tests/Ciplink.Tests.csproj" />
+  <Project Path="Ciplink/Ciplink.csproj" />
+  <Project Path="Example/Example.csproj" />
+</Solution>

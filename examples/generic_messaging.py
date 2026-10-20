@@ -3,7 +3,7 @@ from ciplink import CIPDriver, Services, ClassCode, INT, Array, USINT
 
 # Read PF525 Parameter
 def read_pf525_parameter():
-    drive_path = '10.10.10.100/bp/1/enet/192.168.1.55'
+    drive_path = '192.0.2.10/bp/1/enet/192.0.2.55'
 
     with CIPDriver(drive_path) as drive:
         param = drive.generic_message(
@@ -22,7 +22,7 @@ def read_pf525_parameter():
 
 # Write PF525 Parameter
 def write_pf525_parameter():
-    drive_path = '10.10.10.100/bp/1/enet/192.168.1.55'
+    drive_path = '192.0.2.10/bp/1/enet/192.0.2.55'
 
     with CIPDriver(drive_path) as drive:
         drive.generic_message(
@@ -40,7 +40,7 @@ def write_pf525_parameter():
 
 # Read OK LED Status From ENBT/EN2T
 def enbt_ok_led_status():
-    message_path = '10.10.10.100/bp/2'
+    message_path = '192.0.2.10/bp/2'
 
     with CIPDriver(message_path) as device:
         data = device.generic_message(
@@ -66,7 +66,7 @@ def enbt_ok_led_status():
 
 # Read Link Status of any Logix Ethernet Module
 def link_status():
-    message_path = '10.10.10.100/bp/2'
+    message_path = '192.0.2.10/bp/2'
 
     with CIPDriver(message_path) as device:
         data = device.generic_message(
@@ -97,7 +97,7 @@ def link_status():
 
 # Get the status of both power inputs from a Stratix switch.
 def stratix_power_status():
-    message_path = '10.10.10.100/bp/2/enet/192.168.1.1'
+    message_path = '192.0.2.10/bp/2/enet/192.0.2.1'
 
     with CIPDriver(message_path) as device:
         data = device.generic_message(
@@ -119,9 +119,9 @@ def stratix_power_status():
 
 # Get the IP Configuration from an Ethernet Module
 def ip_config():
-    message_path = '10.10.10.100/bp/2'
+    message_path = '192.0.2.10/bp/2'
 
-    with CIPDriver(message_path) as plc:  # L85
+    with CIPDriver(message_path) as plc:
         data = plc.generic_message(
             service=b'\x0e',
             class_code=b'\xf5',
@@ -146,7 +146,7 @@ def ip_config():
 
 # Get MAC address of
 def get_mac_address():
-    with CIPDriver('10.10.10.100') as plc:
+    with CIPDriver('192.0.2.10') as plc:
         response = plc.generic_message(
             service=Services.get_attribute_single,
             class_code=ClassCode.ethernet_link,

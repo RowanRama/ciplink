@@ -1,6 +1,6 @@
 """Read a base tag Description with a fresh, Linx-assisted ciplink handshake.
 
-Windows and the verified Linx 6.60 binary are required. The controller connection
+Windows and the Linx binary pinned by SHA-256 in linx_session_provider.py are required. The controller connection
 belongs to ciplink; an isolated native helper computes its fresh challenge reply.
 No FactoryTalk UI, existing authenticated connection, or captured completion is
 used. The signed public credential must be supplied separately.
@@ -124,7 +124,7 @@ def read_description(ip, tag, python32, certificate):
     report = {
         "timestamp_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "ip": ip, "tag": tag, "certificate_sha256": hashlib.sha256(certificate).hexdigest(),
-        "provider": "Installed Linx 6.60, version-pinned x86 native session ABI",
+        "provider": "Installed Linx, version-pinned x86 native session ABI",
     }
     with LogixDriver(ip) as plc:
         report["symbol_instance"] = plc.get_tag_info(tag)["instance_id"]
