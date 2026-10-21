@@ -2,6 +2,16 @@
 Release History
 ===============
 
+ciplink 0.3.2
+=============
+
+- |:sparkles:| controller-side trends: the controller samples tags at a fixed period (down to 1 ms) into the trend
+  object Studio 5000 uses, and the driver uploads the samples in batches on a connection of its own, each with the
+  controller's timestamp.  A pen is any atomic tag, member or array element of up to 32 bits (BOOL, SINT, INT, DINT,
+  USINT, UINT, UDINT, REAL) or a bit; 64-bit types cannot be trended.  ``LogixDriver.trend()`` in Python, Rust and
+  C++, ``LogixDriver.Trend()`` in C#, ``ciplink_trend_start`` in C.
+- |:sparkles:| ``ciplink-sim`` simulates the trend object.
+
 ciplink 0.3.1
 =============
 

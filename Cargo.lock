@@ -70,7 +70,7 @@ dependencies = [
 
 [[package]]
 name = "ciplink"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "chacha20poly1305",
  "getrandom 0.3.4",
@@ -85,7 +85,7 @@ dependencies = [
 
 [[package]]
 name = "ciplink-ffi"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "ciplink",
  "ciplink-sim",
@@ -95,7 +95,7 @@ dependencies = [
 
 [[package]]
 name = "ciplink-py"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "ciplink",
  "indexmap",
@@ -106,7 +106,7 @@ dependencies = [
 
 [[package]]
 name = "ciplink-sim"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "ciplink",
  "indexmap",
