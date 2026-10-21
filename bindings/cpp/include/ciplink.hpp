@@ -541,6 +541,87 @@ private:
     std::unique_ptr<CiplinkDriver, Free> handle_;
 };
 
+// ---------------------------------------------------------------------------------------------- trends
+
+/// One sample of every pen of a trend.
+struct TrendSample {
+    /// Controller time of the sample, microseconds since 1970 UTC.
+    uint64_t timestamp_us = 0;
+    /// Time since the trend started, microseconds.
+    uint64_t elapsed_us = 0;
+    /// One value per pen, in pen order.
+    std::vector<Value> values;
+};
+
+/// A pen of a trend: the tag and the type sampled ("BOOL" for a bit).
+struct TrendPen {
+    std::string tag;
+    std::string type;
+};
+
+/// A running controller-side trend, from Logix::trend (movable, not copyable). Destroying it stops the trend
+/// without waiting; close() waits for the cleanup.
+class Trend {
+public:
+    Trend(Trend&&) noexcept = default;
+    Trend& operator=(Trend&&) noexcept = default;
+
+    /// The samples uploaded since the last read, oldest first; throws the trend's error once it failed and
+    /// every sample was taken.
+    std::vector<TrendSample> read() {
+        char* out = nullptr;
+        detail::check(ciplink_trend_read(h(), &out));
+        std::vector<TrendSample> samples;
+        Value parsed = parse_json(detail::take(out));
+        for (auto& j : parsed.as_array()) {
+            samples.push_back({j["timestamp_us"].as_uint(), j["elapsed_us"].as_uint(), j["values"].as_array()});
+        }
+        return samples;
+    }
+
+    /// Stops the trend and waits for its cleanup; throws the trend's error if it failed.
+    void close() { detail::check(ciplink_trend_close(h())); }
+
+    std::vector<TrendPen> pens() const {
+        std::vector<TrendPen> pens;
+        Value state = info();
+        for (auto& p : state["pens"].as_array()) pens.push_back({p["tag"].as_string(), p["type"].as_string()});
+        return pens;
+    }
+    uint64_t start_time_us() const { return info()["start_time_us"].as_uint(); }
+    /// True until the trend is closed, its duration is over, or it failed.
+    bool running() const { return info()["running"].as_bool(); }
+    /// Samples uploaded so far, including dropped ones.
+    uint64_t received() const { return info()["received"].as_uint(); }
+    /// Samples dropped because `capacity` samples were waiting to be read.
+    uint64_t dropped() const { return info()["dropped"].as_uint(); }
+    /// Why the trend failed, if it did.
+    std::optional<std::string> error() const {
+        Value e = info()["error"];
+        return e.is_null() ? std::nullopt : std::optional<std::string>(e.as_string());
+    }
+
+    /// The raw handle for calls this wrapper does not cover.
+    CiplinkTrend* handle() const { return h(); }
+
+private:
+    friend class Logix;
+    explicit Trend(CiplinkTrend* raw) : handle_(raw) {}
+
+    CiplinkTrend* h() const { return handle_.get(); }
+
+    Value info() const {
+        char* out = nullptr;
+        detail::check(ciplink_trend_info(h(), &out));
+        return parse_json(detail::take(out));
+    }
+
+    struct Free {
+        void operator()(CiplinkTrend* p) const noexcept { ciplink_trend_free(p); }
+    };
+    std::unique_ptr<CiplinkTrend, Free> handle_;
+};
+
 /// A ControlLogix / CompactLogix / Micro800 driver.
 class Logix : public Driver {
 public:
@@ -553,6 +634,22 @@ public:
     Tag read_tag(const std::string& tag) { return read_({tag}).at(0); }
     std::vector<Tag> write(const std::vector<std::pair<std::string, Value>>& items) { return write_(items); }
     Tag write_tag(const std::string& tag, const Value& value) { return write_({{tag, value}}).at(0); }
+
+    /// Starts a controller-side trend: the controller samples `tags` (atomic tags, members or elements of up to
+    /// 32 bits, or bits such as "Tag.3") every `period_ms` and the trend uploads them on a connection of its own.
+    /// `capacity` samples are kept until read (the oldest are dropped); `duration` seconds stops it by itself.
+    Trend trend(const std::vector<std::string>& tags, double period_ms = 10, size_t capacity = 4096,
+                std::optional<double> duration = std::nullopt) {
+        std::vector<const char*> ptrs;
+        ptrs.reserve(tags.size());
+        for (auto& t : tags) ptrs.push_back(t.c_str());
+        std::string options = "{\"period_ms\":" + std::to_string(period_ms) +
+                              ",\"capacity\":" + std::to_string(capacity) +
+                              ",\"duration\":" + (duration ? std::to_string(*duration) : "null") + "}";
+        CiplinkTrend* raw = nullptr;
+        detail::check(ciplink_trend_start(h(), ptrs.data(), ptrs.size(), options.c_str(), &raw));
+        return Trend(raw);
+    }
 
     /// Tag definitions, data types, controller info and tag list as JSON text (the Python driver's dicts).
     std::string tags_json() { return json_call([&](char** o) { return ciplink_tags(h(), o); }); }

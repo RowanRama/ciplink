@@ -6,6 +6,8 @@
 //!   [`ciplink_cip_new`] and freed with [`ciplink_driver_free`]. Calls a driver kind does not support return
 //!   [`CiplinkStatus::Unsupported`]. A handle can be used from several threads at once (calls are serialized
 //!   inside the driver).
+//! - A controller-side trend is a second handle type, [`CiplinkTrend`], made by [`ciplink_trend_start`] and freed
+//!   with [`ciplink_trend_free`].
 //! - Every function returns a [`CiplinkStatus`]; 0 is success. The message of the latest failure is kept on the
 //!   handle and on the calling thread: [`ciplink_last_error`] with the handle, or with NULL for the calling
 //!   thread's latest failure (the one to use for constructors, handle-less calls, or a handle shared by threads).
@@ -34,6 +36,7 @@ use ciplink_core::epath::LogicalValue;
 use ciplink_core::logix::auth::LogixMetadataCredentials;
 use ciplink_core::logix::driver::{LogixDriver, LogixOptions};
 use ciplink_core::logix::metadata::TextEncoding;
+use ciplink_core::logix::trend::{Trend, TrendOptions};
 use ciplink_core::logix::types::PyObj;
 use ciplink_core::slc::driver::SlcDriver;
 use ciplink_core::{Error, Value};
@@ -1464,6 +1467,182 @@ pub unsafe extern "C" fn ciplink_discover(
         value_json(&devices, &mut out);
         put_string(out_json, out)
     })
+}
+
+// ------------------------------------------------------------------------------------------------ trends
+
+/// A running controller-side trend, made by [`ciplink_trend_start`] and freed with [`ciplink_trend_free`].
+/// The trend functions report failures on the calling thread: [`ciplink_last_error`] with NULL.
+pub struct CiplinkTrend {
+    trend: Trend,
+}
+
+fn trend_options(o: &Map<String, Json>) -> FfiResult<TrendOptions> {
+    let d = TrendOptions::default();
+    let period = match o.get("period_ms") {
+        None => d.period,
+        Some(j) => j
+            .as_f64()
+            .filter(|ms| ms.is_finite() && *ms > 0.0)
+            .map(|ms| Duration::from_micros((ms * 1000.0).round() as u64))
+            .ok_or_else(|| {
+                FfiError::Invalid("option period_ms must be a positive number".into())
+            })?,
+    };
+    let capacity = match o.get("capacity") {
+        None => d.capacity,
+        Some(j) => j
+            .as_u64()
+            .and_then(|n| usize::try_from(n).ok())
+            .ok_or_else(|| FfiError::Invalid("option capacity must be a sample count".into()))?,
+    };
+    let duration = match o.get("duration") {
+        None | Some(Json::Null) => None,
+        Some(j) => Some(
+            j.as_f64()
+                .filter(|s| s.is_finite() && *s > 0.0)
+                .map(Duration::from_secs_f64)
+                .ok_or_else(|| {
+                    FfiError::Invalid("option duration must be seconds or null".into())
+                })?,
+        ),
+    };
+    Ok(TrendOptions {
+        period,
+        capacity,
+        duration,
+    })
+}
+
+/// Runs a trend entry point; a NULL trend is an invalid argument.
+fn with_trend(
+    trend: *const CiplinkTrend,
+    f: impl FnOnce(&Trend) -> FfiResult<()>,
+) -> CiplinkStatus {
+    // SAFETY: the caller passes NULL or a live trend from `ciplink_trend_start` not yet freed.
+    match unsafe { trend.as_ref() } {
+        Some(t) => guard(None, || f(&t.trend)),
+        None => guard(None, || {
+            Err(FfiError::Invalid("trend handle is NULL".into()))
+        }),
+    }
+}
+
+/// Starts a controller-side trend of `count` tags on a connection of its own (Logix only): the controller
+/// samples them every period into its trend buffer and a worker thread uploads the samples. A pen is an atomic
+/// tag, member or array element of up to 32 bits (BOOL, SINT, INT, DINT, USINT, UINT, UDINT, REAL) or a bit
+/// (`Tag.3`); anything else is a [`CiplinkStatus::Request`] error.
+///
+/// `options_json` may be NULL or `{}`; keys (all optional): `period_ms` (default 10, 1 or more, whole
+/// microseconds), `capacity` (samples kept until read, the oldest dropped when full, default 4096), `duration`
+/// (seconds, null to run until closed).
+///
+/// # Safety
+/// `handle` is NULL or a live handle; `tags` points to `count` NUL-terminated strings; `options_json` is NULL or
+/// NUL-terminated; `out` is writable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ciplink_trend_start(
+    handle: *const CiplinkDriver,
+    tags: *const *const c_char,
+    count: usize,
+    options_json: *const c_char,
+    out: *mut *mut CiplinkTrend,
+) -> CiplinkStatus {
+    with_handle(handle, |h| {
+        check_out(out)?;
+        let names = arg_names(tags, count)?;
+        let options = trend_options(&options_map(options_json)?)?;
+        let trend = logix(h, "trend")?.trend(&names, options)?;
+        // SAFETY: `out` was checked not NULL by check_out.
+        unsafe { *out = Box::into_raw(Box::new(CiplinkTrend { trend })) };
+        Ok(())
+    })
+}
+
+/// Takes the samples uploaded since the last read, oldest first, as a JSON array of `{"timestamp_us": int,
+/// "elapsed_us": int, "values": [value per pen]}` (`timestamp_us` is the controller time, microseconds since 1970
+/// UTC). Once the trend failed and every sample was taken, returns its error.
+///
+/// # Safety
+/// `trend` is NULL or a live trend; `out_json` is writable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ciplink_trend_read(
+    trend: *const CiplinkTrend,
+    out_json: *mut *mut c_char,
+) -> CiplinkStatus {
+    with_trend(trend, |t| {
+        check_out(out_json)?;
+        let samples = t.read()?;
+        let mut out = String::with_capacity(64 * samples.len() + 2);
+        out.push('[');
+        for (i, s) in samples.iter().enumerate() {
+            if i > 0 {
+                out.push(',');
+            }
+            let _ = write!(
+                out,
+                "{{\"timestamp_us\":{},\"elapsed_us\":{},\"values\":",
+                s.timestamp_us, s.elapsed_us
+            );
+            value_json(&Value::Array(s.values.clone()), &mut out);
+            out.push('}');
+        }
+        out.push(']');
+        put_string(out_json, out)
+    })
+}
+
+/// The trend's state as JSON: `{"pens": [{"tag": str, "type": str}], "period_us": int, "start_time_us": int,
+/// "running": bool, "received": int, "dropped": int, "error": null|str}`.
+///
+/// # Safety
+/// `trend` is NULL or a live trend; `out_json` is writable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ciplink_trend_info(
+    trend: *const CiplinkTrend,
+    out_json: *mut *mut c_char,
+) -> CiplinkStatus {
+    with_trend(trend, |t| {
+        check_out(out_json)?;
+        let pens: Vec<Json> = t
+            .pens()
+            .iter()
+            .map(|p| serde_json::json!({"tag": p.tag, "type": p.data_type}))
+            .collect();
+        let info = serde_json::json!({
+            "pens": pens,
+            "period_us": t.period().as_micros() as u64,
+            "start_time_us": t.start_time_us(),
+            "running": t.running(),
+            "received": t.received(),
+            "dropped": t.dropped(),
+            "error": t.error().map(|e| e.to_string()),
+        });
+        put_string(out_json, info.to_string())
+    })
+}
+
+/// Stops the trend and waits for its cleanup; the samples uploaded until then can still be read. Returns the
+/// trend's error if it failed.
+///
+/// # Safety
+/// `trend` is NULL or a live trend.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ciplink_trend_close(trend: *const CiplinkTrend) -> CiplinkStatus {
+    with_trend(trend, |t| Ok(t.close()?))
+}
+
+/// Frees a trend; a running one is stopped without waiting (the cleanup finishes in the background). NULL is
+/// ignored.
+///
+/// # Safety
+/// `trend` is NULL or a trend from [`ciplink_trend_start`] not yet freed, and no other thread is using it.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ciplink_trend_free(trend: *mut CiplinkTrend) {
+    if !trend.is_null() {
+        // SAFETY: made by Box::into_raw in `ciplink_trend_start`, freed once (caller contract).
+        let _ = catch_unwind(|| drop(unsafe { Box::from_raw(trend) }));
+    }
 }
 
 // ------------------------------------------------------------------------------------------------ errors, memory

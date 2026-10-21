@@ -895,3 +895,99 @@ fn logix_only_calls_on_an_slc_handle_are_unsupported() {
     let (st, _) = authenticate(&h, None, None);
     assert_eq!(st, CiplinkStatus::Unsupported);
 }
+
+// ------------------------------------------------------------------------------------------------ trends
+
+fn trend_start(h: &Handle, tags: &[&str], options: &str) -> (CiplinkStatus, *mut CiplinkTrend) {
+    let names: Vec<CString> = tags.iter().map(|t| cstr(t)).collect();
+    let ptrs: Vec<*const c_char> = names.iter().map(|c| c.as_ptr()).collect();
+    let options = cstr(options);
+    let mut trend = ptr::null_mut();
+    // SAFETY: a live handle and valid pointers for the duration of the call.
+    let st = unsafe {
+        ciplink_trend_start(h.0, ptrs.as_ptr(), ptrs.len(), options.as_ptr(), &mut trend)
+    };
+    (st, trend)
+}
+
+fn trend_json(
+    trend: *const CiplinkTrend,
+    f: unsafe extern "C" fn(*const CiplinkTrend, *mut *mut c_char) -> CiplinkStatus,
+) -> Json {
+    let mut out = ptr::null_mut();
+    // SAFETY: a live trend and a writable out pointer.
+    let st = unsafe { f(trend, &mut out) };
+    assert_eq!(st, CiplinkStatus::Ok, "{}", last_error(ptr::null()));
+    serde_json::from_str(&take(out)).unwrap()
+}
+
+#[test]
+fn a_trend_samples_tags_as_json_and_stops_on_close() {
+    let (_sim, server) = serve("example_controller.json");
+    let h = open(ciplink_logix_new, &server);
+    let (st, trend) = trend_start(
+        &h,
+        &["int1", "real1", "bool1", "timer1.ACC"],
+        r#"{"period_ms": 5}"#,
+    );
+    assert_eq!(st, CiplinkStatus::Ok, "{}", last_error(ptr::null()));
+    let info = trend_json(trend, ciplink_trend_info);
+    assert_eq!(
+        info["pens"][1],
+        serde_json::json!({"tag": "real1", "type": "REAL"})
+    );
+    assert_eq!(info["period_us"], 5000);
+    assert_eq!(info["running"], true);
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    let mut samples = Vec::new();
+    while samples.len() < 2 && std::time::Instant::now() < deadline {
+        samples.extend(
+            trend_json(trend, ciplink_trend_read)
+                .as_array()
+                .unwrap()
+                .clone(),
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(samples.len() >= 2);
+    assert_eq!(
+        samples[0]["values"],
+        serde_json::json!([-1234, 3.25, true, 1234])
+    );
+    assert_eq!(
+        samples[0]["timestamp_us"].as_u64().unwrap(),
+        info["start_time_us"].as_u64().unwrap() + samples[0]["elapsed_us"].as_u64().unwrap()
+    );
+    // SAFETY: a live trend, freed once.
+    unsafe {
+        assert_eq!(ciplink_trend_close(trend), CiplinkStatus::Ok);
+        assert_eq!(trend_json(trend, ciplink_trend_info)["running"], false);
+        ciplink_trend_free(trend);
+    }
+}
+
+#[test]
+fn trend_errors_are_statuses() {
+    let (_sim, server) = serve("example_controller.json");
+    let h = open(ciplink_logix_new, &server);
+    let (st, trend) = trend_start(&h, &["lint1"], "");
+    assert_eq!(st, CiplinkStatus::Request);
+    assert!(trend.is_null());
+    assert!(last_error(ptr::null()).contains("LINT"));
+    let (st, _) = trend_start(&h, &["dint1"], r#"{"period_ms": -1}"#);
+    assert_eq!(st, CiplinkStatus::InvalidArgument);
+    // SAFETY: NULL trends are checked or ignored.
+    unsafe {
+        assert_eq!(
+            ciplink_trend_close(ptr::null()),
+            CiplinkStatus::InvalidArgument
+        );
+        ciplink_trend_free(ptr::null_mut());
+    }
+    let (_sim, server) = serve("example_slc.json");
+    let slc = open(ciplink_slc_new, &server);
+    assert_eq!(
+        trend_start(&slc, &["N7:0"], "").0,
+        CiplinkStatus::Unsupported
+    );
+}

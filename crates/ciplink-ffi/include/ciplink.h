@@ -32,6 +32,10 @@ typedef enum CiplinkStatus {
 // A driver handle: a Logix, SLC or plain CIP driver.
 typedef struct CiplinkDriver CiplinkDriver;
 
+// A running controller-side trend, made by [`ciplink_trend_start`] and freed with [`ciplink_trend_free`].
+// The trend functions report failures on the calling thread: [`ciplink_last_error`] with NULL.
+typedef struct CiplinkTrend CiplinkTrend;
+
 // A generic CIP message (like a Logix MSG instruction).
 typedef struct CiplinkMessage {
   // Service code.
@@ -359,6 +363,55 @@ enum CiplinkStatus ciplink_list_identity(const char *path, char **out_json);
 // `broadcast` is NULL or a NUL-terminated string; `out_json` is writable.
 enum CiplinkStatus ciplink_discover(const char *broadcast,
                                     char **out_json);
+
+// Starts a controller-side trend of `count` tags on a connection of its own (Logix only): the controller
+// samples them every period into its trend buffer and a worker thread uploads the samples. A pen is an atomic
+// tag, member or array element of up to 32 bits (BOOL, SINT, INT, DINT, USINT, UINT, UDINT, REAL) or a bit
+// (`Tag.3`); anything else is a [`CiplinkStatus::Request`] error.
+//
+// `options_json` may be NULL or `{}`; keys (all optional): `period_ms` (default 10, 1 or more, whole
+// microseconds), `capacity` (samples kept until read, the oldest dropped when full, default 4096), `duration`
+// (seconds, null to run until closed).
+//
+// # Safety
+// `handle` is NULL or a live handle; `tags` points to `count` NUL-terminated strings; `options_json` is NULL or
+// NUL-terminated; `out` is writable.
+enum CiplinkStatus ciplink_trend_start(const struct CiplinkDriver *handle,
+                                       const char *const *tags,
+                                       size_t count,
+                                       const char *options_json,
+                                       struct CiplinkTrend **out);
+
+// Takes the samples uploaded since the last read, oldest first, as a JSON array of `{"timestamp_us": int,
+// "elapsed_us": int, "values": [value per pen]}` (`timestamp_us` is the controller time, microseconds since 1970
+// UTC). Once the trend failed and every sample was taken, returns its error.
+//
+// # Safety
+// `trend` is NULL or a live trend; `out_json` is writable.
+enum CiplinkStatus ciplink_trend_read(const struct CiplinkTrend *trend,
+                                      char **out_json);
+
+// The trend's state as JSON: `{"pens": [{"tag": str, "type": str}], "period_us": int, "start_time_us": int,
+// "running": bool, "received": int, "dropped": int, "error": null|str}`.
+//
+// # Safety
+// `trend` is NULL or a live trend; `out_json` is writable.
+enum CiplinkStatus ciplink_trend_info(const struct CiplinkTrend *trend,
+                                      char **out_json);
+
+// Stops the trend and waits for its cleanup; the samples uploaded until then can still be read. Returns the
+// trend's error if it failed.
+//
+// # Safety
+// `trend` is NULL or a live trend.
+enum CiplinkStatus ciplink_trend_close(const struct CiplinkTrend *trend);
+
+// Frees a trend; a running one is stopped without waiting (the cleanup finishes in the background). NULL is
+// ignored.
+//
+// # Safety
+// `trend` is NULL or a trend from [`ciplink_trend_start`] not yet freed, and no other thread is using it.
+void ciplink_trend_free(struct CiplinkTrend *trend);
 
 // The message of the latest failed call on `handle`, or of the calling thread's latest failure if `handle` is
 // NULL; NULL if there was none. Free it with [`ciplink_string_free`].

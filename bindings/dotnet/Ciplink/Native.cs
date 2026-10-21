@@ -17,6 +17,18 @@ internal sealed class DriverHandle : SafeHandleZeroOrMinusOneIsInvalid
     }
 }
 
+/// <summary>Owns a <c>CiplinkTrend*</c>; releasing it stops the trend (without waiting) and frees it.</summary>
+internal sealed class TrendHandle : SafeHandleZeroOrMinusOneIsInvalid
+{
+    public TrendHandle() : base(ownsHandle: true) { }
+
+    protected override bool ReleaseHandle()
+    {
+        Native.ciplink_trend_free(handle);
+        return true;
+    }
+}
+
 /// <summary>The <c>CiplinkMessage</c> struct of ciplink.h (x64 size 56).</summary>
 [StructLayout(LayoutKind.Sequential)]
 internal struct NativeMessage
@@ -148,6 +160,21 @@ internal static partial class Native
 
     [LibraryImport(Lib, StringMarshalling = StringMarshalling.Utf8)]
     internal static partial int ciplink_discover(string? broadcast, out IntPtr json);
+
+    [LibraryImport(Lib, StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial int ciplink_trend_start(DriverHandle handle, IntPtr[] tags, nuint count, string? optionsJson, out TrendHandle trend);
+
+    [LibraryImport(Lib)]
+    internal static partial int ciplink_trend_read(TrendHandle trend, out IntPtr json);
+
+    [LibraryImport(Lib)]
+    internal static partial int ciplink_trend_info(TrendHandle trend, out IntPtr json);
+
+    [LibraryImport(Lib)]
+    internal static partial int ciplink_trend_close(TrendHandle trend);
+
+    [LibraryImport(Lib)]
+    internal static partial void ciplink_trend_free(IntPtr trend);
 
     /// <summary>Always called with NULL: the calling thread's latest error, which every failing call sets.</summary>
     [LibraryImport(Lib)]

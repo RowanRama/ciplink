@@ -100,6 +100,10 @@ Every function takes the handle first, and output arguments come last. JSON resu
 | `ciplink_tag_table_version(h, &json)` | Logix | 5 numbers or null | `tag_table_version()` | `TagTableVersion()` |
 | `ciplink_get_tag_descriptions(h, names, n, lang, enc, &json)` | Logix | results | `get_tag_descriptions(...)` | `GetTagDescriptions(...)` |
 | `ciplink_authenticate_metadata(h, cert, n, key, n, &json)` | Logix | result, value `true` | `authenticate_metadata([cert, key])` | `AuthenticateMetadata([cert, key])` |
+| `ciplink_trend_start(h, names, n, options_json, &trend)` | Logix | `CiplinkTrend*` | `trend({...}, period_ms, capacity, duration)` | `Trend(tags, TrendOptions)` |
+| `ciplink_trend_read(trend, &json)` | trend | samples `[{"timestamp_us", "elapsed_us", "values"}]` | `Trend::read()` | `Trend.Read()` |
+| `ciplink_trend_info(trend, &json)` | trend | pens, running, received, dropped, error | `pens()`, `running()`, ... | `Pens`, `Running`, ... |
+| `ciplink_trend_close(trend)`, `ciplink_trend_free(trend)` | trend | - | `close()`, destructor | `Close()`, `Dispose()` |
 | `ciplink_slc_processor_type(h, &json)` | SLC | string or null | `get_processor_type()` | `GetProcessorType()` |
 | `ciplink_slc_file_directory(h, &json)` | SLC | `{"N7": {...}}` | `get_file_directory()` | `GetFileDirectory()` |
 | `ciplink_slc_datalog_queue(h, n, queue, &json)` | SLC | array | `get_datalog_queue(n, q)` | `GetDatalogQueue(n, q)` |

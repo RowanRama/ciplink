@@ -5,6 +5,8 @@
 #include "ciplink.hpp"
 
 #include <algorithm>
+#include <chrono>
+#include <cstdlib>
 #include <cmath>
 #include <fstream>
 #include <iterator>
@@ -367,6 +369,36 @@ int main(int argc, char** argv) {
         std::vector<uint8_t> short_key(key.begin(), key.begin() + 10);
         expect_error(CIPLINK_STATUS_REQUEST, [&] { plc.authenticate_metadata(cert, short_key); });
         expect_error(CIPLINK_STATUS_REQUEST, [&] { plc.authenticate_metadata({}, {}); });
+    });
+
+    run("trend_samples_tags_until_closed", [] {
+        ciplink::Logix plc(logix_path);
+        plc.open();
+        ciplink::Trend trend = plc.trend({"sint1", "uint1", "real1", "timer1.EN"}, 5);
+        auto pens = trend.pens();
+        CHECK(pens.size() == 4 && pens[1].tag == "uint1" && pens[3].type == "BOOL");
+        CHECK(trend.running());
+        std::vector<ciplink::TrendSample> samples;
+        for (int i = 0; i < 400 && samples.size() < 2; ++i) {
+            auto batch = trend.read();
+            samples.insert(samples.end(), batch.begin(), batch.end());
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        CHECK(samples.size() >= 2);
+        if (samples.size() >= 2) {
+            CHECK(samples[0].values.size() == 4);
+            CHECK(samples[0].values[0].as_int() == 100);
+            CHECK(samples[0].values[1].as_int() == 60000);
+            CHECK(samples[0].values[2] == plc.read_tag("real1").value);  // an earlier test writes it
+            CHECK(samples[0].values[3].as_bool());
+            CHECK(samples[0].timestamp_us == trend.start_time_us() + samples[0].elapsed_us);
+            CHECK(std::llabs(int64_t(samples[1].elapsed_us - samples[0].elapsed_us) - 5000) < 128);
+        }
+        trend.close();
+        CHECK(!trend.running());
+        CHECK(!trend.error());
+        expect_error(CIPLINK_STATUS_REQUEST, [&] { plc.trend({"lint1"}); });
+        expect_error(CIPLINK_STATUS_INVALID_ARGUMENT, [&] { plc.trend({"dint1"}, 0); });
     });
 
     std::cout << checks << " checks, " << failures << " failures\n";

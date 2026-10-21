@@ -223,6 +223,31 @@ public sealed class LogixDriver : Driver
     public LogixDriver(string path, LogixOptions? options = null)
         : base(path, options ?? new LogixOptions(), Native.ciplink_logix_new) { }
 
+    /// <summary>
+    /// Starts a controller-side trend: the controller samples <paramref name="tags"/> (atomic tags, members or
+    /// elements of up to 32 bits, or bits such as "Tag.3") every period and the trend uploads them on a connection
+    /// of its own. Close or dispose the trend to stop it.
+    /// </summary>
+    /// <exception cref="CiplinkException">A tag cannot be trended (<see cref="CiplinkStatus.Request"/>), or the
+    /// controller refused the trend.</exception>
+    public Trend Trend(string[] tags, TrendOptions? options = null)
+    {
+        string json = (options ?? new TrendOptions()).ToJson();
+        return WithNames(tags, ptrs =>
+        {
+            int status = Native.ciplink_trend_start(Handle, ptrs, (nuint)ptrs.Length, json, out TrendHandle trend);
+            if (status != 0)
+            {
+                trend.Dispose();
+                Native.Check(status);
+            }
+            return new Trend(trend);
+        });
+    }
+
+    /// <summary>Starts a controller-side trend of <paramref name="tags"/> sampled every 10 ms.</summary>
+    public Trend Trend(params string[] tags) => Trend(tags, null);
+
     /// <summary>The uploaded tag definitions, by tag name.</summary>
     public JsonObject Tags() => (JsonObject)CallNode((out IntPtr j) => Native.ciplink_tags(Handle, out j))!;
 

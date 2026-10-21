@@ -123,7 +123,8 @@ For data faster than polling gives, a trend has the controller sample tags every
 buffer (the trend object Studio 5000 uses), on a connection of its own. Each sample carries the controller's
 timestamp. A pen can be any atomic tag, member or array element of up to 32 bits (BOOL, SINT, INT, DINT, USINT,
 UINT, UDINT, REAL) or a bit (`Tag.3`). 64-bit types (LINT, LREAL) can't be trended. The controller deletes the trend
-when it's closed or when its connection drops. Trends are available from Python and Rust.
+when it's closed or when its connection drops. Every binding has trends: `plc.trend(...)` in Python, Rust and C++,
+`plc.Trend(...)` in C#, `ciplink_trend_start` in C.
 
 ```python
 import time
