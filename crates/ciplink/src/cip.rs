@@ -5,7 +5,7 @@
 //! connection, holding its lock across multi-step operations.
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, ToSocketAddrs, UdpSocket};
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use crate::epath::{LogicalValue, Segment, encode_epath, parse_cip_route, parse_connection_path};
@@ -149,7 +149,7 @@ impl GenericReply {
 /// Matches the Python `CIPDriver`: the same requests in the same order, the same sequence counter, the same
 /// packing and fallback decisions. A transport failure in the middle of a request drops the connection.
 pub struct CipConnection {
-    connector: Connector,
+    connector: Arc<Connector>,
     transport: Option<Box<dyn Transport>>,
     path: String,
     host: String,
@@ -204,7 +204,7 @@ impl CipConnection {
         check_socket_timeout(options.socket_timeout)?;
         check_connection_size(options.connection_size)?;
         Ok(CipConnection {
-            connector,
+            connector: Arc::new(connector),
             transport: None,
             path: path.to_owned(),
             host,
@@ -221,6 +221,12 @@ impl CipConnection {
             csn: [0x27, 0x04],
             vsn: [0x09, 0x10, 0x19, 0x71],
         })
+    }
+
+    /// A connector opening transports like this connection's (for another connection to the same device).
+    pub(crate) fn share_connector(&self) -> Connector {
+        let connector = Arc::clone(&self.connector);
+        Box::new(move |host, port, timeout| connector(host, port, timeout))
     }
 
     /// The path the connection was created with.

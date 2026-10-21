@@ -5,10 +5,11 @@ use crate::config::{ConfigError, LogixConfig, TagConfig, TypeConfig};
 use crate::identity::Identity;
 use crate::metadata::{self, Selector};
 use crate::model::{Atomic, BASE_TAG_BIT, StructKind, Tag, Ty, Types};
-use crate::path::{Seg, attribute, class_instance, parse_request};
+use crate::path::{Seg, attribute, class_instance, parse_path, parse_request};
+use ciplink::reader::Reader;
 use serde_json::Value as Json;
-use std::collections::BTreeSet;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::collections::{BTreeMap, BTreeSet};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 /// A CIP status: general status and extended status words.
 type Status = (u8, Vec<u16>);
@@ -145,6 +146,7 @@ struct TableVersion {
 }
 
 /// A request path resolved to a region of a tag.
+#[derive(Clone, Debug)]
 struct Target {
     program: Option<usize>,
     tag: usize,
@@ -191,7 +193,34 @@ pub struct Logix {
     programs: Vec<Program>,
     version: TableVersion,
     clock_offset_us: i128,
+    /// Controller-side trends (class 0xB2) by instance.
+    trends: BTreeMap<u32, Trend>,
 }
+
+/// A controller-side trend (class 0xB2, the object Studio 5000 trends use): one driver of pens, each a
+/// tag path and a mask over the 32-bit word at the tag's address, sampled every `period_us * multiplier`.
+#[derive(Clone, Debug)]
+struct Trend {
+    period_us: u32,
+    driver: Option<TrendDriver>,
+    started: Option<Instant>,
+    /// Samples uploaded (or dropped) since the start.
+    sent: u64,
+}
+
+/// The pens of a trend: each a resolved tag path and the mask over the word at its address.
+#[derive(Clone, Debug)]
+struct TrendDriver {
+    id: u16,
+    /// Samples are taken every `multiplier` periods.
+    multiplier: u8,
+    pens: Vec<(Target, u32)>,
+}
+
+/// The most samples a trend keeps for upload; older ones are dropped, as a controller's buffer overflows.
+const TREND_BACKLOG: u64 = 20_000;
+/// Trend clock ticks are 128 µs.
+const TREND_TICK_US: u64 = 128;
 
 fn now_us() -> i128 {
     SystemTime::now()
@@ -337,6 +366,7 @@ impl Logix {
                 project: 0x6500_0001,
             },
             clock_offset_us: config.clock_us.map_or(0, |us| i128::from(us) - now_us()),
+            trends: BTreeMap::new(),
         })
     }
 
@@ -699,6 +729,20 @@ impl Logix {
                 _ => Err(status(0x14)),
             },
             (Some((0x8B, 1)), 0x04) => self.clock_set(request.data),
+            (Some((0xB2, 0)), 0x08) if !self.micro800 => Ok(self.trend_create()),
+            (Some((0xB2, 0)), 0x03) if !self.micro800 => {
+                let last = self.trends.keys().next_back().copied().unwrap_or(0);
+                let count = self.trends.len();
+                get_attribute_list(request.data, |a| match a {
+                    1 => Some(3u16.to_le_bytes().to_vec()),
+                    2 => Some((last as u16).to_le_bytes().to_vec()),
+                    3 => Some((count as u16).to_le_bytes().to_vec()),
+                    _ => None,
+                })
+            }
+            (Some((0xB2, id)), _) if !self.micro800 && id != 0 => {
+                return self.trend_service(service, id, request.data, limit);
+            }
             (_, 0x55) => return self.symbol_list(&request.path, request.data, limit),
             (_, 0x4C | 0x52 | 0x4D | 0x53 | 0x4E) if is_tag_path(&request.path) => {
                 return self.tag_service(service, &request.path, request.data, limit, faults);
@@ -805,6 +849,175 @@ impl Logix {
             10 => Some(v.project.to_le_bytes().to_vec()),
             _ => None,
         })
+    }
+
+    // ---- trends (class 0xB2) ----
+
+    /// Create (0x08): a new trend instance, its id twice (the attributes of the request are not checked).
+    fn trend_create(&mut self) -> Vec<u8> {
+        let id = (1..)
+            .find(|id| !self.trends.contains_key(id))
+            .unwrap_or(u32::MAX);
+        self.trends.insert(
+            id,
+            Trend {
+                period_us: 10_000,
+                driver: None,
+                started: None,
+                sent: 0,
+            },
+        );
+        [id.to_le_bytes(), id.to_le_bytes()].concat()
+    }
+
+    /// The services of a trend instance; answers the whole reply.
+    fn trend_service(&mut self, service: u8, id: u32, data: &[u8], limit: usize) -> Vec<u8> {
+        let fail = |(general, extended): Status| reply(service, general, &extended, &[]);
+        if !self.trends.contains_key(&id) {
+            return fail(status(0x05));
+        }
+        let result = match service {
+            0x04 => self.trend_set(id, data),
+            0x4E => self.trend_add_driver(id, data),
+            0x06 => {
+                let now = self.clock_us();
+                self.trend_mut(id).map(|t| {
+                    t.started = Some(Instant::now());
+                    t.sent = 0;
+                    now.to_le_bytes().to_vec()
+                })
+            }
+            0x4C => return self.trend_upload(id, limit),
+            0x07 => self.trend_mut(id).map(|t| {
+                t.started = None;
+                Vec::new()
+            }),
+            0x4F => self.trend_mut(id).map(|t| {
+                t.driver = None;
+                Vec::new()
+            }),
+            0x09 => {
+                self.trends.remove(&id);
+                Ok(Vec::new())
+            }
+            _ => Err(status(0x08)),
+        };
+        match result {
+            Ok(data) => reply(service, 0, &[], &data),
+            Err(s) => fail(s),
+        }
+    }
+
+    fn trend_mut(&mut self, id: u32) -> Result<&mut Trend, Status> {
+        self.trends.get_mut(&id).ok_or_else(|| status(0x05))
+    }
+
+    /// Set_Attribute_List: attribute 1 the sample period in µs (1 ms or more), attribute 5 a USINT.
+    fn trend_set(&mut self, id: u32, data: &[u8]) -> Result<Vec<u8>, Status> {
+        let mut r = Reader::new(data);
+        let count = r.u16().map_err(|_| status(0x13))?;
+        let mut out = count.to_le_bytes().to_vec();
+        let mut failed = false;
+        for _ in 0..count {
+            let attribute = r.u16().map_err(|_| status(0x13))?;
+            out.extend(attribute.to_le_bytes());
+            let code: u16 = match attribute {
+                1 => {
+                    let period = r.u32().map_err(|_| status(0x13))?;
+                    if period < 1000 {
+                        0x09
+                    } else {
+                        self.trend_mut(id)?.period_us = period;
+                        0
+                    }
+                }
+                5 => {
+                    r.u8().map_err(|_| status(0x13))?;
+                    0
+                }
+                _ => {
+                    out.extend(0x14u16.to_le_bytes());
+                    return Err(status(0x0A));
+                }
+            };
+            failed |= code != 0;
+            out.extend(code.to_le_bytes());
+        }
+        if failed {
+            return Err(status(0x0A));
+        }
+        Ok(out)
+    }
+
+    /// Add Driver (0x4E): driver id, sample multiplier, pen count, then each pen's padded path and mask.
+    fn trend_add_driver(&mut self, id: u32, data: &[u8]) -> Result<Vec<u8>, Status> {
+        let mut r = Reader::new(data);
+        let short = |_| status(0x13);
+        let driver = r.u16().map_err(short)?;
+        let multiplier = r.u8().map_err(short)?.max(1);
+        let count = r.u8().map_err(short)?;
+        let mut pens = Vec::with_capacity(usize::from(count));
+        for _ in 0..count {
+            let words = usize::from(r.u8().map_err(short)?);
+            let path = parse_path(r.take(words * 2).map_err(short)?).ok_or_else(|| status(0x04))?;
+            let mask = r.u32().map_err(short)?;
+            pens.push((self.resolve(&path, true)?, mask));
+        }
+        self.trend_mut(id)?.driver = Some(TrendDriver {
+            id: driver,
+            multiplier,
+            pens,
+        });
+        Ok(driver.to_le_bytes().to_vec())
+    }
+
+    /// Upload (0x4C): the samples due since the last upload, each the driver id, the elapsed 128 µs ticks
+    /// and a masked word per pen; status 0x06 when more are due than fit in the reply.
+    fn trend_upload(&mut self, id: u32, limit: usize) -> Vec<u8> {
+        let Some(trend) = self.trends.get(&id) else {
+            return reply(0x4C, 0x05, &[], &[]);
+        };
+        let (
+            Some(started),
+            Some(TrendDriver {
+                id: driver,
+                multiplier,
+                pens,
+            }),
+        ) = (trend.started, &trend.driver)
+        else {
+            return reply(0x4C, 0x0C, &[], &[]);
+        };
+        let every = u64::from(trend.period_us) * u64::from(*multiplier);
+        let due = started.elapsed().as_micros() as u64 / every;
+        let first = trend.sent.max(due.saturating_sub(TREND_BACKLOG));
+        let size = 6 + 4 * pens.len();
+        let fit = (limit.saturating_sub(4) / size) as u64;
+        let last = due.min(first + fit);
+        let words: Vec<u32> = pens
+            .iter()
+            .map(|(target, mask)| {
+                let data = &self.scope(target.program).tags[target.tag].data;
+                let mut word = [0u8; 4];
+                for (i, b) in word.iter_mut().enumerate() {
+                    *b = data.get(target.offset + i).copied().unwrap_or(0);
+                }
+                u32::from_le_bytes(word) & mask
+            })
+            .collect();
+        let mut out = Vec::with_capacity(size * (last - first) as usize);
+        for sample in first + 1..=last {
+            out.extend(driver.to_le_bytes());
+            out.extend((((sample * every) / TREND_TICK_US) as u32).to_le_bytes());
+            for word in &words {
+                out.extend(word.to_le_bytes());
+            }
+        }
+        let general = if last < due { 0x06 } else { 0 };
+        if let Some(t) = self.trends.get_mut(&id) {
+            t.sent = last;
+        }
+        reply(0x4C, general, &[], &out)
     }
 
     fn clock_get(&self, data: &[u8]) -> Result<Vec<u8>, Status> {

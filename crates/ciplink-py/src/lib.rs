@@ -15,6 +15,7 @@ use ciplink::epath::LogicalValue;
 use ciplink::logix::auth::LogixMetadataCredentials;
 use ciplink::logix::driver::{LogixDriver, LogixOptions};
 use ciplink::logix::metadata::TextEncoding;
+use ciplink::logix::trend::{Trend, TrendOptions};
 use ciplink::logix::types::PyObj;
 use ciplink::slc::driver::SlcDriver;
 use ciplink::transport::{Connector, Transport, tcp_connector};
@@ -1293,6 +1294,40 @@ impl PyLogixDriver {
         tag_result(py, &result)
     }
 
+    /// Starts a controller-side trend of `tags` on a connection of its own.
+    #[pyo3(signature = (tags, period_us, capacity, duration=None))]
+    fn trend(
+        &self,
+        py: Python<'_>,
+        tags: Vec<String>,
+        period_us: u64,
+        capacity: usize,
+        duration: Option<f64>,
+    ) -> PyResult<PyTrend> {
+        let duration = match duration {
+            None => None,
+            Some(s) if s.is_finite() && s > 0.0 => Some(Duration::from_secs_f64(s)),
+            Some(_) => {
+                return Err(PyValueError::new_err(
+                    "duration must be a positive finite number of seconds or None",
+                ));
+            }
+        };
+        let options = TrendOptions {
+            period: Duration::from_micros(period_us),
+            capacity,
+            duration,
+        };
+        sync_log_level(py);
+        let trend = py
+            .detach(|| {
+                let refs: Vec<&str> = tags.iter().map(String::as_str).collect();
+                self.inner.trend(&refs, options)
+            })
+            .py()?;
+        Ok(PyTrend { inner: trend })
+    }
+
     /// Moves the reload backoff clock forward (tests).
     fn advance_clock(&self, py: Python<'_>, seconds: f64) {
         let by = Duration::from_secs_f64(seconds.max(0.0));
@@ -1301,6 +1336,84 @@ impl PyLogixDriver {
 
     fn __str__(&self, py: Python<'_>) -> String {
         py.detach(|| self.inner.to_string())
+    }
+}
+
+// ------------------------------------------------------------------------------------------------ trend
+
+/// A running controller-side trend (`ciplink.trend.Trend`'s core).
+#[pyclass(frozen, module = "ciplink._core", name = "Trend")]
+struct PyTrend {
+    inner: Trend,
+}
+
+#[pymethods]
+impl PyTrend {
+    /// (tag, data type) of each pen.
+    #[getter]
+    fn pens(&self) -> Vec<(String, &'static str)> {
+        self.inner
+            .pens()
+            .iter()
+            .map(|p| (p.tag.clone(), p.data_type))
+            .collect()
+    }
+
+    #[getter]
+    fn period_us(&self) -> u128 {
+        self.inner.period().as_micros()
+    }
+
+    #[getter]
+    fn start_time_us(&self) -> u64 {
+        self.inner.start_time_us()
+    }
+
+    #[getter]
+    fn running(&self) -> bool {
+        self.inner.running()
+    }
+
+    #[getter]
+    fn received(&self) -> u64 {
+        self.inner.received()
+    }
+
+    #[getter]
+    fn dropped(&self) -> u64 {
+        self.inner.dropped()
+    }
+
+    /// The trend's error as a ciplink exception, None if it has not failed.
+    #[getter]
+    fn error(&self, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
+        match self.inner.error() {
+            Some(err) => Ok(Some(
+                make_py_err(py, &err)?.value(py).clone().into_any().unbind(),
+            )),
+            None => Ok(None),
+        }
+    }
+
+    /// The samples since the last read as (timestamp_us, elapsed_us, values) tuples.
+    fn read<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        let samples = self.inner.read().py()?;
+        let items = samples
+            .iter()
+            .map(|s| {
+                let values = s
+                    .values
+                    .iter()
+                    .map(|v| value_to_py(py, v))
+                    .collect::<PyResult<Vec<_>>>()?;
+                (s.timestamp_us, s.elapsed_us, PyTuple::new(py, values)?).into_pyobject(py)
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+        PyList::new(py, items)
+    }
+
+    fn close(&self, py: Python<'_>) -> PyResult<()> {
+        py.detach(|| self.inner.close()).py()
     }
 }
 
@@ -1318,5 +1431,6 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyCipDriver>()?;
     m.add_class::<PySlcDriver>()?;
     m.add_class::<PyLogixDriver>()?;
+    m.add_class::<PyTrend>()?;
     Ok(())
 }

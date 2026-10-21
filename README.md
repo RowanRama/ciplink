@@ -40,6 +40,7 @@ flowchart LR
 | **Tag discovery** | the tag list and UDT definitions are uploaded on connect, or loaded on first use with `lazy_tags`; a binary tag cache makes restarts near-instant |
 | **Online-edit safe** | tags are addressed by instance ID and checked against the controller's tag-table version on every read and write, so an online edit never silently returns the wrong tag |
 | **Extras** | tag descriptions, PLC clock, device discovery, module identity, and a simulated controller for testing |
+| **Trends** | the controller samples tags at a fixed period (down to 1 ms) and the driver uploads them in batches, like a Studio 5000 trend |
 
 ## Install
 
@@ -115,6 +116,29 @@ for (const ciplink::Tag& t : plc.read({"Counter", "Tank.Level"}))
 plc.write_tag("Counter", 0);
 ```
 </details>
+
+## Trends
+
+For data faster than polling gives, a trend has the controller sample tags every `period_ms` into its own trend
+buffer (the trend object Studio 5000 uses), on a connection of its own. Each sample carries the controller's
+timestamp. A pen can be any atomic tag, member or array element of up to 32 bits (BOOL, SINT, INT, DINT, USINT,
+UINT, UDINT, REAL) or a bit (`Tag.3`). 64-bit types (LINT, LREAL) can't be trended. The controller deletes the trend
+when it's closed or when its connection drops. Trends are available from Python and Rust.
+
+```python
+import time
+from ciplink import LogixDriver
+
+with LogixDriver("192.0.2.10") as plc:
+    with plc.trend("Motor.Speed", "Tank.Level", "Valve.Open", period_ms=1) as trend:
+        while trend.running:
+            time.sleep(0.1)
+            for sample in trend.read():          # TrendSample(timestamp_us, elapsed_us, values)
+                print(sample.timestamp, sample.values)
+```
+
+`capacity` (default 4096) bounds the samples waiting for `read()`; the oldest are dropped when it is full and
+counted in `dropped_samples`. `duration` (seconds) stops the trend by itself.
 
 ## Test without a PLC
 

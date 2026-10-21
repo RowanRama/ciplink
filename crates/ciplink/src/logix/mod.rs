@@ -7,4 +7,5 @@ pub mod driver;
 pub mod metadata;
 pub mod rw;
 pub mod tag_cache;
+pub mod trend;
 pub mod types;

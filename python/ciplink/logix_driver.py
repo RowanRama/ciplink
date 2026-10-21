@@ -47,6 +47,7 @@ from .const import SEC_TO_US
 from .exceptions import RequestError
 from .tag import Tag, ErrorKind, TagError
 from .logix_auth import LogixMetadataCredentials
+from .trend import Trend
 
 AtomicValueType = Union[int, float, bool, str]
 TagValueType = Union[AtomicValueType, List[AtomicValueType], Dict[str, "TagValueType"]]
@@ -378,6 +379,21 @@ class LogixDriver(CIPDriver):
             tags_values = ((*tags_values,),)
         results = self._core.write(tags_values)
         return results if len(results) > 1 else results[0]
+
+    @_definitions_may_change
+    def trend(self, *tags: str, period_ms: float = 10, capacity: int = 4096,
+              duration: Optional[float] = None) -> Trend:
+        """
+        Starts a controller-side trend: the controller samples ``tags`` every ``period_ms`` into its trend buffer
+        and the trend uploads them on a connection of its own, see :mod:`ciplink.trend`.
+
+        :param tags: atomic tags, members or array elements of up to 32 bits, or bits (``Tag.3``)
+        :param period_ms: sample period, 1 ms or more (whole microseconds)
+        :param capacity: samples kept until :meth:`Trend.read`, the oldest are dropped when full
+        :param duration: stop after this many seconds, None to run until closed
+        :return: the running :class:`Trend`, close it (or use it as a context manager) to stop it
+        """
+        return Trend(self._core.trend(list(tags), round(period_ms * 1000), capacity, duration))
 
     # ---- metadata
 

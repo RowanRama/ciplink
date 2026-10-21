@@ -28,6 +28,14 @@ use crate::types::Elementary;
 use crate::value::py_str_repr;
 use crate::{Error, ErrorKind, Result, TagError, Value};
 
+/// What a trend pen samples: the tag its path names (the word of a BOOL array element, the integer of a bit),
+/// that tag's type, and the bit of a BOOL.
+pub(crate) struct PenTarget {
+    pub plc_tag: String,
+    pub data_type: TypeRef,
+    pub bit: Option<u32>,
+}
+
 /// Most elements one Read/Write Tag service carries (its element count is a UINT).
 const MAX_SERVICE_ELEMENTS: usize = 65535;
 /// Reply bytes of a write in a multi-service packet: sequence and reply header.
@@ -1265,6 +1273,28 @@ impl Logix {
                 error: Some(error.clone()),
             })
             .collect()
+    }
+
+    /// What a trend pen of `tag` samples, parsed like a read of it.
+    pub(crate) fn pen_target(&mut self, tag: &str) -> Result<PenTarget> {
+        self.conn.ensure_forward_open("trend")?;
+        let p = self.parse_tag_request(tag, Rw::Read, 0)?;
+        if p.elements != 1 || p.bool_elements.is_some() {
+            return Err(Error::request(format!(
+                "Cannot trend {tag}: a pen is one value, not an element count"
+            )));
+        }
+        let bit = match (&p.info, p.bit) {
+            // a bit of an integer, or a BOOL array element's bit in its word
+            (_, Some(b)) => u32::try_from(b).ok(),
+            (Info::Member(m), None) => m.bit.map(u32::from),
+            (Info::Tag(t), None) => t.bit_position.map(u32::from),
+        };
+        Ok(PenTarget {
+            data_type: p.info.view().data_type().clone(),
+            plc_tag: p.plc_tag,
+            bit,
+        })
     }
 
     /// `read`: two attempts, the second after the tag definitions were loaded again because the tag table
