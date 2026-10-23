@@ -24,8 +24,9 @@ classifiers = [
 
 [project.optional-dependencies]
 tests = ["pytest"]
-# the tag server (one process per site serving tag values over a WebSocket), Python 3.11+
-server = ["ciplink-tagserver>=0.4.1"]
+
+[project.scripts]
+ciplink-server = "ciplink.server:main"
 
 [project.urls]
 Source = "https://github.com/RowanRama/ciplink"

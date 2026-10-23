@@ -5,6 +5,7 @@
 //! the pure-Python `ciplink.exceptions` module.  The `ciplink` package wraps these classes in its public API.
 
 mod defs;
+mod server;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -1670,5 +1671,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PySlcDriver>()?;
     m.add_class::<PyLogixDriver>()?;
     m.add_class::<PyTrend>()?;
+    m.add_class::<server::PyTagServer>()?;
+    m.add_function(wrap_pyfunction!(server::server_main, m)?)?;
     Ok(())
 }

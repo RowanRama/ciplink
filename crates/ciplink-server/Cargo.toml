@@ -1,0 +1,37 @@
+[package]
+name = "ciplink-server"
+description = "One server per site that owns the PLC connections and serves tag values over a WebSocket"
+readme = "README.md"
+keywords = ["plc", "ethernet-ip", "hmi", "websocket", "allen-bradley"]
+categories = ["network-programming", "science"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+ciplink = { path = "../ciplink", version = "0.3.3" }
+axum = { version = "0.8", features = ["ws"] }
+clap = { version = "4", features = ["derive"] }
+futures-util = "0.3"
+indexmap = "2"
+log = "0.4"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net", "signal"] }
+toml = { version = "0.9", features = ["preserve_order"] }
+tower-http = { version = "0.6", features = ["cors"] }
+
+[dev-dependencies]
+ciplink-sim = { path = "../ciplink-sim" }
+tokio-tungstenite = "0.29"
+
+[[bin]]
+name = "ciplink-server"
+path = "src/main.rs"
+
+[lints]
+workspace = true
