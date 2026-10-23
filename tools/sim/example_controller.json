@@ -10,6 +10,21 @@
     "keyswitch": "REMOTE RUN"
   },
   "slot": 0,
+  "ip": "192.168.1.10",
+  "netmask": "255.255.255.0",
+  "network": [
+    {
+      "ip": "192.168.1.20",
+      "identity": {
+        "product_type": 12,
+        "product_code": 145,
+        "revision": [5, 12],
+        "serial": "00a1b2c3",
+        "product_name": "1734-AENTR/C",
+        "keyswitch": "RUN"
+      }
+    }
+  ],
   "program_name": "SimPLC",
   "modules": [
     {

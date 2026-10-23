@@ -134,6 +134,15 @@ pub struct LogixConfig {
     pub identity: IdentityConfig,
     /// Backplane slot of the controller: Unconnected Send and Forward Open routes must name it.
     pub slot: u8,
+    /// Slots in the chassis, the node range of the backplane port in the Port Object (class 0xF4).
+    pub chassis_size: u8,
+    /// IP address and subnet mask of the EtherNet/IP port (its TCP/IP Interface Object, class 0xF5).
+    pub ip: String,
+    /// Subnet mask of the EtherNet/IP port.
+    pub netmask: String,
+    /// Devices on the EtherNet/IP network, answering Get_Attributes_All of their identity through Unconnected
+    /// Send on port 2; other addresses time out (0x01/0x0204).
+    pub network: Vec<NetworkDeviceConfig>,
     /// Name of the project (class 0x64).
     pub program_name: String,
     /// Largest connection size a Forward Open may ask for.
@@ -174,6 +183,10 @@ impl Default for LogixConfig {
         LogixConfig {
             identity: IdentityConfig::default(),
             slot: 0,
+            chassis_size: 10,
+            ip: "192.168.1.10".into(),
+            netmask: "255.255.255.0".into(),
+            network: Vec::new(),
             program_name: "SimController".into(),
             max_connection_size: 4002,
             large_forward_open: true,
@@ -480,6 +493,16 @@ pub struct SystemTagConfig {
 pub struct ModuleConfig {
     /// Backplane slot.
     pub slot: u8,
+    /// Its identity.
+    pub identity: IdentityConfig,
+}
+
+/// A device on the EtherNet/IP network of a Logix.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct NetworkDeviceConfig {
+    /// IP address.
+    pub ip: String,
     /// Its identity.
     pub identity: IdentityConfig,
 }

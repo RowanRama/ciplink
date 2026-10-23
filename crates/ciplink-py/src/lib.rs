@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
+use ciplink::browse::{Node, PortInfo};
 use ciplink::cip::{CipDriver, CipOptions, GenericMessage, RoutePath, TagResult};
 use ciplink::epath::LogicalValue;
 use ciplink::logix::auth::LogixMetadataCredentials;
@@ -466,6 +467,82 @@ fn identity<'py>(
     }
 }
 
+fn ports_py(py: Python<'_>, ports: Vec<PortInfo>) -> PyResult<Py<PyList>> {
+    let items = ports
+        .iter()
+        .map(|p| {
+            let dict = PyDict::new(py);
+            dict.set_item("number", p.number)?;
+            dict.set_item("type", p.port_type)?;
+            dict.set_item("type_name", p.type_name())?;
+            dict.set_item("name", &p.name)?;
+            dict.set_item("address", &p.address)?;
+            dict.set_item("ip", p.ip.map(|(ip, _)| ip.to_string()))?;
+            dict.set_item("netmask", p.ip.map(|(_, mask)| mask.to_string()))?;
+            dict.set_item("nodes", p.nodes())?;
+            Ok(dict)
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    Ok(PyList::new(py, items)?.unbind())
+}
+
+fn nodes_py(py: Python<'_>, nodes: Vec<Node>) -> PyResult<Py<PyList>> {
+    let items = nodes
+        .iter()
+        .map(|n| {
+            let dict = PyDict::new(py);
+            dict.set_item("route", &n.route)?;
+            dict.set_item("address", &n.address)?;
+            match &n.identity {
+                Some(id) => dict.set_item("identity", value_to_py(py, &id.to_value())?)?,
+                None => dict.set_item("identity", py.None())?,
+            }
+            dict.set_item("error", &n.error)?;
+            Ok(dict)
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    Ok(PyList::new(py, items)?.unbind())
+}
+
+/// A scan's `found` callback over a Python callable: each node as a dict; a falsy result other than None, or
+/// an exception (raised by [`finish`](NodeCallback::finish)), stops the scan.
+struct NodeCallback {
+    call: Box<dyn FnMut(Node) -> bool + Send>,
+    error: Arc<Mutex<Option<PyErr>>>,
+}
+
+impl NodeCallback {
+    fn finish(self) -> PyResult<()> {
+        match self
+            .error
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
+        {
+            Some(err) => Err(err),
+            None => Ok(()),
+        }
+    }
+}
+
+fn node_callback(found: Py<PyAny>) -> NodeCallback {
+    let error = Arc::new(Mutex::new(None));
+    let errors = Arc::clone(&error);
+    let call = Box::new(move |node: Node| {
+        Python::attach(|py| {
+            let result = nodes_py(py, vec![node])
+                .and_then(|list| list.bind(py).get_item(0))
+                .and_then(|dict| found.call1(py, (dict,)))
+                .and_then(|r| Ok(r.is_none(py) || r.is_truthy(py)?));
+            result.unwrap_or_else(|err| {
+                *errors.lock().unwrap_or_else(PoisonError::into_inner) = Some(err);
+                false
+            })
+        })
+    });
+    NodeCallback { call, error }
+}
+
 fn discover_py(py: Python<'_>, broadcast: &str) -> PyResult<Py<PyList>> {
     sync_log_level(py);
     let devices = py.detach(|| CipDriver::discover(broadcast));
@@ -585,6 +662,59 @@ impl PyCipDriver {
         sync_log_level(py);
         let id = py.detach(|| self.inner.get_module_info(slot)).py()?;
         value_to_py(py, &id.to_value())
+    }
+
+    #[pyo3(signature = (route=""))]
+    fn get_identity<'py>(&self, py: Python<'py>, route: &str) -> PyResult<Bound<'py, PyAny>> {
+        sync_log_level(py);
+        let id = py.detach(|| self.inner.identity_at(route)).py()?;
+        value_to_py(py, &id.to_value())
+    }
+
+    #[pyo3(signature = (route=""))]
+    fn get_ports(&self, py: Python<'_>, route: &str) -> PyResult<Py<PyList>> {
+        sync_log_level(py);
+        let ports = py.detach(|| self.inner.ports_at(route)).py()?;
+        ports_py(py, ports)
+    }
+
+    #[pyo3(signature = (route, port, nodes=None, workers=16))]
+    fn browse_port(
+        &self,
+        py: Python<'_>,
+        route: &str,
+        port: u16,
+        nodes: Option<Vec<String>>,
+        workers: usize,
+    ) -> PyResult<Py<PyList>> {
+        sync_log_level(py);
+        let nodes = py
+            .detach(|| {
+                self.inner
+                    .browse_port(route, port, nodes.as_deref(), workers)
+            })
+            .py()?;
+        nodes_py(py, nodes)
+    }
+
+    #[pyo3(signature = (route, port, nodes, workers, found))]
+    fn scan_port(
+        &self,
+        py: Python<'_>,
+        route: &str,
+        port: u16,
+        nodes: Option<Vec<String>>,
+        workers: usize,
+        found: Py<PyAny>,
+    ) -> PyResult<()> {
+        sync_log_level(py);
+        let mut callback = node_callback(found);
+        py.detach(|| {
+            self.inner
+                .scan_port(route, port, nodes.as_deref(), workers, &mut callback.call)
+        })
+        .py()?;
+        callback.finish()
     }
 
     #[staticmethod]
@@ -725,6 +855,61 @@ impl PySlcDriver {
         sync_log_level(py);
         let id = py.detach(|| self.inner.cip().get_module_info(slot)).py()?;
         value_to_py(py, &id.to_value())
+    }
+
+    #[pyo3(signature = (route=""))]
+    fn get_identity<'py>(&self, py: Python<'py>, route: &str) -> PyResult<Bound<'py, PyAny>> {
+        sync_log_level(py);
+        let id = py.detach(|| self.inner.cip().identity_at(route)).py()?;
+        value_to_py(py, &id.to_value())
+    }
+
+    #[pyo3(signature = (route=""))]
+    fn get_ports(&self, py: Python<'_>, route: &str) -> PyResult<Py<PyList>> {
+        sync_log_level(py);
+        let ports = py.detach(|| self.inner.cip().ports_at(route)).py()?;
+        ports_py(py, ports)
+    }
+
+    #[pyo3(signature = (route, port, nodes=None, workers=16))]
+    fn browse_port(
+        &self,
+        py: Python<'_>,
+        route: &str,
+        port: u16,
+        nodes: Option<Vec<String>>,
+        workers: usize,
+    ) -> PyResult<Py<PyList>> {
+        sync_log_level(py);
+        let nodes = py
+            .detach(|| {
+                self.inner
+                    .cip()
+                    .browse_port(route, port, nodes.as_deref(), workers)
+            })
+            .py()?;
+        nodes_py(py, nodes)
+    }
+
+    #[pyo3(signature = (route, port, nodes, workers, found))]
+    fn scan_port(
+        &self,
+        py: Python<'_>,
+        route: &str,
+        port: u16,
+        nodes: Option<Vec<String>>,
+        workers: usize,
+        found: Py<PyAny>,
+    ) -> PyResult<()> {
+        sync_log_level(py);
+        let mut callback = node_callback(found);
+        py.detach(|| {
+            self.inner
+                .cip()
+                .scan_port(route, port, nodes.as_deref(), workers, &mut callback.call)
+        })
+        .py()?;
+        callback.finish()
     }
 
     #[staticmethod]
@@ -1044,6 +1229,59 @@ impl PyLogixDriver {
         sync_log_level(py);
         let id = py.detach(|| self.inner.get_module_info(slot)).py()?;
         value_to_py(py, &id.to_value())
+    }
+
+    #[pyo3(signature = (route=""))]
+    fn get_identity<'py>(&self, py: Python<'py>, route: &str) -> PyResult<Bound<'py, PyAny>> {
+        sync_log_level(py);
+        let id = py.detach(|| self.inner.identity_at(route)).py()?;
+        value_to_py(py, &id.to_value())
+    }
+
+    #[pyo3(signature = (route=""))]
+    fn get_ports(&self, py: Python<'_>, route: &str) -> PyResult<Py<PyList>> {
+        sync_log_level(py);
+        let ports = py.detach(|| self.inner.ports_at(route)).py()?;
+        ports_py(py, ports)
+    }
+
+    #[pyo3(signature = (route, port, nodes=None, workers=16))]
+    fn browse_port(
+        &self,
+        py: Python<'_>,
+        route: &str,
+        port: u16,
+        nodes: Option<Vec<String>>,
+        workers: usize,
+    ) -> PyResult<Py<PyList>> {
+        sync_log_level(py);
+        let nodes = py
+            .detach(|| {
+                self.inner
+                    .browse_port(route, port, nodes.as_deref(), workers)
+            })
+            .py()?;
+        nodes_py(py, nodes)
+    }
+
+    #[pyo3(signature = (route, port, nodes, workers, found))]
+    fn scan_port(
+        &self,
+        py: Python<'_>,
+        route: &str,
+        port: u16,
+        nodes: Option<Vec<String>>,
+        workers: usize,
+        found: Py<PyAny>,
+    ) -> PyResult<()> {
+        sync_log_level(py);
+        let mut callback = node_callback(found);
+        py.detach(|| {
+            self.inner
+                .scan_port(route, port, nodes.as_deref(), workers, &mut callback.call)
+        })
+        .py()?;
+        callback.finish()
     }
 
     #[staticmethod]

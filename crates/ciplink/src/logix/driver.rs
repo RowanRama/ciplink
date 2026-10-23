@@ -2296,6 +2296,44 @@ impl LogixDriver {
         self.lock().conn.get_module_info(slot)
     }
 
+    /// The identity of the device at `route` (see [`crate::browse`]).
+    pub fn identity_at(&self, route: &str) -> Result<ModuleIdentity> {
+        self.lock().conn.identity_at(route)
+    }
+
+    /// The ports of the device at `route` (see [`crate::browse`]).
+    pub fn ports_at(&self, route: &str) -> Result<Vec<crate::browse::PortInfo>> {
+        self.lock().conn.ports_at(route)
+    }
+
+    /// Probes the slots, nodes or IP addresses on `port` of the device at `route` (`nodes`, by default the
+    /// port's own) from `workers` connections at once; the nodes in address order (see [`crate::browse`]).
+    pub fn browse_port(
+        &self,
+        route: &str,
+        port: u16,
+        nodes: Option<&[String]>,
+        workers: usize,
+    ) -> Result<Vec<crate::browse::Node>> {
+        let scan = self.lock().conn.scan(route, port, nodes)?;
+        Ok(scan.collect(workers))
+    }
+
+    /// [`browse_port`](Self::browse_port), calling `found` with each node as it answers (in any order) until it
+    /// returns false.
+    pub fn scan_port(
+        &self,
+        route: &str,
+        port: u16,
+        nodes: Option<&[String]>,
+        workers: usize,
+        found: &mut dyn FnMut(crate::browse::Node) -> bool,
+    ) -> Result<()> {
+        let scan = self.lock().conn.scan(route, port, nodes)?;
+        scan.run(workers, found);
+        Ok(())
+    }
+
     /// Identifies the target at `path` (Logix path parsing) with ListIdentity over a session of its own.
     pub fn list_identity(path: &str) -> Result<Option<ListIdentity>> {
         crate::cip::CipDriver::list_identity_with(

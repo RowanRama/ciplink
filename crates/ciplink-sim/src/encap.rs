@@ -4,7 +4,7 @@
 use crate::cip::{Faults, reply};
 use crate::identity::Identity;
 use crate::logix::Logix;
-use crate::path::{Seg, class_instance, parse_path, parse_request};
+use crate::path::{Seg, attribute, class_instance, parse_path, parse_request};
 use crate::slc::Slc;
 use std::time::Duration;
 
@@ -71,6 +71,17 @@ impl Device {
         }
     }
 
+    fn network_device(&self, ip: &[u8]) -> Option<&Identity> {
+        match self {
+            Device::Logix(l) => l
+                .network
+                .iter()
+                .find(|(a, _)| a.as_bytes() == ip)
+                .map(|(_, i)| i),
+            Device::Slc(_) => None,
+        }
+    }
+
     /// Answers a message received on a connection (its O->T ID); a Logix sees the connection while it answers
     /// (metadata authentication is per connection), and None for unconnected messages.
     fn message_on(
@@ -90,11 +101,76 @@ impl Device {
         out
     }
 
+    /// An unconnected message to the device itself: the Port Object (a Logix's backplane and EtherNet/IP
+    /// ports, Get_Attribute_Single only), anything else is the device's.
+    fn unconnected_message(&mut self, message: &[u8], faults: &Faults) -> Vec<u8> {
+        match (&*self, parse_request(message)) {
+            (Device::Logix(l), Some(r))
+                if matches!(class_instance(&r.path), Some((0xF4 | 0xF5, _))) =>
+            {
+                port_object(l, r.service, &r.path)
+            }
+            _ => self.message(message, UCMM_LIMIT, faults),
+        }
+    }
+
     fn message(&mut self, message: &[u8], limit: usize, faults: &Faults) -> Vec<u8> {
         match self {
             Device::Logix(l) => l.message(message, limit, faults),
             Device::Slc(s) => s.message(message, limit, faults),
         }
+    }
+}
+
+/// The Port Object (class 0xF4) and TCP/IP Interface Object (class 0xF5) of a Logix: port 1 the backplane
+/// (its node range is the chassis), port 2 the EtherNet/IP port, which reports no node range.
+fn port_object(logix: &Logix, service: u8, path: &[Seg]) -> Vec<u8> {
+    if service != 0x0E {
+        return reply(service, 0x08, &[], &[]);
+    }
+    let (class, instance) = class_instance(path).unwrap_or_default();
+    if class == 0xF5 {
+        return match (instance, attribute(path)) {
+            (1, Some(5)) => {
+                let (ip, mask) = logix.ip;
+                let mut data = [u32::from(ip), u32::from(mask), 0, 0, 0]
+                    .map(u32::to_le_bytes)
+                    .concat();
+                data.extend([0, 0]); // no domain name
+                reply(service, 0, &[], &data)
+            }
+            (1, _) => reply(service, 0x14, &[], &[]),
+            _ => reply(service, 0x16, &[], &[]),
+        };
+    }
+    let short_string = |s: &str| [&[s.len() as u8], s.as_bytes()].concat();
+    let ip = logix.ip.0.to_string();
+    let data = match (instance, attribute(path)) {
+        (0, Some(2 | 3)) => Some(2u16.to_le_bytes().to_vec()), // max instance, instance count
+        (1, Some(1)) => Some(1u16.to_le_bytes().to_vec()),
+        (1, Some(2)) => Some(1u16.to_le_bytes().to_vec()),
+        (1, Some(4)) => Some(short_string("Backplane")),
+        (1, Some(7)) => Some(vec![0x01, logix.slot]),
+        (1, Some(8)) => Some(
+            [0u16, u16::from(logix.chassis_size).saturating_sub(1)]
+                .map(u16::to_le_bytes)
+                .concat(),
+        ),
+        (2, Some(1)) => Some(4u16.to_le_bytes().to_vec()),
+        (2, Some(2)) => Some(2u16.to_le_bytes().to_vec()),
+        (2, Some(3)) => Some(vec![0x02, 0x00, 0x20, 0xF6, 0x24, 0x01]), // the Ethernet Link Object
+        (2, Some(4)) => Some(short_string("A")),
+        (2, Some(7)) => {
+            let mut segment = [&[0x12, ip.len() as u8], ip.as_bytes()].concat();
+            segment.resize(segment.len().next_multiple_of(2), 0);
+            Some(segment)
+        }
+        (0..=2, _) => None,
+        _ => return reply(service, 0x16, &[], &[]), // object does not exist
+    };
+    match data {
+        Some(data) => reply(service, 0, &[], &data),
+        None => reply(service, 0x14, &[], &[]), // attribute not supported
     }
 }
 
@@ -356,7 +432,7 @@ impl Inner {
             return reply(service, 0x04, &[], &[]);
         };
         if class_instance(&request.path) != Some((0x06, 1)) {
-            return self.device.message(message, UCMM_LIMIT, &self.faults);
+            return self.device.unconnected_message(message, &self.faults);
         }
         if let Some((general, extended)) = self.faults.service_status(service, Some(0x06)) {
             return reply(service, general, &extended, &[]);
@@ -496,15 +572,22 @@ impl Inner {
         let Some(route) = data.get(route_at + 2..route_at + 2 + 2 * words) else {
             return fail(0x13, &[]);
         };
-        let slot = match parse_path(route).as_deref() {
-            Some([Seg::Port { port: 1, link }]) if link.len() == 1 => link[0],
+        let identity = match parse_path(route).as_deref() {
+            Some([Seg::Port { port: 1, link }]) if link.len() == 1 => {
+                if link[0] == self.device.slot() {
+                    return self.device.unconnected_message(message, &self.faults);
+                }
+                match self.device.module(link[0]) {
+                    Some(identity) => identity,
+                    None => return fail(0x01, &[0x0312]),
+                }
+            }
+            // a device on the EtherNet/IP network; at any other address the bridge's request times out
+            Some([Seg::Port { port: 2, link }]) => match self.device.network_device(link) {
+                Some(identity) => identity,
+                None => return fail(0x01, &[0x0204]),
+            },
             _ => return fail(0x01, &[0x0312]),
-        };
-        if slot == self.device.slot() {
-            return self.device.message(message, UCMM_LIMIT, &self.faults);
-        }
-        let Some(identity) = self.device.module(slot) else {
-            return fail(0x01, &[0x0312]);
         };
         let service = message.first().copied().unwrap_or(0);
         match parse_request(message).map(|r| (class_instance(&r.path), r.service)) {

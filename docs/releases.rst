@@ -2,6 +2,21 @@
 Release History
 ===============
 
+Unreleased
+==========
+
+- |:sparkles:| device browsing like RSWho: ``get_ports()``, ``browse_port()``, ``iter_port()`` and ``get_identity()``
+  list a device's ports, the modules, nodes or (on an EtherNet/IP port) the devices of its subnet, and the identity at
+  any route through them, probing from several connections at once.  Every binding has it: Python and Rust, C++
+  (``get_ports``, ``browse_port``, ``scan_port``), C# (``GetPorts``, ``BrowsePort``, ``ScanPort``) and C
+  (``ciplink_get_ports``, ``ciplink_browse_port``, ``ciplink_scan_port``).  ``examples/device_browser.py`` is a tree
+  browser built on them.
+- |:bug:| ``discover()`` broadcasts on every network adapter that is up, not only on the addresses the host name
+  resolves to (which can leave out a plant network adapter with a static address), and on all of them at once.
+- |:sparkles:| ``ciplink-sim`` answers the Port Object and TCP/IP Interface Object (a backplane and an EtherNet/IP
+  port); ``chassis_size`` sets the slots of its backplane, ``ip``/``netmask`` its port and ``network`` the devices
+  on its network.
+
 ciplink 0.3.2
 =============
 

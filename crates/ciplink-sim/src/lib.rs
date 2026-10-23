@@ -40,7 +40,8 @@ mod transport;
 
 pub use config::{
     Config, ConfigError, FileConfig, IdentityConfig, LogixConfig, MemberConfig, ModuleConfig,
-    NamedConfig, ProgramConfig, SlcConfig, SystemTagConfig, TagConfig, TypeConfig,
+    NamedConfig, NetworkDeviceConfig, ProgramConfig, SlcConfig, SystemTagConfig, TagConfig,
+    TypeConfig,
 };
 pub use logix::Logix;
 pub use server::{Server, UdpServer};

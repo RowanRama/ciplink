@@ -88,6 +88,40 @@ in the rack.  This method is *not* a class method, so it does require an instanc
 'revision': {'major': 5, 'minor': 8}, 'status': b'0\x00', 'serial': '00000000', 'product_name': '1756-EN2T/B'}
 >>> driver.close()
 
+Browsing Devices
+^^^^^^^^^^^^^^^^
+
+Like RSWho in FactoryTalk Linx, a device can be browsed through: :meth:`CIPDriver.get_ports` lists its ports (its
+Port Object), :meth:`CIPDriver.browse_port` probes every address on one of them, and each node found has a
+``route`` to browse further.  Routes are relative to the device at the driver's IP address (the driver's own
+connection path is not used): ``''`` is that device, ``'bp/3'`` (or ``'1/3'``) the module in slot 3 of its backplane,
+``'bp/2/enet/192.168.1.10'`` a device behind the module in slot 2.  :meth:`CIPDriver.get_identity` reads the identity
+at any route.
+
+A port's ``nodes`` are the addresses probed: the slots of a backplane, the nodes of a ControlNet or DeviceNet
+network, and for an EtherNet/IP port every host of its subnet (from the port's IP address and subnet mask, at most
+the /24 around it), each asked through the module.
+
+>>> with CIPDriver('192.0.2.100') as driver:
+...     for port in driver.get_ports():
+...         print(port['number'], port['type_name'], port['ip'], len(port['nodes']))
+...         for node in driver.browse_port('', port):
+...             if node['identity']:
+...                 print('  ', node['route'], node['identity']['product_name'])
+1 Backplane None 10
+   1/0 1756-L83E/B
+   1/1 1756-EN2T/D
+2 EtherNet/IP 192.0.2.100 254
+   2/192.0.2.21 2198-H008-ERS2
+   2/192.0.2.30 1734-AENTR/C
+
+An empty slot or missing device costs a reply from the bridge, which may wait for its Unconnected Send timeout
+(about 4 s), so ``browse_port`` probes from ``workers`` connections of their own at once (16 by default).
+:meth:`CIPDriver.iter_port` yields each address as it answers instead.  ``examples/device_browser.py`` is a small
+RSWho-style browser built on these methods.
+
+:meth:`CIPDriver.discover` broadcasts on every network adapter that is up, so devices on each network are found.
+
 
 Generic Messaging
 -----------------

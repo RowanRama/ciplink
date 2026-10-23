@@ -39,7 +39,7 @@ flowchart LR
 | **Throughput** | many tags packed into each packet, with large values fragmented and chunked automatically |
 | **Tag discovery** | the tag list and UDT definitions are uploaded on connect, or loaded on first use with `lazy_tags`; a binary tag cache makes restarts near-instant |
 | **Online-edit safe** | tags are addressed by instance ID and checked against the controller's tag-table version on every read and write, so an online edit never silently returns the wrong tag |
-| **Extras** | tag descriptions, PLC clock, device discovery, module identity, and a simulated controller for testing |
+| **Extras** | tag descriptions, PLC clock, device discovery, RSWho-style device browsing, module identity, and a simulated controller for testing |
 | **Trends** | the controller samples tags at a fixed period (down to 1 ms) and the driver uploads them in batches, like a Studio 5000 trend |
 
 ## Install
@@ -140,6 +140,24 @@ with LogixDriver("192.0.2.10") as plc:
 
 `capacity` (default 4096) bounds the samples waiting for `read()`; the oldest are dropped when it is full and
 counted in `dropped_samples`. `duration` (seconds) stops the trend by itself.
+
+## Browse devices
+
+Like RSWho in FactoryTalk Linx: `get_ports()` lists a device's ports, `browse_port()` finds the module in each slot,
+the node at each address or, on an EtherNet/IP port, every device on the port's subnet. Every node found has a
+`route` to browse further (`""` is the device at the IP, `"bp/3"` the module in slot 3, `"bp/2/enet/192.168.1.10"` a
+device behind the module in slot 2). `python -m examples.device_browser` is a small tree browser built on them. Every binding has browsing:
+`get_ports`/`browse_port`/`scan_port` in Rust, C++ and Python (`iter_port` streams), `GetPorts`/`BrowsePort`/
+`ScanPort` in C#, `ciplink_get_ports`/`ciplink_browse_port`/`ciplink_scan_port` in C.
+
+```python
+from ciplink import CIPDriver
+
+with CIPDriver("192.0.2.10") as drv:
+    for port in drv.get_ports():                      # e.g. Backplane, EtherNet/IP
+        for node in drv.browse_port("", port):        # every slot, or every address of the subnet
+            print(node["route"], node["identity"] and node["identity"]["product_name"])
+```
 
 ## Test without a PLC
 

@@ -9,6 +9,7 @@ use crate::path::{Seg, attribute, class_instance, parse_path, parse_request};
 use ciplink::reader::Reader;
 use serde_json::Value as Json;
 use std::collections::{BTreeMap, BTreeSet};
+use std::net::Ipv4Addr;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 /// A CIP status: general status and extended status words.
@@ -173,6 +174,9 @@ pub struct Logix {
     pub(crate) identity: Identity,
     pub(crate) modules: Vec<(u8, Identity)>,
     pub(crate) slot: u8,
+    pub(crate) chassis_size: u8,
+    pub(crate) ip: (Ipv4Addr, Ipv4Addr),
+    pub(crate) network: Vec<(String, Identity)>,
     pub(crate) max_connection_size: u16,
     pub(crate) large_forward_open: bool,
     program_name: String,
@@ -338,11 +342,23 @@ impl Logix {
             }
             modules.push((m.slot, Identity::build(&m.identity)?));
         }
+        let parse_ip = |text: &str| {
+            text.parse::<Ipv4Addr>()
+                .map_err(|_| ConfigError::new(format!("{text:?} is not an IPv4 address")))
+        };
+        let ip = (parse_ip(&config.ip)?, parse_ip(&config.netmask)?);
+        let mut network = Vec::new();
+        for d in &config.network {
+            network.push((parse_ip(&d.ip)?.to_string(), Identity::build(&d.identity)?));
+        }
         let micro800 = config.micro800;
         Ok(Logix {
             identity: Identity::build(&config.identity)?,
             modules,
             slot: config.slot,
+            chassis_size: config.chassis_size,
+            ip,
+            network,
             max_connection_size: config.max_connection_size,
             large_forward_open: config.large_forward_open && !micro800,
             program_name: config.program_name.clone(),

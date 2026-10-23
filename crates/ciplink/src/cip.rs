@@ -4,10 +4,11 @@
 //! handle can be shared between threads, one request/reply at a time. The Logix and SLC drivers build on the
 //! connection, holding its lock across multi-step operations.
 
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, ToSocketAddrs, UdpSocket};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
+use crate::browse::{Node, PortInfo};
 use crate::epath::{LogicalValue, Segment, encode_epath, parse_cip_route, parse_connection_path};
 use crate::identity::{ListIdentity, ModuleIdentity};
 use crate::packets::{self, Encap, ForwardOpen, Reply, ReplyKind};
@@ -812,6 +813,44 @@ impl CipDriver {
         self.lock().get_module_info(slot)
     }
 
+    /// The identity of the device at `route` (see [`crate::browse`]).
+    pub fn identity_at(&self, route: &str) -> Result<ModuleIdentity> {
+        self.lock().identity_at(route)
+    }
+
+    /// The ports of the device at `route` (see [`crate::browse`]).
+    pub fn ports_at(&self, route: &str) -> Result<Vec<PortInfo>> {
+        self.lock().ports_at(route)
+    }
+
+    /// Probes the slots, nodes or IP addresses on `port` of the device at `route` (`nodes`, by default the
+    /// port's own) from `workers` connections at once; the nodes in address order (see [`crate::browse`]).
+    pub fn browse_port(
+        &self,
+        route: &str,
+        port: u16,
+        nodes: Option<&[String]>,
+        workers: usize,
+    ) -> Result<Vec<Node>> {
+        let scan = self.lock().scan(route, port, nodes)?;
+        Ok(scan.collect(workers))
+    }
+
+    /// [`browse_port`](Self::browse_port), calling `found` with each node as it answers (in any order) until it
+    /// returns false.
+    pub fn scan_port(
+        &self,
+        route: &str,
+        port: u16,
+        nodes: Option<&[String]>,
+        workers: usize,
+        found: &mut dyn FnMut(Node) -> bool,
+    ) -> Result<()> {
+        let scan = self.lock().scan(route, port, nodes)?;
+        scan.run(workers, found);
+        Ok(())
+    }
+
     /// Identifies the target at `path` with ListIdentity over a session of its own; None if the session or
     /// reply was refused.
     pub fn list_identity(path: &str) -> Result<Option<ListIdentity>> {
@@ -834,18 +873,25 @@ impl CipDriver {
     }
 
     /// Discovers EtherNet/IP devices by broadcasting ListIdentity to `broadcast` (`255.255.255.255`) from
-    /// each local IPv4 address, then unbound if none answered.
+    /// every network adapter at once, then unbound if none answered.
     pub fn discover(broadcast: &str) -> Vec<ListIdentity> {
         log::info!("Discovering devices...");
-        let mut devices = Vec::new();
-        for ip in local_addresses() {
-            log::debug!("Broadcasting discover for IP: {ip}");
-            devices.extend(Self::discover_at(
-                Some(IpAddr::V4(ip)),
-                broadcast,
-                DEFAULT_PORT,
-            ));
-        }
+        // one broadcast per network adapter, all at once: each waits a second for its last reply
+        let mut devices: Vec<ListIdentity> = std::thread::scope(|scope| {
+            let broadcasts: Vec<_> = local_addresses()
+                .into_iter()
+                .map(|ip| {
+                    scope.spawn(move || {
+                        log::debug!("Broadcasting discover for IP: {ip}");
+                        Self::discover_at(Some(IpAddr::V4(ip)), broadcast, DEFAULT_PORT)
+                    })
+                })
+                .collect();
+            broadcasts
+                .into_iter()
+                .flat_map(|b| b.join().unwrap_or_default())
+                .collect()
+        });
         if devices.is_empty() {
             log::debug!("No devices found so far, attempting broadcast without binding to an IP.");
             devices.extend(Self::discover_at(None, broadcast, DEFAULT_PORT));
@@ -896,35 +942,18 @@ fn broadcast_discover(
     Ok(())
 }
 
-/// The IPv4 addresses the host name resolves to, each once, in order.
+/// The IPv4 address of every network adapter that is up, loopback excluded, each once.
 fn local_addresses() -> Vec<Ipv4Addr> {
-    let Some(name) = host_name() else {
-        return Vec::new();
-    };
     let mut out = Vec::new();
-    if let Ok(addrs) = (name.as_str(), 0).to_socket_addrs() {
-        for addr in addrs {
-            if let IpAddr::V4(ip) = addr.ip() {
-                if !out.contains(&ip) {
-                    out.push(ip);
-                }
-            }
+    for interface in if_addrs::get_if_addrs().unwrap_or_default() {
+        if let if_addrs::IfAddr::V4(v4) = interface.addr
+            && !v4.ip.is_loopback()
+            && !out.contains(&v4.ip)
+        {
+            out.push(v4.ip);
         }
     }
     out
-}
-
-fn host_name() -> Option<String> {
-    ["COMPUTERNAME", "HOSTNAME"]
-        .iter()
-        .find_map(|var| std::env::var(var).ok())
-        .or_else(|| {
-            ["/proc/sys/kernel/hostname", "/etc/hostname"]
-                .iter()
-                .find_map(|p| std::fs::read_to_string(p).ok())
-        })
-        .map(|s| s.trim().to_owned())
-        .filter(|s| !s.is_empty())
 }
 
 #[cfg(test)]

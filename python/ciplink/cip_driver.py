@@ -35,8 +35,9 @@ __all__ = [
 
 import logging
 import threading
+import queue
 from functools import wraps
-from typing import Union, Optional, Tuple, List, Sequence, Type, Any, Dict
+from typing import Union, Optional, Tuple, List, Sequence, Type, Any, Dict, Iterator
 
 from . import _core
 from .cip import CIPSegment, PortSegment, PADDED_EPATH, DataType
@@ -229,6 +230,72 @@ class CIPDriver:
         """
         return self._core.get_module_info(slot)
 
+    def get_identity(self, route: str = "") -> dict:
+        """
+        Get the Identity object of the device at ``route``.
+
+        Routes are relative to the device at the driver's IP address and ignore its connection path:
+        ``""`` is that device, ``"bp/3"`` (or ``"1/3"``) the module in slot 3 of its backplane,
+        ``"bp/2/enet/192.168.1.10"`` a device behind the module in slot 2.
+        """
+        return self._core.get_identity(route)
+
+    def get_ports(self, route: str = "") -> List[Dict[str, Any]]:
+        """
+        Get the ports of the device at ``route`` (its Port Object, class 0xF4), like the networks RSWho
+        shows under a device. Each port is a dict: ``number`` (the port of a route through it), ``type``,
+        ``type_name`` (e.g. ``"Backplane"``, ``"EtherNet/IP"``), ``name``, ``address`` (this device's
+        own slot, node or IP address on it, or None), ``ip`` and ``netmask`` (of an EtherNet/IP port, else None)
+        and ``nodes`` (the addresses :meth:`browse_port` probes, as strings: the slots or nodes, or on an
+        EtherNet/IP port every host of its subnet, at most the /24 around its address; None if not known).
+        Empty if the device has no Port Object.
+        """
+        return self._core.get_ports(route)
+
+    def browse_port(self, route: str, port, nodes: Optional[Sequence] = None,
+                    workers: int = 16) -> List[Dict[str, Any]]:
+        """
+        Probe every slot, node or IP address on a port of the device at ``route`` for its identity, like
+        expanding a backplane or network in RSWho.
+
+        An empty slot or missing device costs a reply from the bridge, which may wait for its Unconnected Send
+        timeout (about 4 s), so ``workers`` connections of their own to the device probe at once.
+
+        :param port: a port dict from :meth:`get_ports`, or a port number
+        :param nodes: the addresses to probe, by default the port's ``nodes``
+        :return: a dict per address, in their order: ``route`` (to browse it further), ``address``,
+                 ``identity`` (as :meth:`get_identity`, None if nothing answered) and ``error``
+        """
+        number, nodes = _port_nodes(port, nodes)
+        return self._core.browse_port(route, number, nodes, workers)
+
+    def iter_port(self, route: str, port, nodes: Optional[Sequence] = None,
+                  workers: int = 16) -> Iterator[Dict[str, Any]]:
+        """
+        :meth:`browse_port`, yielding each address as it answers (in any order).  Closing the iterator early
+        stops the scan.
+        """
+        number, nodes = _port_nodes(port, nodes)
+        found, stop = queue.Queue(), threading.Event()
+        done = object()
+
+        def scan():
+            try:
+                self._core.scan_port(route, number, nodes, workers, lambda node: found.put(node) or not stop.is_set())
+            except Exception as error:
+                found.put(error)
+            finally:
+                found.put(done)
+
+        threading.Thread(target=scan, daemon=True).start()
+        try:
+            while (item := found.get()) is not done:
+                if isinstance(item, Exception):
+                    raise item
+                yield item
+        finally:
+            stop.set()
+
     def open(self):
         """
         Creates a new Ethernet/IP socket connection to target device and registers a CIP session.
@@ -308,6 +375,14 @@ class CIPDriver:
         response = request.response_class(request, reply)
         self.__log.debug("Received: %r", response)
         return response
+
+
+def _port_nodes(port, nodes):
+    """The port number, and the addresses to probe on it: those given, those of a port dict, or None for the port's
+    own (read by the core)."""
+    if isinstance(port, dict):
+        port, nodes = port["number"], port["nodes"] if nodes is None else nodes
+    return port, None if nodes is None else [str(n) for n in nodes]
 
 
 def parse_connection_path(path: str, auto_slot: bool = False) -> Tuple[str, Optional[int], List[PortSegment]]:
