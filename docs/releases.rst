@@ -2,6 +2,12 @@
 Release History
 ===============
 
+Unreleased
+==========
+
+- |:sparkles:| ``pip install ciplink[server]`` installs the tag server, `ciplink-tagserver
+  <https://github.com/RowanRama/ciplink-tagserver>`_ (0.4.1 or later, Python 3.11+), with the driver.
+
 ciplink 0.3.3
 =============
 

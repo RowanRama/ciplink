@@ -53,6 +53,10 @@ flowchart LR
 
 The Python wheels and the NuGet package already contain the compiled core, so you don't need a Rust toolchain.
 
+`pip install ciplink[server]` (Python 3.11+) also installs [ciplink-tagserver](https://github.com/RowanRama/ciplink-tagserver):
+one server per site that owns the PLC connections and serves tag values to web apps over a WebSocket, with a React
+client ([@ciplink/react](https://www.npmjs.com/package/@ciplink/react)). Run it with `ciplink-tagserver run --config tagserver.toml`.
+
 ## Quick start
 
 The path is the controller's IP address, `IP/slot` for a ControlLogix outside slot 0, or a full route such as
