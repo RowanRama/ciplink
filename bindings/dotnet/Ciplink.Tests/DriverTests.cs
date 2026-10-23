@@ -1,3 +1,5 @@
+using System.Text.Json.Nodes;
+
 namespace Ciplink.Tests;
 
 [Collection("sim")]
@@ -244,6 +246,58 @@ public sealed class SlcTests
         Assert.True(slc.GetFileDirectory()["N7"]!["elements"]!.GetValue<long>() > 0);
         Assert.Equal(2, slc.GetDatalogQueue(2, 1).Count);
         Assert.NotNull(slc.GetModuleInfo(0));
+    }
+}
+
+[Collection("sim")]
+public sealed class BrowseTests
+{
+    private readonly Simulators _sim;
+
+    public BrowseTests(Simulators sim) => _sim = sim;
+
+    [Fact]
+    public void Browsing_lists_ports_slots_and_the_devices_on_the_network()
+    {
+        using var cip = new CipDriver(_sim.LogixPath);
+        cip.Open();
+        Assert.Equal("1756-SIM/A", cip.GetIdentity()["product_name"]!.GetValue<string>());
+        Assert.Equal("1756-EN2T/D", cip.GetIdentity("bp/1")["product_name"]!.GetValue<string>());
+        JsonArray ports = cip.GetPorts();
+        Assert.Equal("Backplane", ports[0]!["type_name"]!.GetValue<string>());
+        Assert.Equal(10, ports[0]!["nodes"]!.AsArray().Count);
+        Assert.Equal("EtherNet/IP", ports[1]!["type_name"]!.GetValue<string>());
+        Assert.Equal("192.168.1.10", ports[1]!["ip"]!.GetValue<string>());
+
+        JsonArray slots = cip.BrowsePort("", 1, new[] { "1", "2", "3" }, workers: 2);
+        Assert.Equal("1/1", slots[0]!["route"]!.GetValue<string>());
+        Assert.Equal("1756-IB16/A", slots[1]!["identity"]!["product_name"]!.GetValue<string>());
+        Assert.Null(slots[2]!["identity"]);
+        Assert.NotNull(slots[2]!["error"]);
+
+        JsonArray subnet = cip.BrowsePort("", 2);  // the port's own addresses: its subnet
+        Assert.Equal(254, subnet.Count);
+        Assert.Equal(new[] { "2/192.168.1.20" },
+            subnet.Where(n => n!["identity"] is not null).Select(n => n!["route"]!.GetValue<string>()));
+    }
+
+    [Fact]
+    public void A_scan_calls_back_until_told_to_stop_and_rethrows()
+    {
+        using var plc = new LogixDriver(_sim.LogixPath);
+        plc.Open();
+        int seen = 0;
+        string? first = null;
+        plc.ScanPort("", 2, node =>
+        {
+            seen++;
+            first = node["identity"]?["product_name"]?.GetValue<string>();
+            return first is null;
+        }, workers: 4);
+        Assert.Equal("1734-AENTR/C", first);
+        Assert.True(seen < 254);
+        var e = Assert.Throws<InvalidOperationException>(() => plc.ScanPort("", 1, _ => throw new InvalidOperationException("stop")));
+        Assert.Equal("stop", e.Message);
     }
 }
 

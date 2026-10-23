@@ -31,6 +31,7 @@
 #![allow(unsafe_code)] // the C ABI needs raw pointers; every unsafe block says why it is sound
 #![warn(missing_docs)]
 
+use ciplink_core::browse::{Node, PortInfo};
 use ciplink_core::cip::{CipDriver, CipOptions, GenericMessage, RoutePath, TagResult};
 use ciplink_core::epath::LogicalValue;
 use ciplink_core::logix::auth::LogixMetadataCredentials;
@@ -43,7 +44,7 @@ use ciplink_core::{Error, Value};
 use indexmap::IndexMap;
 use serde_json::{Map, Value as Json};
 use std::cell::RefCell;
-use std::ffi::{CStr, CString, c_char};
+use std::ffi::{CStr, CString, c_char, c_void};
 use std::fmt::Write as _;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;
@@ -1418,6 +1419,184 @@ pub unsafe extern "C" fn ciplink_slc_file_directory(
             })
             .collect();
         put_string(out_json, Json::Object(obj).to_string())
+    })
+}
+
+// ------------------------------------------------------------------------------------------------ browsing
+
+/// Called by [`ciplink_scan_port`] with each node as it answers, as a JSON object (valid only during the call);
+/// return false to stop the scan.
+pub type CiplinkNodeCallback =
+    Option<unsafe extern "C" fn(user: *mut c_void, node_json: *const c_char) -> bool>;
+
+fn port_json(p: &PortInfo) -> Json {
+    serde_json::json!({
+        "number": p.number,
+        "type": p.port_type,
+        "type_name": p.type_name(),
+        "name": p.name,
+        "address": p.address,
+        "ip": p.ip.map(|(ip, _)| ip.to_string()),
+        "netmask": p.ip.map(|(_, mask)| mask.to_string()),
+        "nodes": p.nodes(),
+    })
+}
+
+fn node_json(n: &Node) -> FfiResult<Json> {
+    let identity = match &n.identity {
+        Some(id) => parse_json(&value_string(&id.to_value()), "identity")?,
+        None => Json::Null,
+    };
+    Ok(serde_json::json!({
+        "route": n.route,
+        "address": n.address,
+        "identity": identity,
+        "error": n.error,
+    }))
+}
+
+/// The addresses of a `nodes_json` argument: NULL for the port's own, else a JSON array of strings or numbers.
+fn node_list(nodes_json: *const c_char) -> FfiResult<Option<Vec<String>>> {
+    let Some(text) = opt_str(nodes_json, "nodes_json")? else {
+        return Ok(None);
+    };
+    match parse_json(text, "nodes_json")? {
+        Json::Array(items) => Ok(Some(
+            items
+                .iter()
+                .map(|j| match j {
+                    Json::String(s) => s.clone(),
+                    other => other.to_string(),
+                })
+                .collect(),
+        )),
+        _ => Err(FfiError::Invalid("nodes_json is not a JSON array".into())),
+    }
+}
+
+/// Reads the identity of the device at `route` (NULL or `""` for the device at the driver's IP address,
+/// `"bp/3"` the module in slot 3 of its backplane, `"bp/2/enet/192.168.1.10"` a device behind the module in
+/// slot 2) as a JSON object.
+///
+/// # Safety
+/// `handle` is NULL or a live handle; `route` is NULL or a NUL-terminated string; `out_json` is writable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ciplink_get_identity(
+    handle: *const CiplinkDriver,
+    route: *const c_char,
+    out_json: *mut *mut c_char,
+) -> CiplinkStatus {
+    with_handle(handle, |h| {
+        check_out(out_json)?;
+        let route = opt_str(route, "route")?.unwrap_or("");
+        let id = match &h.driver {
+            Driver::Logix(d) => d.identity_at(route)?,
+            Driver::Slc(d) => d.cip().identity_at(route)?,
+            Driver::Cip(d) => d.identity_at(route)?,
+        };
+        put_string(out_json, value_string(&id.to_value()))
+    })
+}
+
+/// Reads the ports of the device at `route` (its Port Object, like the networks RSWho shows under a device) as a
+/// JSON array of `{"number": int, "type": int, "type_name": str, "name": str, "address": null|str, "ip":
+/// null|str, "netmask": null|str, "nodes": null|[str]}`; `nodes` are the addresses [`ciplink_browse_port`] probes
+/// (the slots, or every host of an EtherNet/IP port's subnet, at most a /24).
+///
+/// # Safety
+/// `handle` is NULL or a live handle; `route` is NULL or a NUL-terminated string; `out_json` is writable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ciplink_get_ports(
+    handle: *const CiplinkDriver,
+    route: *const c_char,
+    out_json: *mut *mut c_char,
+) -> CiplinkStatus {
+    with_handle(handle, |h| {
+        check_out(out_json)?;
+        let route = opt_str(route, "route")?.unwrap_or("");
+        let ports = match &h.driver {
+            Driver::Logix(d) => d.ports_at(route)?,
+            Driver::Slc(d) => d.cip().ports_at(route)?,
+            Driver::Cip(d) => d.ports_at(route)?,
+        };
+        put_string(
+            out_json,
+            Json::Array(ports.iter().map(port_json).collect()).to_string(),
+        )
+    })
+}
+
+/// Probes every address on `port` of the device at `route` for its identity, like expanding a backplane or
+/// network in RSWho, from `workers` connections of their own at once (each missing device may cost the bridge's
+/// ~4 s timeout). `nodes_json` is NULL for the port's own addresses, or a JSON array of them. The nodes in
+/// address order as a JSON array of `{"route": str, "address": str, "identity": null|object, "error": null|str}`.
+///
+/// # Safety
+/// `handle` is NULL or a live handle; `route` and `nodes_json` are NULL or NUL-terminated strings; `out_json`
+/// is writable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ciplink_browse_port(
+    handle: *const CiplinkDriver,
+    route: *const c_char,
+    port: u16,
+    nodes_json: *const c_char,
+    workers: usize,
+    out_json: *mut *mut c_char,
+) -> CiplinkStatus {
+    with_handle(handle, |h| {
+        check_out(out_json)?;
+        let route = opt_str(route, "route")?.unwrap_or("");
+        let nodes = node_list(nodes_json)?;
+        let nodes = nodes.as_deref();
+        let found = match &h.driver {
+            Driver::Logix(d) => d.browse_port(route, port, nodes, workers)?,
+            Driver::Slc(d) => d.cip().browse_port(route, port, nodes, workers)?,
+            Driver::Cip(d) => d.browse_port(route, port, nodes, workers)?,
+        };
+        let found = found.iter().map(node_json).collect::<FfiResult<Vec<_>>>()?;
+        put_string(out_json, Json::Array(found).to_string())
+    })
+}
+
+/// [`ciplink_browse_port`], calling `callback` on this thread with each node as it answers (in any order), until
+/// it returns false.
+///
+/// # Safety
+/// `handle` is NULL or a live handle; `route` and `nodes_json` are NULL or NUL-terminated strings; `callback` is
+/// a function that does not unwind, and `user` is whatever it expects.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ciplink_scan_port(
+    handle: *const CiplinkDriver,
+    route: *const c_char,
+    port: u16,
+    nodes_json: *const c_char,
+    workers: usize,
+    callback: CiplinkNodeCallback,
+    user: *mut c_void,
+) -> CiplinkStatus {
+    with_handle(handle, |h| {
+        let callback = callback.ok_or_else(|| FfiError::Invalid("callback is NULL".into()))?;
+        let route = opt_str(route, "route")?.unwrap_or("");
+        let nodes = node_list(nodes_json)?;
+        let nodes = nodes.as_deref();
+        let mut failed = None;
+        let mut found = |node: Node| match node_json(&node).and_then(|j| {
+            CString::new(j.to_string())
+                .map_err(|_| FfiError::Invalid("node contains a NUL byte".into()))
+        }) {
+            // SAFETY: the caller passes a callback taking `user` and a string valid during the call.
+            Ok(text) => unsafe { callback(user, text.as_ptr()) },
+            Err(err) => {
+                failed = Some(err);
+                false
+            }
+        };
+        match &h.driver {
+            Driver::Logix(d) => d.scan_port(route, port, nodes, workers, &mut found)?,
+            Driver::Slc(d) => d.cip().scan_port(route, port, nodes, workers, &mut found)?,
+            Driver::Cip(d) => d.scan_port(route, port, nodes, workers, &mut found)?,
+        }
+        failed.map_or(Ok(()), Err)
     })
 }
 

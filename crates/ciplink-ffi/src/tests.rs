@@ -991,3 +991,115 @@ fn trend_errors_are_statuses() {
         CiplinkStatus::Unsupported
     );
 }
+
+// ------------------------------------------------------------------------------------------------ browsing
+
+fn json_out(f: impl FnOnce(*mut *mut c_char) -> CiplinkStatus, h: &Handle) -> Json {
+    let mut out = ptr::null_mut();
+    let st = f(&mut out);
+    assert_eq!(st, CiplinkStatus::Ok, "{}", last_error(h.0));
+    serde_json::from_str(&take(out)).unwrap()
+}
+
+#[test]
+fn browsing_lists_ports_slots_and_the_devices_on_the_network() {
+    let (_sim, server) = serve("example_controller.json");
+    let h = open(ciplink_cip_new, &server);
+    // SAFETY (every call below): a live handle, NULL or valid strings, a writable out pointer.
+    let id = json_out(|o| unsafe { ciplink_get_identity(h.0, ptr::null(), o) }, &h);
+    assert_eq!(id["product_name"], "1756-SIM/A");
+    let route = cstr("bp/1");
+    let id = json_out(
+        |o| unsafe { ciplink_get_identity(h.0, route.as_ptr(), o) },
+        &h,
+    );
+    assert_eq!(id["product_name"], "1756-EN2T/D");
+
+    let ports = json_out(|o| unsafe { ciplink_get_ports(h.0, ptr::null(), o) }, &h);
+    assert_eq!(ports[0]["type_name"], "Backplane");
+    assert_eq!(ports[0]["nodes"].as_array().unwrap().len(), 10);
+    assert_eq!(ports[1]["type_name"], "EtherNet/IP");
+    assert_eq!(
+        (ports[1]["ip"].as_str(), ports[1]["netmask"].as_str()),
+        (Some("192.168.1.10"), Some("255.255.255.0"))
+    );
+
+    let slots = cstr("[1, 2, 3]");
+    let nodes = json_out(
+        |o| unsafe { ciplink_browse_port(h.0, ptr::null(), 1, slots.as_ptr(), 2, o) },
+        &h,
+    );
+    let names: Vec<_> = nodes
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|n| n["identity"]["product_name"].clone())
+        .collect();
+    assert_eq!(
+        names,
+        [
+            Json::from("1756-EN2T/D"),
+            Json::from("1756-IB16/A"),
+            Json::Null
+        ]
+    );
+    assert_eq!(nodes[0]["route"], "1/1");
+    assert!(nodes[2]["error"].is_string());
+
+    // the subnet of the EtherNet/IP port by default, in address order
+    let nodes = json_out(
+        |o| unsafe { ciplink_browse_port(h.0, ptr::null(), 2, ptr::null(), 16, o) },
+        &h,
+    );
+    let nodes = nodes.as_array().unwrap();
+    assert_eq!(nodes.len(), 254);
+    let found: Vec<_> = nodes
+        .iter()
+        .filter(|n| !n["identity"].is_null())
+        .map(|n| n["route"].clone())
+        .collect();
+    assert_eq!(found, [Json::from("2/192.168.1.20")]);
+}
+
+#[test]
+fn a_scan_calls_back_with_each_node_until_told_to_stop() {
+    let (_sim, server) = serve("example_controller.json");
+    let h = open(ciplink_cip_new, &server);
+
+    unsafe extern "C" fn until_found(user: *mut c_void, node_json: *const c_char) -> bool {
+        // SAFETY: `user` is the Vec below and `node_json` a string valid during the call.
+        let seen = unsafe { &mut *user.cast::<Vec<Json>>() };
+        let text = unsafe { CStr::from_ptr(node_json) }.to_str().unwrap();
+        seen.push(serde_json::from_str(text).unwrap());
+        seen.last().unwrap()["identity"].is_null()
+    }
+    let mut seen: Vec<Json> = Vec::new();
+    // SAFETY: a live handle, a callback that does not unwind, and `user` the Vec it expects.
+    let st = unsafe {
+        ciplink_scan_port(
+            h.0,
+            ptr::null(),
+            2,
+            ptr::null(),
+            4,
+            Some(until_found),
+            (&raw mut seen).cast(),
+        )
+    };
+    assert_eq!(st, CiplinkStatus::Ok, "{}", last_error(h.0));
+    assert_eq!(
+        seen.last().unwrap()["identity"]["product_name"],
+        "1734-AENTR/C"
+    );
+    assert!(seen.len() < 254, "the scan went on after the stop");
+
+    // SAFETY: as above, but with no callback.
+    let st =
+        unsafe { ciplink_scan_port(h.0, ptr::null(), 2, ptr::null(), 4, None, ptr::null_mut()) };
+    assert_eq!(st, CiplinkStatus::InvalidArgument);
+    let bad = cstr("{\"not\": \"a list\"}");
+    let mut out = ptr::null_mut();
+    // SAFETY: valid pointers.
+    let st = unsafe { ciplink_browse_port(h.0, ptr::null(), 1, bad.as_ptr(), 1, &mut out) };
+    assert_eq!(st, CiplinkStatus::InvalidArgument);
+}

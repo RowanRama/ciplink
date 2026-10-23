@@ -401,6 +401,49 @@ int main(int argc, char** argv) {
         expect_error(CIPLINK_STATUS_INVALID_ARGUMENT, [&] { plc.trend({"dint1"}, 0); });
     });
 
+    run("browse_ports_slots_and_network", [] {
+        ciplink::Cip cip(logix_path);
+        cip.open();
+        CHECK(cip.get_identity()["product_name"].as_string() == "1756-SIM/A");
+        CHECK(cip.get_identity("bp/1")["product_name"].as_string() == "1756-EN2T/D");
+        Value ports = cip.get_ports();
+        CHECK(ports[0]["type_name"].as_string() == "Backplane");
+        CHECK(ports[0]["nodes"].as_array().size() == 10);
+        CHECK(ports[1]["type_name"].as_string() == "EtherNet/IP");
+        CHECK(ports[1]["ip"].as_string() == "192.168.1.10");
+
+        Value slots = cip.browse_port("", 1, std::vector<std::string>{"1", "2", "3"}, 2);
+        CHECK(slots.as_array().size() == 3);
+        CHECK(slots[0]["route"].as_string() == "1/1");
+        CHECK(slots[1]["identity"]["product_name"].as_string() == "1756-IB16/A");
+        CHECK(slots[2]["identity"].is_null() && slots[2]["error"].is<std::string>());
+
+        Value subnet = cip.browse_port("", 2);  // the port's own addresses: its subnet
+        CHECK(subnet.as_array().size() == 254);
+        std::vector<std::string> found;
+        for (auto& n : subnet.as_array())
+            if (!n["identity"].is_null()) found.push_back(n["route"].as_string());
+        CHECK(found == std::vector<std::string>{"2/192.168.1.20"});
+
+        size_t seen = 0;
+        std::string first;
+        cip.scan_port("", 2, [&](const Value& n) {
+            ++seen;
+            if (n["identity"].is_null()) return true;
+            first = n["identity"]["product_name"].as_string();
+            return false;
+        }, std::nullopt, 4);
+        CHECK(first == "1734-AENTR/C");
+        CHECK(seen < 254);
+        bool thrown = false;
+        try {
+            cip.scan_port("", 1, [](const Value&) -> bool { throw std::runtime_error("stop"); });
+        } catch (const std::runtime_error& e) {
+            thrown = std::string(e.what()) == "stop";
+        }
+        CHECK(thrown);
+    });
+
     std::cout << checks << " checks, " << failures << " failures\n";
     return failures == 0 ? 0 : 1;
 }

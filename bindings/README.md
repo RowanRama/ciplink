@@ -87,6 +87,10 @@ Every function takes the handle first, and output arguments come last. JSON resu
 | `ciplink_send_connected(h, msg, len, &data, &n)` | all | raw reply frame | `send_connected(bytes)` | `SendConnected(byte[])` |
 | `ciplink_send_unconnected(h, msg, len, &data, &n)` | all | raw reply frame | `send_unconnected(bytes)` | `SendUnconnected(byte[])` |
 | `ciplink_get_module_info(h, slot, &json)` | all | identity | `get_module_info(slot)` | `GetModuleInfo(slot)` |
+| `ciplink_get_identity(h, route, &json)` | all | identity | `get_identity(route)` | `GetIdentity(route)` |
+| `ciplink_get_ports(h, route, &json)` | all | ports `[{"number", "type_name", "ip", "nodes", ...}]` | `get_ports(route)` | `GetPorts(route)` |
+| `ciplink_browse_port(h, route, port, nodes_json, workers, &json)` | all | nodes `[{"route", "address", "identity", "error"}]` | `browse_port(route, port, nodes, workers)` | `BrowsePort(route, port, nodes, workers)` |
+| `ciplink_scan_port(h, route, port, nodes_json, workers, callback, user)` | all | each node to `callback` | `scan_port(route, port, found, ...)` | `ScanPort(route, port, found, ...)` |
 | `ciplink_tags(h, &json)` | Logix | tag dict | `tags_json()` | `Tags()` |
 | `ciplink_tag_list(h, program, cache, filter, &json)` | Logix | tag list | `tag_list_json(program, cache, filter)` | `TagList(program, cache, filter)` |
 | `ciplink_tag_info(h, name, &json)` | Logix | definition | `tag_info_json(name)` | `TagInfo(name)` |
@@ -130,6 +134,13 @@ C# it is `CiplinkException`.
 - **Tag list.** `program` is NULL for controller tags, `"*"` for all, or a program name. With `cache` the list
   replaces the handle's tag definitions. Without `cache` they are left as they were. `tag_namespace_filter` (NULL or
   `""` for none) keeps the names that start with it, ignoring any `Program:X.` prefix.
+- **Device browsing** works like RSWho. A route is relative to the device at the driver's IP address: NULL or `""`
+  is that device, `"bp/3"` the module in slot 3 of its backplane, `"bp/2/enet/192.168.1.10"` a device behind the
+  module in slot 2. A port's `nodes` are the addresses a browse probes: its slots or nodes, or every host of an
+  EtherNet/IP port's subnet (at most a /24). `nodes_json` NULL probes those, or pass a JSON array of addresses.
+  Each empty slot or missing device may cost the bridge's ~4 s timeout, so `workers` connections of their own probe
+  at once. `ciplink_scan_port` calls `callback(user, node_json)` on the calling thread as each node answers, in any
+  order, until it returns false; `node_json` is valid only during the call, and the callback must not unwind.
 - **Metadata authentication.** Pass both buffers as NULL to use the bundled credentials, or pass both a signed
   certificate and its unencrypted PKCS #1 or PKCS #8 DER RSA private key. Passing only one is `INVALID_ARGUMENT`.
   Credentials that do not parse or do not match each other are `REQUEST`. A handshake the controller refuses is the

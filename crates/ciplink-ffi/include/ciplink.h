@@ -60,6 +60,10 @@ typedef struct CiplinkMessage {
   const char *name;
 } CiplinkMessage;
 
+// Called by [`ciplink_scan_port`] with each node as it answers, as a JSON object (valid only during the call);
+// return false to stop the scan.
+typedef bool (*CiplinkNodeCallback)(void *user, const char *node_json);
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
@@ -349,6 +353,56 @@ enum CiplinkStatus ciplink_slc_datalog_queue(const struct CiplinkDriver *handle,
 // # Safety
 // `handle` is NULL or a live handle; `out_json` is writable.
 enum CiplinkStatus ciplink_slc_file_directory(const struct CiplinkDriver *handle, char **out_json);
+
+// Reads the identity of the device at `route` (NULL or `""` for the device at the driver's IP address,
+// `"bp/3"` the module in slot 3 of its backplane, `"bp/2/enet/192.168.1.10"` a device behind the module in
+// slot 2) as a JSON object.
+//
+// # Safety
+// `handle` is NULL or a live handle; `route` is NULL or a NUL-terminated string; `out_json` is writable.
+enum CiplinkStatus ciplink_get_identity(const struct CiplinkDriver *handle,
+                                        const char *route,
+                                        char **out_json);
+
+// Reads the ports of the device at `route` (its Port Object, like the networks RSWho shows under a device) as a
+// JSON array of `{"number": int, "type": int, "type_name": str, "name": str, "address": null|str, "ip":
+// null|str, "netmask": null|str, "nodes": null|[str]}`; `nodes` are the addresses [`ciplink_browse_port`] probes
+// (the slots, or every host of an EtherNet/IP port's subnet, at most a /24).
+//
+// # Safety
+// `handle` is NULL or a live handle; `route` is NULL or a NUL-terminated string; `out_json` is writable.
+enum CiplinkStatus ciplink_get_ports(const struct CiplinkDriver *handle,
+                                     const char *route,
+                                     char **out_json);
+
+// Probes every address on `port` of the device at `route` for its identity, like expanding a backplane or
+// network in RSWho, from `workers` connections of their own at once (each missing device may cost the bridge's
+// ~4 s timeout). `nodes_json` is NULL for the port's own addresses, or a JSON array of them. The nodes in
+// address order as a JSON array of `{"route": str, "address": str, "identity": null|object, "error": null|str}`.
+//
+// # Safety
+// `handle` is NULL or a live handle; `route` and `nodes_json` are NULL or NUL-terminated strings; `out_json`
+// is writable.
+enum CiplinkStatus ciplink_browse_port(const struct CiplinkDriver *handle,
+                                       const char *route,
+                                       uint16_t port,
+                                       const char *nodes_json,
+                                       size_t workers,
+                                       char **out_json);
+
+// [`ciplink_browse_port`], calling `callback` on this thread with each node as it answers (in any order), until
+// it returns false.
+//
+// # Safety
+// `handle` is NULL or a live handle; `route` and `nodes_json` are NULL or NUL-terminated strings; `callback` is
+// a function that does not unwind, and `user` is whatever it expects.
+enum CiplinkStatus ciplink_scan_port(const struct CiplinkDriver *handle,
+                                     const char *route,
+                                     uint16_t port,
+                                     const char *nodes_json,
+                                     size_t workers,
+                                     CiplinkNodeCallback callback,
+                                     void *user);
 
 // Identifies the device at `path` with ListIdentity: a JSON object, or `null` if it refused.
 //

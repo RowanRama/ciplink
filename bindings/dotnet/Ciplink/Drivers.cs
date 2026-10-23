@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 
@@ -59,6 +61,75 @@ public abstract class Driver : IDisposable
     /// <summary>Reads the identity of the module in backplane <paramref name="slot"/> (product_name, serial, ...).</summary>
     public JsonObject GetModuleInfo(long slot) =>
         (JsonObject)CallNode((out IntPtr j) => Native.ciplink_get_module_info(_handle, slot, out j))!;
+
+    // Device browsing like RSWho. A route is relative to the device at the driver's IP address: "" is that device,
+    // "bp/3" the module in slot 3 of its backplane, "bp/2/enet/192.168.1.10" a device behind the module in slot 2.
+
+    /// <summary>Reads the identity of the device at <paramref name="route"/> (product_name, serial, ...).</summary>
+    public JsonObject GetIdentity(string route = "") =>
+        (JsonObject)CallNode((out IntPtr j) => Native.ciplink_get_identity(_handle, route, out j))!;
+
+    /// <summary>
+    /// The ports of the device at <paramref name="route"/>: objects with number, type, type_name, name, address,
+    /// ip, netmask and nodes, the addresses <see cref="BrowsePort"/> probes (the slots, or every host of an
+    /// EtherNet/IP port's subnet, at most a /24).
+    /// </summary>
+    public JsonArray GetPorts(string route = "") =>
+        (JsonArray)CallNode((out IntPtr j) => Native.ciplink_get_ports(_handle, route, out j))!;
+
+    /// <summary>
+    /// Probes every address on <paramref name="port"/> of the device at <paramref name="route"/>
+    /// (<paramref name="nodes"/>, by default the port's own) from <paramref name="workers"/> connections at once:
+    /// objects with route, address, identity (null if nothing answered) and error, in address order. Each
+    /// missing device may cost the bridge's ~4 s timeout.
+    /// </summary>
+    public JsonArray BrowsePort(string route, int port, IEnumerable<string>? nodes = null, int workers = 16) =>
+        (JsonArray)CallNode((out IntPtr j) =>
+            Native.ciplink_browse_port(_handle, route, checked((ushort)port), NodesJson(nodes), (nuint)Math.Max(workers, 1), out j))!;
+
+    /// <summary>
+    /// <see cref="BrowsePort"/>, calling <paramref name="found"/> on this thread with each node as it answers (in
+    /// any order) until it returns false. An exception thrown by <paramref name="found"/> stops the scan and is
+    /// rethrown.
+    /// </summary>
+    public unsafe void ScanPort(string route, int port, Func<JsonObject, bool> found, IEnumerable<string>? nodes = null, int workers = 16)
+    {
+        var scan = new Scan(found);
+        GCHandle user = GCHandle.Alloc(scan);
+        try
+        {
+            Native.Check(Native.ciplink_scan_port(_handle, route, checked((ushort)port), NodesJson(nodes),
+                (nuint)Math.Max(workers, 1), &OnNode, GCHandle.ToIntPtr(user)));
+        }
+        finally
+        {
+            user.Free();
+        }
+        if (scan.Error is not null) ExceptionDispatchInfo.Capture(scan.Error).Throw();
+    }
+
+    private sealed class Scan(Func<JsonObject, bool> found)
+    {
+        public Func<JsonObject, bool> Found { get; } = found;
+        public Exception? Error { get; set; }
+    }
+
+    [UnmanagedCallersOnly]
+    private static byte OnNode(IntPtr user, IntPtr nodeJson)
+    {
+        var scan = (Scan)GCHandle.FromIntPtr(user).Target!;
+        try
+        {
+            return scan.Found((JsonObject)JsonNode.Parse(Marshal.PtrToStringUTF8(nodeJson)!)!) ? (byte)1 : (byte)0;
+        }
+        catch (Exception e)
+        {
+            scan.Error = e;
+            return 0;
+        }
+    }
+
+    private static string? NodesJson(IEnumerable<string>? nodes) => nodes is null ? null : JsonSerializer.Serialize(nodes);
 
     /// <summary>
     /// The connection size of the next Forward Open (1 to 65535; above 511 uses a Large Forward Open). Set it

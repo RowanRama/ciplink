@@ -19,6 +19,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -471,6 +473,52 @@ public:
         return parse_json(json_call([&](char** o) { return ciplink_get_module_info(h(), slot, o); }));
     }
 
+    // Device browsing like RSWho. A route is relative to the device at the driver's IP address: "" is that device,
+    // "bp/3" the module in slot 3 of its backplane, "bp/2/enet/192.168.1.10" a device behind the module in slot 2.
+
+    /// The identity of the device at `route` (product_name, serial, ...).
+    Value get_identity(const std::string& route = "") {
+        return parse_json(json_call([&](char** o) { return ciplink_get_identity(h(), route.c_str(), o); }));
+    }
+    /// The ports of the device at `route`: an array of {number, type, type_name, name, address, ip, netmask,
+    /// nodes}; `nodes` are the addresses browse_port probes (the slots, or every host of an EtherNet/IP port's
+    /// subnet, at most a /24).
+    Value get_ports(const std::string& route = "") {
+        return parse_json(json_call([&](char** o) { return ciplink_get_ports(h(), route.c_str(), o); }));
+    }
+    /// Probes every address on `port` of the device at `route` (`nodes`, by default the port's own) from `workers`
+    /// connections at once: an array of {route, address, identity (null if nothing answered), error}, in address
+    /// order. Each missing device may cost the bridge's ~4 s timeout.
+    Value browse_port(const std::string& route, uint16_t port,
+                      const std::optional<std::vector<std::string>>& nodes = std::nullopt, size_t workers = 16) {
+        std::string list = nodes_json(nodes);
+        return parse_json(json_call([&](char** o) {
+            return ciplink_browse_port(h(), route.c_str(), port, nodes ? list.c_str() : nullptr, workers, o);
+        }));
+    }
+    /// browse_port, calling `found` on this thread with each node as it answers (in any order) until it returns
+    /// false. An exception thrown by `found` stops the scan and is rethrown.
+    void scan_port(const std::string& route, uint16_t port, const std::function<bool(const Value&)>& found,
+                   const std::optional<std::vector<std::string>>& nodes = std::nullopt, size_t workers = 16) {
+        struct Call {
+            const std::function<bool(const Value&)>& found;
+            std::exception_ptr error;
+        } call{found, nullptr};
+        auto trampoline = [](void* user, const char* node) -> bool {
+            auto c = static_cast<Call*>(user);
+            try {
+                return c->found(parse_json(node));
+            } catch (...) {
+                c->error = std::current_exception();
+                return false;
+            }
+        };
+        std::string list = nodes_json(nodes);
+        detail::check(ciplink_scan_port(h(), route.c_str(), port, nodes ? list.c_str() : nullptr, workers,
+                                        trampoline, &call));
+        if (call.error) std::rethrow_exception(call.error);
+    }
+
     /// The raw handle for calls this wrapper does not cover.
     CiplinkDriver* handle() const { return h(); }
 
@@ -524,6 +572,16 @@ protected:
         Value parsed = parse_json(json);
         for (auto& j : parsed.as_array()) tags.push_back(Tag::from(j));
         return tags;
+    }
+
+    static std::string nodes_json(const std::optional<std::vector<std::string>>& nodes) {
+        std::string json = "[";
+        if (nodes)
+            for (size_t i = 0; i < nodes->size(); ++i) {
+                if (i) json += ',';
+                detail::write_string((*nodes)[i], json);
+            }
+        return json + "]";
     }
 
     /// Runs `f(&out)` and returns the JSON it produced.

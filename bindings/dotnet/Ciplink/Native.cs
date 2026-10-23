@@ -134,6 +134,18 @@ internal static partial class Native
     [LibraryImport(Lib)]
     internal static partial int ciplink_get_module_info(DriverHandle handle, long slot, out IntPtr json);
 
+    [LibraryImport(Lib, StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial int ciplink_get_identity(DriverHandle handle, string? route, out IntPtr json);
+
+    [LibraryImport(Lib, StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial int ciplink_get_ports(DriverHandle handle, string? route, out IntPtr json);
+
+    [LibraryImport(Lib, StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial int ciplink_browse_port(DriverHandle handle, string? route, ushort port, string? nodesJson, nuint workers, out IntPtr json);
+
+    [LibraryImport(Lib, StringMarshalling = StringMarshalling.Utf8)]
+    internal static unsafe partial int ciplink_scan_port(DriverHandle handle, string? route, ushort port, string? nodesJson, nuint workers, delegate* unmanaged<IntPtr, IntPtr, byte> callback, IntPtr user);
+
     [LibraryImport(Lib)]
     internal static partial int ciplink_check_tag_table(DriverHandle handle, out byte changed);
 
