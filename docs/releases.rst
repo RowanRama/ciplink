@@ -10,6 +10,10 @@ Unreleased
   every binding: the ``ciplink-server`` command and ``ciplink.server.TagServer`` in the Python package, the
   ``ciplink-server`` crate, ``ciplink_server_start`` in C, ``ciplink::Server`` in C++ and ``Ciplink.TagServer`` in C#,
   and an executable per platform on the GitHub release.  See ``docs/server.md``.
+- |:bug:| scalar bit strings are no longer taken for BOOL arrays: a ``DWORD`` read by name gives its 32 bits (not bit
+  0), ``Name.n`` reads bit n of a ``BYTE``, ``WORD``, ``DWORD`` or ``LWORD`` (a tag, member or array element) and
+  writes it with a Read-Modify-Write of ``Name`` itself.  Only a ``DWORD`` with dimensions is a BOOL array.
+  ``ciplink-sim`` has ``BYTE``, ``WORD`` and ``LWORD`` tags and members.
 
 ciplink 0.3.3
 =============

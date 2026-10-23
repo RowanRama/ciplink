@@ -895,6 +895,17 @@ impl<'a> TagInfo<'a> {
         self.data_type().name()
     }
 
+    /// True for a BOOL array: Logix stores one as a DWORD array (a tag with dimensions, which count its BOOLs, or
+    /// a member array, counted in DWORDs). A DWORD without dimensions is a 32-bit bit string, like a BYTE.
+    pub fn is_bool_array(&self) -> bool {
+        let dword = matches!(self.data_type(), TypeRef::Atomic(Some(Elementary::DWord)));
+        dword
+            && match self {
+                TagInfo::Tag(t) => t.dim > 0,
+                TagInfo::Member(m) => m.array.is_some_and(|n| n > 0),
+            }
+    }
+
     /// `"atomic"` or `"struct"`.
     pub fn tag_type(&self) -> &'static str {
         self.data_type().tag_type()
@@ -1454,7 +1465,7 @@ fn reprlib_level(value: &Value, level: i32) -> String {
 
 /// Decodes the data of a read reply (type code, or `A0 02` and a structure handle, then the values) of
 /// `elements` values of a tag or member.  Returns the value and its type name: one element of an array tag is
-/// its value alone, BOOL words are flattened to bools (`BOOL[32 × n]`), more elements are `TYPE[n]`; a whole
+/// its value alone, a BOOL array's words are flattened to bools (`BOOL[32 × n]`), more elements are `TYPE[n]`; a whole
 /// structure's value has its public members in template order.
 pub fn parse_read_reply(
     data: &[u8],
@@ -1489,7 +1500,7 @@ pub fn parse_read_reply(
         }
     };
     let name = info.data_type_name();
-    let type_name = if name == Some("DWORD") {
+    let type_name = if info.is_bool_array() {
         Some(format!("BOOL[{}]", elements * 32))
     } else if elements > 1 {
         Some(format!("{}[{elements}]", name.unwrap_or("None")))

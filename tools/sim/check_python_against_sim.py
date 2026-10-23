@@ -290,6 +290,7 @@ EXPECTED_TAGS = {
     "dint_ary", "dint_2d", "dint_3d", "real_ary", "sint_ary", "bool_ary", "big_ary", "str1", "str20", "str480",
     "str_ary", "udt1", "udt2", "udt3", "udt4", "udt_ary", "nested", "timer1", "timers", "counter1", "control1",
     "valve1", "valves", "proc1", "holder", "ro_dint", "hidden_dint", "Local:1:I", "Local:2:O",
+    "byte1", "word1", "dword1", "lword1", "word_ary", "bits_udt",
 }
 PROGRAM_TAGS = {"Program:MainProgram.p_dint", "Program:MainProgram.p_str", "Program:MainProgram.p_udt",
                 "Program:MainProgram.p_valve", "Program:MainProgram.p_ary", "Program:SecondProgram.counter",

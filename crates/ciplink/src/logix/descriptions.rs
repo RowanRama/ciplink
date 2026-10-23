@@ -45,8 +45,8 @@ const PROGRAM_CLASS: u16 = 0x68;
 const TEMPLATE_CLASS: u16 = 0x6C;
 const READ_TAG: u8 = 0x4C;
 const GET_ATTRIBUTE_LIST: u8 = 0x03;
-/// Bits of the types a bit of can be addressed (`Tag.3`).
-const BIT_TYPES: [(&str, u64); 9] = [
+/// Bits of the types a bit of can be addressed (`Tag.3`): integers and bit strings (not BOOL arrays).
+const BIT_TYPES: [(&str, u64); 12] = [
     ("SINT", 8),
     ("INT", 16),
     ("DINT", 32),
@@ -55,7 +55,10 @@ const BIT_TYPES: [(&str, u64); 9] = [
     ("UINT", 16),
     ("UDINT", 32),
     ("ULINT", 64),
+    ("BYTE", 8),
+    ("WORD", 16),
     ("DWORD", 32),
+    ("LWORD", 64),
 ];
 
 /// The object a Description request targets: (class, instance, owner instance, owner word).
@@ -160,6 +163,14 @@ impl Def {
         self.data_type().name()
     }
 
+    /// A BOOL array, stored as DWORDs (see [`TagInfo::is_bool_array`]).
+    fn is_bool_array(&self) -> bool {
+        match self {
+            Def::Tag(t) => TagInfo::Tag(t).is_bool_array(),
+            Def::Member(m) => TagInfo::Member(m).is_bool_array(),
+        }
+    }
+
     /// Every dimension (a tag's three, a member's array length), for "is it an array".
     fn dimensions(&self) -> Vec<u64> {
         match self {
@@ -216,7 +227,7 @@ fn index_suffix(def: &Def, indices: Option<&str>) -> Result<String> {
             .collect(),
         Def::Member(m) => vec![u64::from(m.array.unwrap_or(0))],
     };
-    if def.type_name() == Some("DWORD") {
+    if def.is_bool_array() {
         if let Some(last) = dimensions.last_mut() {
             *last *= 32; // a BOOL array: 32 bits per DWORD
         }
@@ -710,7 +721,7 @@ impl Logix {
             if name.bytes().all(|b| b.is_ascii_digit()) {
                 let bits = BIT_TYPES
                     .iter()
-                    .find(|(t, _)| Some(*t) == current.type_name())
+                    .find(|(t, _)| Some(*t) == current.type_name() && !current.is_bool_array())
                     .map(|(_, bits)| *bits);
                 let bit = name.parse::<u64>().ok();
                 match (bits, bit) {

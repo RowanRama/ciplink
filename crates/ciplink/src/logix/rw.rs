@@ -2,7 +2,7 @@
 //! helpers (`_parse_requested_tags`, `_read_build_requests`, `_write_build_multi_requests`, `_send_requests`,
 //! the fragmented services, the AOI member reads and the >65535 element splits).
 //!
-//! A call parses each tag request (elements `{n}`, bits of integers, BOOL arrays as DWORD bits, AOI locals
+//! A call parses each tag request (elements `{n}`, bits of integers and bit strings, BOOL arrays as DWORD bits, AOI locals
 //! refused), builds the requests (a request takes its sequence count when it is built, sent or not, as the Python
 //! packets do), packs them in multi-service packets with `Logix::pack_multi_requests` (reads with a tag table
 //! version check first in every packet), sends them and matches the replies to the requests by their keys.
@@ -45,6 +45,8 @@ const MAX_CHUNKS: usize = 65535;
 const INTEGER_TYPES: [&str; 8] = [
     "SINT", "INT", "DINT", "LINT", "USINT", "UINT", "UDINT", "ULINT",
 ];
+/// Bit strings: a value of one bool per bit whose bits are addressed like an integer's (`Word.3`).
+const BIT_STRING_TYPES: [&str; 4] = ["BYTE", "WORD", "DWORD", "LWORD"];
 
 /// Read or write: BOOL array (DWORD) bits are read from the word's bit 0, written from the requested bit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -89,11 +91,9 @@ impl Info {
         self.view().data_type_name()
     }
 
-    fn is_dword(&self) -> bool {
-        matches!(
-            self.view().data_type(),
-            TypeRef::Atomic(Some(Elementary::DWord))
-        )
+    /// A BOOL array (DWORD words); a scalar DWORD is a bit string, like BYTE, WORD and LWORD.
+    fn is_bool_array(&self) -> bool {
+        self.view().is_bool_array()
     }
 }
 
@@ -410,7 +410,7 @@ impl Logix {
         };
 
         let mut bool_elements = None;
-        if info.is_dword() {
+        if info.is_bool_array() {
             let (name, idx) = get_array_index(tag).map_err(|e| Error::data(e.to_string()))?;
             if let Some(idx) = idx {
                 *tag = format!("{name}[{}]", idx.div_euclid(32));
@@ -426,9 +426,9 @@ impl Logix {
             let total = bit.unwrap_or(0).rem_euclid(32).saturating_add(elements);
             elements = total / 32 + i128::from(total % 32 != 0);
         }
-        if let (Some(b), false) = (bit, info.is_dword()) {
+        if let (Some(b), false) = (bit, info.is_bool_array()) {
             let name = info.data_type_name();
-            if !name.is_some_and(|n| INTEGER_TYPES.contains(&n)) {
+            if !name.is_some_and(|n| INTEGER_TYPES.contains(&n) || BIT_STRING_TYPES.contains(&n)) {
                 return Err(Error::request(format!(
                     "Bit access is not supported on {}",
                     name.unwrap_or("None")
@@ -568,7 +568,7 @@ impl Logix {
             Info::Tag(t) => t.dim,
             Info::Member(_) => 1,
         };
-        if !is_array || dim > 1 || p.info.is_dword() {
+        if !is_array || dim > 1 || p.info.is_bool_array() {
             return Err(large());
         }
         let (array_tag, start) =
@@ -738,7 +738,7 @@ impl Logix {
             if p.error.is_some() {
                 continue;
             }
-            let bool_array = p.info.is_dword();
+            let bool_array = p.info.is_bool_array();
             let partial = bool_array
                 && p.bool_elements.is_some_and(|n| n != 0)
                 && (p.bit.unwrap_or(0).rem_euclid(32) != 0
@@ -809,7 +809,7 @@ impl Logix {
         for (index, set) in bools.into_iter().enumerate() {
             let mut target = p.plc_tag.clone();
             let mut target_bit = p.bit.unwrap_or(0);
-            if p.info.is_dword() {
+            if p.info.is_bool_array() {
                 let (word_tag, word_index) =
                     get_array_index(&target).map_err(|e| request_error(&e, ErrorKind::BadValue))?;
                 let at = p.bit.unwrap_or(0).rem_euclid(32) + index as i128;
@@ -1532,7 +1532,7 @@ fn invalid_request(tag: &str, repr: &str) -> TagResult {
     }
 }
 
-/// A read's result for the caller: a bit of an integer as a BOOL, BOOL array (DWORD) bits as BOOL or
+/// A read's result for the caller: a bit of an integer or bit string as a BOOL, BOOL array (DWORD) bits as BOOL or
 /// `BOOL[n]`; Err is the repr of the exception Python would raise.
 fn read_result(p: &Parsed, result: TagResult) -> std::result::Result<TagResult, String> {
     if !result.is_ok() {
@@ -1543,19 +1543,27 @@ fn read_result(p: &Parsed, result: TagResult) -> std::result::Result<TagResult, 
             error: result.error,
         });
     }
-    if !p.info.is_dword() {
+    if !p.info.is_bool_array() {
         let Some(bit) = p.bit else {
             return Ok(result);
         };
-        let number = result
-            .value
-            .as_ref()
-            .and_then(Value::as_i128)
-            .ok_or_else(|| "TypeError('unsupported operand type(s) for &')".to_owned())?;
-        let set = u32::try_from(bit)
-            .ok()
-            .and_then(|b| 1i128.checked_shl(b))
-            .is_some_and(|mask| number & mask != 0);
+        let set = match result.value.as_ref() {
+            // a bit string's value is its bits
+            Some(Value::Array(bits)) => usize::try_from(bit)
+                .ok()
+                .and_then(|b| bits.get(b))
+                .and_then(Value::as_bool)
+                .ok_or_else(|| "IndexError('list index out of range')".to_owned())?,
+            value => {
+                let number = value
+                    .and_then(Value::as_i128)
+                    .ok_or_else(|| "TypeError('unsupported operand type(s) for &')".to_owned())?;
+                u32::try_from(bit)
+                    .ok()
+                    .and_then(|b| 1i128.checked_shl(b))
+                    .is_some_and(|mask| number & mask != 0)
+            }
+        };
         return Ok(TagResult {
             tag: p.user_tag.clone(),
             value: Some(Value::Bool(set)),

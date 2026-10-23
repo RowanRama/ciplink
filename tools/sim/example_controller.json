@@ -159,6 +159,15 @@
     {
       "name": "AB:1756_OF4:O:0",
       "members": [{"name": "Ch0Data", "type": "REAL"}, {"name": "Ch1Data", "type": "REAL"}]
+    },
+    {
+      "name": "BitsUDT",
+      "members": [
+        {"name": "b", "type": "BYTE"},
+        {"name": "w", "type": "WORD"},
+        {"name": "dw", "type": "DWORD"},
+        {"name": "lw", "type": "LWORD"}
+      ]
     }
   ],
   "tasks": [{"name": "MainTask"}, {"name": "Periodic"}],
@@ -287,6 +296,12 @@
     {"name": "ro_dint", "type": "DINT", "value": 77, "external_access": "Read Only"},
     {"name": "hidden_dint", "type": "DINT", "value": 88, "external_access": "None"},
     {"name": "Local:1:I", "type": "AB:1756_IF4:I:0", "value": {"Ch0Data": 4.5, "Ch1Data": -1.25}},
-    {"name": "Local:2:O", "type": "AB:1756_OF4:O:0", "value": {"Ch0Data": 0.5}}
+    {"name": "Local:2:O", "type": "AB:1756_OF4:O:0", "value": {"Ch0Data": 0.5}},
+    {"name": "byte1", "type": "BYTE", "value": 165},
+    {"name": "word1", "type": "WORD", "value": 32769},
+    {"name": "dword1", "type": "DWORD", "value": 2147483653},
+    {"name": "lword1", "type": "LWORD", "value": 9223372036854775811},
+    {"name": "word_ary", "type": "WORD", "dims": [3], "value": [1, 2, 32768]},
+    {"name": "bits_udt", "type": "BitsUDT", "value": {"b": 129, "w": 2, "dw": 4, "lw": 9223372036854775816}}
   ]
 }

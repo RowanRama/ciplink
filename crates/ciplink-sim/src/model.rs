@@ -3,7 +3,8 @@
 use crate::config::{ConfigError, MemberConfig, TagConfig, TypeConfig};
 use serde_json::{Number, Value as Json};
 
-/// The atomic types a Logix tag or member can have (DWORD holds BOOL arrays).
+/// The atomic types a Logix tag or member can have. BYTE, WORD, DWORD and LWORD are bit strings; a DWORD
+/// array holds a BOOL array.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Atomic {
     Bool,
@@ -17,11 +18,14 @@ pub(crate) enum Atomic {
     ULInt,
     Real,
     LReal,
+    Byte,
+    Word,
     DWord,
+    LWord,
 }
 
 impl Atomic {
-    const ALL: [Atomic; 12] = [
+    const ALL: [Atomic; 15] = [
         Atomic::Bool,
         Atomic::SInt,
         Atomic::Int,
@@ -33,7 +37,10 @@ impl Atomic {
         Atomic::ULInt,
         Atomic::Real,
         Atomic::LReal,
+        Atomic::Byte,
+        Atomic::Word,
         Atomic::DWord,
+        Atomic::LWord,
     ];
 
     pub(crate) fn from_name(name: &str) -> Option<Self> {
@@ -55,7 +62,10 @@ impl Atomic {
             Atomic::ULInt => "ULINT",
             Atomic::Real => "REAL",
             Atomic::LReal => "LREAL",
+            Atomic::Byte => "BYTE",
+            Atomic::Word => "WORD",
             Atomic::DWord => "DWORD",
+            Atomic::LWord => "LWORD",
         }
     }
 
@@ -72,22 +82,33 @@ impl Atomic {
             Atomic::ULInt => 0xC9,
             Atomic::Real => 0xCA,
             Atomic::LReal => 0xCB,
+            Atomic::Byte => 0xD1,
+            Atomic::Word => 0xD2,
             Atomic::DWord => 0xD3,
+            Atomic::LWord => 0xD4,
         }
     }
 
     pub(crate) fn size(self) -> usize {
         match self {
-            Atomic::Bool | Atomic::SInt | Atomic::USInt => 1,
-            Atomic::Int | Atomic::UInt => 2,
+            Atomic::Bool | Atomic::SInt | Atomic::USInt | Atomic::Byte => 1,
+            Atomic::Int | Atomic::UInt | Atomic::Word => 2,
             Atomic::DInt | Atomic::UDInt | Atomic::Real | Atomic::DWord => 4,
-            Atomic::LInt | Atomic::ULInt | Atomic::LReal => 8,
+            Atomic::LInt | Atomic::ULInt | Atomic::LReal | Atomic::LWord => 8,
         }
     }
 
-    /// Integer types (and DWORD) whose bits a Read-Modify-Write can change.
+    /// Integer and bit string types, whose bits a Read-Modify-Write can change.
     pub(crate) fn has_bits(self) -> bool {
         !matches!(self, Atomic::Bool | Atomic::Real | Atomic::LReal)
+    }
+
+    /// The bit strings, whose value is one bool per bit.
+    pub(crate) fn is_bit_string(self) -> bool {
+        matches!(
+            self,
+            Atomic::Byte | Atomic::Word | Atomic::DWord | Atomic::LWord
+        )
     }
 }
 
@@ -96,6 +117,12 @@ impl Atomic {
 pub(crate) enum Ty {
     Atomic(Atomic),
     Struct(usize),
+}
+
+impl Ty {
+    fn is_bit_string(self) -> bool {
+        matches!(self, Ty::Atomic(a) if a.is_bit_string())
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -681,7 +708,8 @@ impl Types {
         }
     }
 
-    /// Encodes `count` elements from a list (nested lists are flattened; a DWORD array takes a list of bools).
+    /// Encodes `count` elements from a list (nested lists are flattened; a bit string array, such as the DWORDs
+    /// of a BOOL array, takes a list of bools).
     pub(crate) fn encode_elements(
         &self,
         ty: Ty,
@@ -694,9 +722,10 @@ impl Types {
         }
         let mut items = Vec::new();
         flatten(value, &mut items);
-        if ty == Ty::Atomic(Atomic::DWord) && items.iter().all(|v| v.is_boolean()) {
-            if items.len() > count * 32 {
-                return Err(format!("{} values for {} BOOLs", items.len(), count * 32));
+        if ty.is_bit_string() && items.iter().all(|v| v.is_boolean()) {
+            let bits = count * self.size(ty) * 8;
+            if items.len() > bits {
+                return Err(format!("{} values for {bits} BOOLs", items.len()));
             }
             for (i, item) in items.iter().enumerate() {
                 set_bit(&mut out[i / 8], (i % 8) as u8, json_truthy(item)?);
@@ -749,11 +778,11 @@ impl Types {
         }
     }
 
-    /// Decodes `count` elements as a list (a DWORD array as a list of bools).
+    /// Decodes `count` elements as a list (a bit string array, such as a BOOL array, as a list of bools).
     pub(crate) fn decode_elements(&self, ty: Ty, count: usize, data: &[u8]) -> Json {
-        if ty == Ty::Atomic(Atomic::DWord) {
+        if ty.is_bit_string() {
             return Json::Array(
-                (0..count * 32)
+                (0..count * self.size(ty) * 8)
                     .map(|i| Json::Bool(data[i / 8] & (1 << (i % 8)) != 0))
                     .collect(),
             );
@@ -871,25 +900,29 @@ fn encode_atomic(a: Atomic, value: &Json, out: &mut [u8]) -> Result<(), String> 
             out.copy_from_slice(&(int(i32::MIN.into(), i32::MAX.into())? as i32).to_le_bytes())
         }
         Atomic::UDInt => out.copy_from_slice(&(int(0, u32::MAX.into())? as u32).to_le_bytes()),
-        Atomic::DWord => match value {
-            Json::Array(_) => {
-                let mut items = Vec::new();
-                flatten(value, &mut items);
-                if items.len() > 32 {
-                    return Err("more than 32 bools for a DWORD".into());
-                }
-                let mut word = 0u32;
-                for (i, item) in items.iter().enumerate() {
-                    if json_truthy(item)? {
-                        word |= 1 << i;
+        // a bit string takes a list of bools, least significant first, or an integer
+        Atomic::Byte | Atomic::Word | Atomic::DWord | Atomic::LWord => {
+            let bits = a.size() * 8;
+            let word = match value {
+                Json::Array(_) => {
+                    let mut items = Vec::new();
+                    flatten(value, &mut items);
+                    if items.len() > bits {
+                        return Err(format!("more than {bits} bools for a {}", a.name()));
                     }
+                    let mut word = 0u64;
+                    for (i, item) in items.iter().enumerate() {
+                        if json_truthy(item)? {
+                            word |= 1 << i;
+                        }
+                    }
+                    word
                 }
-                out.copy_from_slice(&word.to_le_bytes());
-            }
-            _ => {
-                out.copy_from_slice(&(int(i32::MIN.into(), u32::MAX.into())? as u32).to_le_bytes())
-            }
-        },
+                // signed or unsigned values of the size, as two's complement bits
+                _ => int(-(1i128 << (bits - 1)), (1i128 << bits) - 1)? as u64,
+            };
+            out.copy_from_slice(&word.to_le_bytes()[..a.size()]);
+        }
         Atomic::LInt => {
             out.copy_from_slice(&(int(i64::MIN.into(), i64::MAX.into())? as i64).to_le_bytes())
         }
@@ -915,8 +948,8 @@ fn decode_atomic(a: Atomic, data: &[u8]) -> Json {
         Atomic::UInt => Json::from(u16::from_le_bytes([b[0], b[1]])),
         Atomic::DInt => Json::from(i32::from_le_bytes([b[0], b[1], b[2], b[3]])),
         Atomic::UDInt => Json::from(u32::from_le_bytes([b[0], b[1], b[2], b[3]])),
-        Atomic::DWord => Json::Array(
-            (0..32)
+        Atomic::Byte | Atomic::Word | Atomic::DWord | Atomic::LWord => Json::Array(
+            (0..a.size() * 8)
                 .map(|i| Json::Bool(b[i / 8] & (1 << (i % 8)) != 0))
                 .collect(),
         ),

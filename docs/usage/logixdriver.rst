@@ -243,6 +243,19 @@ slices containing complete DWORDs use ordinary tag writes. Each word update is
 independent; a slice spanning multiple words is not a single atomic operation.
 A failed word update is reported in the returned Tag even if other words succeed.
 
+Bit Strings
+^^^^^^^^^^^
+
+A ``BYTE``, ``WORD``, ``DWORD`` or ``LWORD`` tag or member (one without dimensions, so not a BOOL array) is a bit
+string: its value is a list of one bool per bit, least significant first, and a write of it takes such a list.  Its
+bits are addressed like an integer's, ``Name.n``, read as a ``BOOL`` and written with a Read-Modify-Write::
+
+    >>> plc.read('status_word')
+    Tag(tag='status_word', value=[True, False, ..., False], type='WORD', error=None)
+    >>> plc.read('status_word.0')
+    Tag(tag='status_word.0', value=True, type='BOOL', error=None)
+    >>> plc.write('status_word.3', True)
+
 Reading Tags
 ------------
 

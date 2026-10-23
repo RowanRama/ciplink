@@ -303,7 +303,8 @@ impl ReadModifyWrite {
         }
     }
 
-    /// Sets or clears a bit (a DWORD's bit index counts modulo 32, as a BOOL array member).
+    /// Sets or clears a bit. A DWORD's bit index counts modulo 32, as the Python packet's did (the driver gives
+    /// a bit within the word: a BOOL array element's bit, or a bit of a DWORD bit string).
     pub fn set_bit(&mut self, bit: u32, value: bool) {
         let bit = u64::from(if self.data_type == Elementary::DWord {
             bit % 32

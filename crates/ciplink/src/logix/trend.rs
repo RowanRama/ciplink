@@ -4,7 +4,8 @@
 //! This is the trend object (class 0xB2) Studio 5000 trends use, addressed directly on a connection of its
 //! own. Each pen is a tag path and a mask: the controller samples the 32-bit word at the tag's address and
 //! ANDs it with the mask, so a pen can be any tag or member of up to 32 bits (BOOL, SINT, INT, DINT, USINT,
-//! UINT, UDINT, REAL), a bit of an integer or a BOOL array element. 64-bit types cannot be trended this way.
+//! UINT, UDINT, REAL), a bit of an integer or bit string (`Word.3`, below bit 32) or a BOOL array element.
+//! 64-bit types cannot be trended this way.
 //! The controller deletes the trend of a connection that closes, so a trend never outlives its driver.
 
 use std::collections::VecDeque;

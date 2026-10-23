@@ -35,7 +35,7 @@ flowchart LR
 | | |
 |---|---|
 | **Controllers** | ControlLogix, CompactLogix, GuardLogix and Micro800 with `LogixDriver`; SLC 500 and MicroLogix with `SLCDriver`; generic CIP messaging to any EtherNet/IP device with `CIPDriver` |
-| **Tag types** | atomic types, arrays, strings, UDTs (whole or by member), AOIs, bits of integers and BOOL arrays |
+| **Tag types** | atomic types, arrays, strings, UDTs (whole or by member), AOIs, bits of integers, bit strings (BYTE, WORD, DWORD, LWORD) and BOOL arrays |
 | **Throughput** | many tags packed into each packet, with large values fragmented and chunked automatically |
 | **Tag discovery** | the tag list and UDT definitions are uploaded on connect, or loaded on first use with `lazy_tags`; a binary tag cache makes restarts near-instant |
 | **Online-edit safe** | tags are addressed by instance ID and checked against the controller's tag-table version on every read and write, so an online edit never silently returns the wrong tag |
