@@ -29,6 +29,18 @@ internal sealed class TrendHandle : SafeHandleZeroOrMinusOneIsInvalid
     }
 }
 
+/// <summary>Owns a <c>CiplinkServer*</c>; releasing it stops the tag server and frees it.</summary>
+internal sealed class ServerHandle : SafeHandleZeroOrMinusOneIsInvalid
+{
+    public ServerHandle() : base(ownsHandle: true) { }
+
+    protected override bool ReleaseHandle()
+    {
+        Native.ciplink_server_stop(handle);
+        return true;
+    }
+}
+
 /// <summary>The <c>CiplinkMessage</c> struct of ciplink.h (x64 size 56).</summary>
 [StructLayout(LayoutKind.Sequential)]
 internal struct NativeMessage
@@ -187,6 +199,15 @@ internal static partial class Native
 
     [LibraryImport(Lib)]
     internal static partial void ciplink_trend_free(IntPtr trend);
+
+    [LibraryImport(Lib, StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial int ciplink_server_start(string configPath, string? optionsJson, out ServerHandle server);
+
+    [LibraryImport(Lib)]
+    internal static partial int ciplink_server_address(ServerHandle server, out IntPtr text);
+
+    [LibraryImport(Lib)]
+    internal static partial int ciplink_server_stop(IntPtr server);
 
     /// <summary>Always called with NULL: the calling thread's latest error, which every failing call sets.</summary>
     [LibraryImport(Lib)]

@@ -227,6 +227,7 @@ name = "ciplink-ffi"
 version = "0.3.3"
 dependencies = [
  "ciplink",
+ "ciplink-server",
  "ciplink-sim",
  "indexmap",
  "serde_json",

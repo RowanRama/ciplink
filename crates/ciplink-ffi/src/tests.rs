@@ -1103,3 +1103,77 @@ fn a_scan_calls_back_with_each_node_until_told_to_stop() {
     let st = unsafe { ciplink_browse_port(h.0, ptr::null(), 1, bad.as_ptr(), 1, &mut out) };
     assert_eq!(st, CiplinkStatus::InvalidArgument);
 }
+
+// ------------------------------------------------------------------------------------------------ tag server
+
+/// A one-PLC mock server config in a fresh temp dir.
+fn server_config(name: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("ciplink-ffi-{name}-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("tags.json"), r#"{"Speed": "REAL", "Count": "DINT"}"#).unwrap();
+    let config = dir.join("tagserver.toml");
+    std::fs::write(
+        &config,
+        "[server]\naudit_log = \"\"\npages_file = \"\"\n[plc.P]\npath = \"192.0.2.1\"\nmock_tags = \"tags.json\"\n[token.t]\nsecret = \"s\"\n",
+    )
+    .unwrap();
+    config
+}
+
+fn http_get(addr: &str, path: &str) -> String {
+    use std::io::{Read, Write};
+    let mut stream = std::net::TcpStream::connect(addr).unwrap();
+    write!(stream, "GET {path} HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n\r\n").unwrap();
+    let mut response = String::new();
+    stream.read_to_string(&mut response).unwrap();
+    response
+}
+
+#[test]
+fn server_starts_serves_and_stops() {
+    let config = cstr(server_config("serve").to_str().unwrap());
+    let options = cstr(r#"{"mock": true, "port": 0}"#);
+    let mut server = ptr::null_mut();
+    // SAFETY: valid strings and out pointer.
+    let st = unsafe { ciplink_server_start(config.as_ptr(), options.as_ptr(), &mut server) };
+    assert_eq!(st, CiplinkStatus::Ok, "{}", last_error(ptr::null()));
+    let mut addr = ptr::null_mut();
+    // SAFETY: a live server and a writable out pointer.
+    assert_eq!(unsafe { ciplink_server_address(server, &mut addr) }, CiplinkStatus::Ok);
+    let addr = take(addr);
+    assert!(addr.starts_with("127.0.0.1:"), "{addr}");
+    let mut health = String::new();
+    for _ in 0..50 {
+        health = http_get(&addr, "/health");
+        if health.contains("\"connected\"") {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    assert!(health.starts_with("HTTP/1.1 200"), "{health}");
+    assert!(health.contains(r#""P":{"state":"connected""#), "{health}");
+    // SAFETY: the server from ciplink_server_start, stopped once.
+    assert_eq!(unsafe { ciplink_server_stop(server) }, CiplinkStatus::Ok);
+    // SAFETY: NULL is ignored.
+    assert_eq!(unsafe { ciplink_server_stop(ptr::null_mut()) }, CiplinkStatus::Ok);
+}
+
+#[test]
+fn server_start_reports_bad_configs() {
+    let missing = cstr("no/such/tagserver.toml");
+    let mut server = ptr::null_mut();
+    // SAFETY: valid strings and out pointer.
+    let st = unsafe { ciplink_server_start(missing.as_ptr(), ptr::null(), &mut server) };
+    assert_eq!(st, CiplinkStatus::InvalidArgument);
+    assert!(server.is_null());
+    assert!(last_error(ptr::null()).contains("tagserver.toml"));
+    let config = cstr(server_config("bad").to_str().unwrap());
+    let bad = cstr(r#"{"port": 70000}"#);
+    // SAFETY: valid strings and out pointer.
+    let st = unsafe { ciplink_server_start(config.as_ptr(), bad.as_ptr(), &mut server) };
+    assert_eq!(st, CiplinkStatus::InvalidArgument);
+    assert_eq!(last_error(ptr::null()), "option port must be 0 to 65535");
+    let mut addr = ptr::null_mut();
+    // SAFETY: NULL server is reported, out pointer writable.
+    assert_eq!(unsafe { ciplink_server_address(ptr::null(), &mut addr) }, CiplinkStatus::InvalidArgument);
+}

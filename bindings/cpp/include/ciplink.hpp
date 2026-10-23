@@ -832,6 +832,44 @@ inline Value discover(const std::string& broadcast = "255.255.255.255") {
     return parse_json(detail::take(o));
 }
 
+// ---------------------------------------------------------------------------------------------- tag server
+
+/// A tag server (see `ciplink-server`) running in this process on threads of its own (movable, not copyable).
+/// Destroying it stops it; stop() does the same and throws if the shutdown failed.
+class Server {
+public:
+    /// Starts the server of a config file (the TOML file of `ciplink-server run --config`) and returns once it
+    /// listens. `mock` serves simulated values from each PLC's mock_tags file; `host` and `port` override the
+    /// config's (port 0 picks a free port).
+    explicit Server(const std::string& config_path, bool mock = false, std::optional<std::string> host = std::nullopt,
+                    std::optional<uint16_t> port = std::nullopt) {
+        Struct options{{"mock", Value(mock)}};
+        if (host) options.emplace_back("host", Value(*host));
+        if (port) options.emplace_back("port", Value(int64_t(*port)));
+        CiplinkServer* raw = nullptr;
+        detail::check(ciplink_server_start(config_path.c_str(), to_json(Value(options)).c_str(), &raw));
+        handle_.reset(raw);
+    }
+    Server(Server&&) noexcept = default;
+    Server& operator=(Server&&) noexcept = default;
+
+    /// The address it listens on, e.g. "127.0.0.1:8765".
+    std::string address() const {
+        char* out = nullptr;
+        detail::check(ciplink_server_address(handle_.get(), &out));
+        return detail::take(out);
+    }
+
+    /// Stops the server: pressed buttons are released, the PLC connections closed, the audit log flushed.
+    void stop() { detail::check(ciplink_server_stop(handle_.release())); }
+
+private:
+    struct Stop {
+        void operator()(CiplinkServer* p) const noexcept { ciplink_server_stop(p); }
+    };
+    std::unique_ptr<CiplinkServer, Stop> handle_;
+};
+
 inline std::string version() { return ciplink_version(); }
 
 }  // namespace ciplink

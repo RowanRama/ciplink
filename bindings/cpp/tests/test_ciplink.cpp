@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <filesystem>
 #include <cmath>
 #include <fstream>
 #include <iterator>
@@ -442,6 +443,20 @@ int main(int argc, char** argv) {
             thrown = std::string(e.what()) == "stop";
         }
         CHECK(thrown);
+    });
+
+    run("tag_server_starts_and_stops", [&] {
+        namespace fs = std::filesystem;
+        fs::path dir = fs::temp_directory_path() / "ciplink-cpp-server";
+        fs::create_directories(dir);
+        std::ofstream(dir / "tags.json") << R"({"Speed": "REAL"})";
+        std::ofstream(dir / "tagserver.toml") << "[server]\naudit_log = \"\"\npages_file = \"\"\n"
+                                                 "[plc.P]\npath = \"192.0.2.1\"\nmock_tags = \"tags.json\"\n"
+                                                 "[token.t]\nsecret = \"s\"\n";
+        ciplink::Server server((dir / "tagserver.toml").string(), true, std::nullopt, uint16_t(0));
+        CHECK(server.address().rfind("127.0.0.1:", 0) == 0);
+        server.stop();
+        expect_error(CIPLINK_STATUS_INVALID_ARGUMENT, [] { ciplink::Server("no/such/tagserver.toml"); });
     });
 
     std::cout << checks << " checks, " << failures << " failures\n";

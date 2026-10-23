@@ -8,6 +8,8 @@
 //!   inside the driver).
 //! - A controller-side trend is a second handle type, [`CiplinkTrend`], made by [`ciplink_trend_start`] and freed
 //!   with [`ciplink_trend_free`].
+//! - A tag server is a third handle type, [`CiplinkServer`], made by [`ciplink_server_start`] and stopped and
+//!   freed with [`ciplink_server_stop`].
 //! - Every function returns a [`CiplinkStatus`]; 0 is success. The message of the latest failure is kept on the
 //!   handle and on the calling thread: [`ciplink_last_error`] with the handle, or with NULL for the calling
 //!   thread's latest failure (the one to use for constructors, handle-less calls, or a handle shared by threads).
@@ -1822,6 +1824,116 @@ pub unsafe extern "C" fn ciplink_trend_free(trend: *mut CiplinkTrend) {
         // SAFETY: made by Box::into_raw in `ciplink_trend_start`, freed once (caller contract).
         let _ = catch_unwind(|| drop(unsafe { Box::from_raw(trend) }));
     }
+}
+
+// ------------------------------------------------------------------------------------------------ tag server
+
+/// A tag server running in this process on threads of its own (see the `ciplink-server` crate), made by
+/// [`ciplink_server_start`] and stopped and freed with [`ciplink_server_stop`]. The server functions report
+/// failures on the calling thread: [`ciplink_last_error`] with NULL.
+pub struct CiplinkServer {
+    handle: Mutex<Option<ciplink_server::ServerHandle>>,
+}
+
+/// Runs a server entry point; a NULL server is an invalid argument.
+fn with_server(
+    server: *const CiplinkServer,
+    f: impl FnOnce(&CiplinkServer) -> FfiResult<()>,
+) -> CiplinkStatus {
+    // SAFETY: the caller passes NULL or a live server from `ciplink_server_start` not yet stopped.
+    match unsafe { server.as_ref() } {
+        Some(s) => guard(None, || f(s)),
+        None => guard(None, || {
+            Err(FfiError::Invalid("server handle is NULL".into()))
+        }),
+    }
+}
+
+/// Starts the tag server of a config file (the TOML file of `ciplink-server run --config`) and returns once it
+/// listens. A config that cannot be read or is wrong is an invalid argument; a port that is taken is a
+/// [`CiplinkStatus::Comm`] error.
+///
+/// `options_json` may be NULL or `{}`; keys (all optional): `mock` (serve simulated values from each PLC's
+/// `mock_tags` file, default false), `host` and `port` (override the config's; port 0 picks a free port).
+///
+/// # Safety
+/// `config_path` is NUL-terminated; `options_json` is NULL or NUL-terminated; `out` is writable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ciplink_server_start(
+    config_path: *const c_char,
+    options_json: *const c_char,
+    out: *mut *mut CiplinkServer,
+) -> CiplinkStatus {
+    guard(None, || {
+        check_out(out)?;
+        let path = arg_str(config_path, "config_path")?;
+        let options = options_map(options_json)?;
+        let mut config = ciplink_server::load_config(std::path::Path::new(path)).map_err(FfiError::Invalid)?;
+        let mock = get_bool(&options, "mock", false)?;
+        match options.get("host") {
+            None | Some(Json::Null) => {}
+            Some(Json::String(host)) => config.host = host.clone(),
+            Some(_) => return Err(FfiError::Invalid("option host must be a string".into())),
+        }
+        match options.get("port") {
+            None | Some(Json::Null) => {}
+            Some(j) => {
+                config.port = j
+                    .as_u64()
+                    .and_then(|p| u16::try_from(p).ok())
+                    .ok_or_else(|| FfiError::Invalid("option port must be 0 to 65535".into()))?;
+            }
+        }
+        let handle = ciplink_server::ServerHandle::start(config, ciplink_server::factory(mock))
+            .map_err(|e| FfiError::Core(Error::Comm(e)))?;
+        let server = CiplinkServer {
+            handle: Mutex::new(Some(handle)),
+        };
+        // SAFETY: `out` was checked not NULL by check_out.
+        unsafe { *out = Box::into_raw(Box::new(server)) };
+        Ok(())
+    })
+}
+
+/// The address the server listens on, e.g. `"127.0.0.1:8765"`; free it with [`ciplink_string_free`].
+///
+/// # Safety
+/// `server` is NULL or a live server; `out` is writable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ciplink_server_address(
+    server: *const CiplinkServer,
+    out: *mut *mut c_char,
+) -> CiplinkStatus {
+    with_server(server, |s| {
+        check_out(out)?;
+        let handle = s.handle.lock().unwrap_or_else(|p| p.into_inner());
+        let addr = handle
+            .as_ref()
+            .map(ciplink_server::ServerHandle::addr)
+            .ok_or_else(|| FfiError::Invalid("server is stopped".into()))?;
+        put_string(out, addr.to_string())
+    })
+}
+
+/// Stops the server and frees it: pressed momentary buttons are released, the PLC connections closed and the
+/// audit log flushed before it returns. NULL is ignored.
+///
+/// # Safety
+/// `server` is NULL or a server from [`ciplink_server_start`] not yet stopped, and no other thread is using it.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ciplink_server_stop(server: *mut CiplinkServer) -> CiplinkStatus {
+    if server.is_null() {
+        return CiplinkStatus::Ok;
+    }
+    // SAFETY: made by Box::into_raw in `ciplink_server_start`, freed once (caller contract).
+    let server = unsafe { Box::from_raw(server) };
+    guard(None, || {
+        let handle = server.handle.lock().unwrap_or_else(|p| p.into_inner()).take();
+        match handle {
+            Some(h) => h.stop().map_err(|e| FfiError::Core(Error::Comm(e))),
+            None => Ok(()),
+        }
+    })
 }
 
 // ------------------------------------------------------------------------------------------------ errors, memory

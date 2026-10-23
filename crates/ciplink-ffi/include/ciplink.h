@@ -32,6 +32,11 @@ typedef enum CiplinkStatus {
 // A driver handle: a Logix, SLC or plain CIP driver.
 typedef struct CiplinkDriver CiplinkDriver;
 
+// A tag server running in this process on threads of its own (see the `ciplink-server` crate), made by
+// [`ciplink_server_start`] and stopped and freed with [`ciplink_server_stop`]. The server functions report
+// failures on the calling thread: [`ciplink_last_error`] with NULL.
+typedef struct CiplinkServer CiplinkServer;
+
 // A running controller-side trend, made by [`ciplink_trend_start`] and freed with [`ciplink_trend_free`].
 // The trend functions report failures on the calling thread: [`ciplink_last_error`] with NULL.
 typedef struct CiplinkTrend CiplinkTrend;
@@ -466,6 +471,32 @@ enum CiplinkStatus ciplink_trend_close(const struct CiplinkTrend *trend);
 // # Safety
 // `trend` is NULL or a trend from [`ciplink_trend_start`] not yet freed, and no other thread is using it.
 void ciplink_trend_free(struct CiplinkTrend *trend);
+
+// Starts the tag server of a config file (the TOML file of `ciplink-server run --config`) and returns once it
+// listens. A config that cannot be read or is wrong is an invalid argument; a port that is taken is a
+// [`CiplinkStatus::Comm`] error.
+//
+// `options_json` may be NULL or `{}`; keys (all optional): `mock` (serve simulated values from each PLC's
+// `mock_tags` file, default false), `host` and `port` (override the config's; port 0 picks a free port).
+//
+// # Safety
+// `config_path` is NUL-terminated; `options_json` is NULL or NUL-terminated; `out` is writable.
+enum CiplinkStatus ciplink_server_start(const char *config_path,
+                                        const char *options_json,
+                                        struct CiplinkServer **out);
+
+// The address the server listens on, e.g. `"127.0.0.1:8765"`; free it with [`ciplink_string_free`].
+//
+// # Safety
+// `server` is NULL or a live server; `out` is writable.
+enum CiplinkStatus ciplink_server_address(const struct CiplinkServer *server, char **out);
+
+// Stops the server and frees it: pressed momentary buttons are released, the PLC connections closed and the
+// audit log flushed before it returns. NULL is ignored.
+//
+// # Safety
+// `server` is NULL or a server from [`ciplink_server_start`] not yet stopped, and no other thread is using it.
+enum CiplinkStatus ciplink_server_stop(struct CiplinkServer *server);
 
 // The message of the latest failed call on `handle`, or of the calling thread's latest failure if `handle` is
 // NULL; NULL if there was none. Free it with [`ciplink_string_free`].
