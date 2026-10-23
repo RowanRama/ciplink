@@ -2,8 +2,8 @@
 Release History
 ===============
 
-Unreleased
-==========
+ciplink 0.3.3
+=============
 
 - |:sparkles:| device browsing like RSWho: ``get_ports()``, ``browse_port()``, ``iter_port()`` and ``get_identity()``
   list a device's ports, the modules, nodes or (on an EtherNet/IP port) the devices of its subnet, and the identity at
