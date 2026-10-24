@@ -30,6 +30,10 @@ pub trait Plc: Send {
     fn version(&mut self) -> Json;
     /// Request and reply bytes per packet.
     fn connection_size(&self) -> usize;
+    /// Whether the driver reads controller descriptions; without them no tag gets one (the mock has none).
+    fn describes(&self) -> bool {
+        false
+    }
     /// The controller descriptions of tags, None for each the controller has none of (or can't tell).
     fn descriptions(&mut self, tags: &[&str]) -> Result<Vec<Option<String>>, String> {
         Ok(vec![None; tags.len()])
@@ -458,6 +462,10 @@ impl Plc for LogixPlc {
         usize::from(self.driver.connection_size())
     }
 
+    fn describes(&self) -> bool {
+        true
+    }
+
     fn descriptions(&mut self, tags: &[&str]) -> Result<Vec<Option<String>>, String> {
         let results = self
             .driver
@@ -549,5 +557,124 @@ mod tests {
         assert_eq!(c.info("Bits{4}").map(|n| n.dims.clone()), Some(vec![96]));
         assert!(c.info("Motor.Nope").is_none());
         assert_eq!(c.struct_size(c.info("Motor").unwrap()), Some(8));
+    }
+    // ---- ports of ciplink-tagserver's tests/test_config_values.py (values.tag_list and values.type_map)
+
+    fn strct(t: &str, dims: Vec<u64>) -> Node {
+        Node {
+            kind: Kind::Struct,
+            structure_size: Some(8),
+            ..atomic(t, dims, false)
+        }
+    }
+
+    fn type_def(members: Vec<(&str, Node)>, public: &[&str], aoi: Option<Aoi>) -> TypeDef {
+        TypeDef {
+            members: members
+                .into_iter()
+                .map(|(m, n)| (m.to_owned(), Node { member: true, ..n }))
+                .collect(),
+            public: public.iter().map(|p| (*p).to_owned()).collect(),
+            structure_size: 8,
+            aoi,
+            whole_readable: true,
+        }
+    }
+
+    #[test]
+    fn tag_list_with_aoi() {
+        let mut tags = IndexMap::new();
+        tags.insert("Speed".to_owned(), atomic("REAL", vec![], false));
+        tags.insert("Valve1".to_owned(), strct("MyAOI", vec![]));
+        tags.insert("Recipe".to_owned(), strct("UDT_R", vec![]));
+        let mut types = IndexMap::new();
+        let aoi = Aoi {
+            whole_read: false,
+            readable: vec!["Open".into(), "Cmd".into()],
+        };
+        let bools = vec![
+            ("Open", atomic("BOOL", vec![], true)),
+            ("Cmd", atomic("BOOL", vec![], true)),
+            ("Local1", atomic("BOOL", vec![], true)),
+        ];
+        types.insert(
+            "MyAOI".to_owned(),
+            type_def(bools, &["Open", "Cmd", "Local1"], Some(aoi)),
+        );
+        types.insert("UDT_R".to_owned(), type_def(vec![], &[], None));
+        let c = Catalog::new(Json::Null, tags, types);
+        assert_eq!(
+            c.tag_list(),
+            [
+                json!({"name": "Speed", "type": "REAL"}),
+                json!({"name": "Valve1", "type": "MyAOI", "aoi_readable": ["Open", "Cmd"]}),
+                json!({"name": "Recipe", "type": "UDT_R"}),
+            ]
+        );
+    }
+
+    #[test]
+    fn tag_list_dims_and_strings_and_type_map() {
+        let string = Node {
+            kind: Kind::String,
+            ..strct("STR20", vec![])
+        };
+        let mut tags = IndexMap::new();
+        tags.insert("Tanks".to_owned(), strct("Tank", vec![4]));
+        tags.insert("Grid".to_owned(), atomic("DINT", vec![3, 5], false));
+        tags.insert("Msg".to_owned(), string.clone());
+        // ciplink leaves string types out of the types, and hidden members out of `public`
+        let mut types = IndexMap::new();
+        let tank = vec![
+            ("ZZZZZZZZZZTank0", atomic("SINT", vec![], true)),
+            ("Level", atomic("REAL", vec![], true)),
+            (
+                "Name",
+                Node {
+                    type_name: "STRING".into(),
+                    ..string
+                },
+            ),
+            ("Hist", atomic("REAL", vec![8], true)),
+        ];
+        types.insert(
+            "Tank".to_owned(),
+            type_def(tank, &["Level", "Name", "Hist"], None),
+        );
+        let old = vec![
+            ("__pad", atomic("SINT", vec![], true)),
+            ("A", atomic("DINT", vec![], true)),
+        ];
+        types.insert("Old".to_owned(), type_def(old, &["A"], None));
+        let valve = vec![
+            ("Open", atomic("BOOL", vec![], true)),
+            ("Cmd", atomic("BOOL", vec![], true)),
+        ];
+        let aoi = Aoi {
+            whole_read: true,
+            readable: vec!["Open".into()],
+        };
+        types.insert(
+            "Valve_AOI".to_owned(),
+            type_def(valve, &["Open", "Cmd"], Some(aoi)),
+        );
+        let c = Catalog::new(Json::Null, tags, types);
+        assert_eq!(
+            c.tag_list(),
+            [
+                json!({"name": "Tanks", "type": "Tank", "dims": [4]}),
+                json!({"name": "Grid", "type": "DINT", "dims": [3, 5]}),
+                json!({"name": "Msg", "type": "STRING"}),
+            ]
+        );
+        assert_eq!(
+            Json::Object(c.type_map()),
+            json!({
+                "Tank": {"members": {"Level": {"type": "REAL"}, "Name": {"type": "STRING"},
+                                     "Hist": {"type": "REAL", "dims": [8]}}},
+                "Old": {"members": {"A": {"type": "DINT"}}},
+                "Valve_AOI": {"members": {"Open": {"type": "BOOL"}}, "aoi": true},
+            })
+        );
     }
 }

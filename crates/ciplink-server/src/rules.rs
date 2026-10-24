@@ -1006,4 +1006,544 @@ mod tests {
         assert_eq!(rules.resolve("P", "W.Other"), "W.Other");
         assert_eq!(rules.resolve("P", "W.3"), "W.3");
     }
+    // ---- ports of ciplink-tagserver's tests/test_rules.py
+
+    #[test]
+    fn match_patterns() {
+        for (pattern, name, expected) in [
+            ("Bench.SpeedSP", "bench.speedsp", true), // case-insensitive
+            ("Tank[*].Level", "Tank[3].Level", true), // brackets are literal
+            ("Tank[*].Level", "Tank3.Level", false),
+            ("Arr[[]3]", "Arr[3]", false), // the 0.2 fnmatch escape no longer works
+            ("Bench.*", "Bench.Axis.Position", true), // * crosses dots
+            ("PLC1/Speed*", "PLC1/SpeedSP", true),
+            ("Speed?", "Speed1", true),
+            ("Speed?", "Speed12", false),
+            ("Speed", "SpeedSP", false), // whole name
+            ("a.b", "aXb", false),       // . is literal
+            ("Program:Bench.*", "Program:Bench.Mode", true),
+        ] {
+            assert_eq!(glob_match(pattern, name), expected, "{pattern} {name}");
+        }
+    }
+
+    fn rules(tables: Json, groups: Json) -> Rules {
+        let data = json!({"plc": {"P": {"path": "x", "rule": tables, "group": groups}}});
+        Rules::new(&crate::config::parse_config(&data, std::path::Path::new(".")).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn effective_first_rule_per_field_wins() {
+        let r = rules(
+            json!([{"match": "Bench.SpeedSP", "writable": true, "max": 1800},
+                   {"match": ["Bench.*", "Other"], "units": "rpm", "max": 5, "writable": false, "nonsense": 1}]),
+            json!([]),
+        );
+        let eff = |tag: &str| Json::Object(r.effective("P", tag));
+        assert_eq!(
+            eff("bench.speedsp"),
+            json!({"writable": true, "max": 1800, "units": "rpm"})
+        );
+        let other = json!({"units": "rpm", "max": 5, "writable": false});
+        assert_eq!(eff("Bench.Speed"), other);
+        assert_eq!(eff("Other"), other);
+        assert_eq!(eff("Nothing"), json!({}));
+    }
+
+    #[test]
+    fn effective_of_a_bit_takes_only_writable_from_its_word() {
+        let r = rules(
+            json!([{"match": "W", "writable": true, "min": 0, "bits": {"EStop": 0}, "units": "x", "description": "d"},
+                   {"match": "V.*", "max": 3, "description": "bit"}, {"match": "V", "writable": true}]),
+            json!([]),
+        );
+        let eff = |tag: &str| Json::Object(r.effective("P", tag));
+        assert_eq!(eff("W.3"), json!({"writable": true}));
+        // max never applies to a bit
+        assert_eq!(eff("V.0"), json!({"description": "bit", "writable": true}));
+        assert_eq!(eff("Z.0"), json!({}));
+    }
+
+    #[test]
+    fn effective_memo_is_bounded() {
+        let r = rules(json!([{"match": "*", "units": "u"}]), json!([]));
+        for i in 0..MEMO_MAX + 10 {
+            assert_eq!(
+                Json::Object(r.effective("P", &format!("T{i}"))),
+                json!({"units": "u"})
+            );
+        }
+        assert!(r.memo.lock().unwrap().len() <= MEMO_MAX);
+    }
+
+    #[test]
+    fn resolve_bit_names() {
+        let r = rules(
+            json!([{"match": "Bench.StatusWord", "bits": {"EStop": 0, "DoorOpen": 1}},
+                   {"match": "Tank[*].Status", "bits": {"Alarm": 7}}]),
+            json!([]),
+        );
+        assert_eq!(
+            r.resolve("P", "Bench.StatusWord.estop"),
+            "Bench.StatusWord.0"
+        );
+        assert_eq!(
+            r.resolve("P", "Bench.StatusWord.DoorOpen"),
+            "Bench.StatusWord.1"
+        );
+        assert_eq!(r.resolve("P", "Tank[2].Status.Alarm"), "Tank[2].Status.7");
+        assert_eq!(r.resolve("P", "Bench.StatusWord.5"), "Bench.StatusWord.5");
+        // unknown: unchanged, reads missing
+        assert_eq!(
+            r.resolve("P", "Bench.StatusWord.Nope"),
+            "Bench.StatusWord.Nope"
+        );
+        assert_eq!(r.resolve("P", "Speed"), "Speed");
+    }
+
+    #[test]
+    fn groups() {
+        let r = rules(
+            json!([]),
+            json!([{"name": "fast", "rate_ms": 50, "match": ["Bench.Axis.*"]},
+                   {"name": "also", "rate_ms": 10, "match": "Bench.Axis.Position"},
+                   {"name": "slow", "rate_ms": 2000, "match": "Tank[*].Temp"}]),
+        );
+        let group = |name: &str, rate_ms| {
+            Some(Group {
+                name: name.into(),
+                rate_ms,
+            })
+        };
+        // first matching group wins
+        assert_eq!(r.group("P", "Bench.Axis.Position"), group("fast", 50));
+        assert_eq!(r.group("P", "tank[1].temp"), group("slow", 2000));
+        assert_eq!(r.group("P", "Bench.Speed"), None);
+        let names: Vec<&Json> = r.groups("P").iter().map(|g| &g["name"]).collect();
+        assert_eq!(names, [&json!("fast"), &json!("also"), &json!("slow")]);
+    }
+
+    #[test]
+    fn always_takes_literal_names() {
+        let r = rules(
+            json!([{"match": "Off", "always": false},
+                   {"match": ["Bench.StatusWord", "Off", "Tank[*].Level"], "always": true},
+                   {"match": "Alarm", "always": true}]),
+            json!([]),
+        );
+        // Tank[*].Level is a pattern: logged and left out
+        assert_eq!(r.always("P"), ["Bench.StatusWord", "Alarm"]);
+    }
+
+    // ---- ports of ciplink-tagserver's tests/test_decorators.py (resolution and config)
+
+    fn decorators() -> Json {
+        json!({
+            "temp": {"units": "C", "rate_ms": 1000},
+            "fast": {"rate_ms": 250},
+            "slow": {"rate_ms": 2000, "together": true},
+            "sp": {"writable": true, "min": 0, "max": 100, "units": "rpm"},
+            "cmd": {"writable": true},
+            "alarm": {"always": true},
+        })
+    }
+
+    fn tag_list() -> Vec<Json> {
+        vec![
+            json!({"name": "Line", "type": "LineData"}),
+            json!({"name": "Axes", "type": "Axis", "dims": [2]}),
+            json!({"name": "Zone", "type": "REAL", "dims": [8]}),
+            json!({"name": "Program:Main.Axis", "type": "Axis"}),
+            json!({"name": "Word", "type": "DINT"}),
+        ]
+    }
+
+    fn types() -> Json {
+        json!({
+            "LineData": {"members": {"Pump": {"type": "Pump"}, "Axes": {"type": "Axis", "dims": [2]}}},
+            "Axis": {"members": {"Drive": {"type": "Drive"}, "Pos": {"type": "REAL"}, "Jog": {"type": "BOOL"}}},
+            "Drive": {"members": {"Temp": {"type": "REAL"}, "Amps": {"type": "REAL"},
+                                  "Faults": {"type": "DINT", "dims": [4]}}},
+            "Pump": {"members": {"SpeedSP": {"type": "REAL"}, "Speed": {"type": "REAL"}, "Alarm": {"type": "BOOL"}}},
+        })
+    }
+
+    /// test_decorators.py's `resolver(udt, tags, rules, groups, types=True)`.
+    fn resolver_of(udt: Json, tags: Json, rules: Json, groups: Json, with_types: bool) -> Resolver {
+        let list = |v: Json| -> Vec<Map<String, Json>> {
+            v.as_array()
+                .unwrap()
+                .iter()
+                .map(|t| obj(t.clone()))
+                .collect()
+        };
+        let mut r = Resolver::new(
+            &obj(decorators()),
+            &obj(udt),
+            &obj(tags),
+            list(rules),
+            list(groups),
+            "plc.P",
+        )
+        .unwrap();
+        if with_types {
+            r.set_types(&tag_list(), &obj(types()));
+        }
+        r
+    }
+
+    fn with(udt: Json, tags: Json) -> Resolver {
+        resolver_of(udt, tags, json!([]), json!([]), true)
+    }
+
+    fn eff(r: &Resolver, tag: &str) -> Json {
+        Json::Object(r.effective(tag))
+    }
+
+    fn group_of(r: &Resolver, tag: &str) -> Option<Group> {
+        r.group(tag, &r.effective(tag))
+    }
+
+    #[test]
+    fn entry_forms_list_order_and_inline_fields() {
+        let r = with(
+            json!({}),
+            json!({"A": "temp", "B": ["temp", "fast"], "C": ["fast", "temp"], "D": {"use": "sp", "max": 5},
+                   "E": {"use": ["sp", "temp"], "units": "%", "rate_ms": 10}, "F": {"min": 1}}),
+        );
+        assert_eq!(
+            eff(&r, "A"),
+            json!({"units": "C", "rate_ms": 1000, "group": "temp"})
+        );
+        // later wins
+        assert_eq!(eff(&r, "B")["rate_ms"], 250);
+        assert_eq!(
+            group_of(&r, "B"),
+            Some(Group {
+                name: "fast".into(),
+                rate_ms: 250
+            })
+        );
+        assert_eq!(eff(&r, "C")["rate_ms"], 1000);
+        // inline wins over use
+        assert_eq!(
+            eff(&r, "D"),
+            json!({"writable": true, "min": 0, "max": 5, "units": "rpm"})
+        );
+        assert_eq!(eff(&r, "e")["units"], "%");
+        assert_eq!(
+            group_of(&r, "E"),
+            Some(Group {
+                name: "tag".into(),
+                rate_ms: 10
+            })
+        );
+        assert_eq!(eff(&r, "F"), json!({"min": 1}));
+    }
+
+    #[test]
+    fn precedence_at_a_node() {
+        let r = with(
+            json!({"Axis": {"Pos": {"units": "udt", "min": 1, "max": 9}}}),
+            json!({"Axes.Pos": {"units": "stripped", "min": 2}, "Axes[1].Pos": {"units": "specific"}}),
+        );
+        assert_eq!(
+            eff(&r, "Axes[1].Pos"),
+            json!({"units": "specific", "min": 2, "max": 9})
+        );
+        assert_eq!(
+            eff(&r, "Axes[0].Pos"),
+            json!({"units": "stripped", "min": 2, "max": 9})
+        );
+        // no [tags] key
+        assert_eq!(
+            eff(&r, "Program:Main.Axis.Pos"),
+            json!({"units": "udt", "min": 1, "max": 9})
+        );
+        assert_eq!(eff(&r, "AXES[01].pos")["units"], "specific"); // case and index spelling
+    }
+
+    #[test]
+    fn inherited_fields_closest_wins() {
+        let r = with(
+            json!({"Axis": {"Drive": "fast"}, "Drive": {"Temp": "temp"}, "LineData": {"Pump": "slow"}}),
+            json!({"Line": {"rate_ms": 50, "together": false}}),
+        );
+        assert_eq!(
+            eff(&r, "Axes[1].Drive.Amps"),
+            json!({"rate_ms": 250, "group": "fast"})
+        );
+        assert_eq!(
+            eff(&r, "Axes[1].Drive.Faults[2]"),
+            json!({"rate_ms": 250, "group": "fast"})
+        );
+        assert_eq!(
+            eff(&r, "Axes[0].Drive.Temp"),
+            json!({"rate_ms": 1000, "group": "temp", "units": "C"})
+        );
+        assert_eq!(
+            eff(&r, "Line.Pump.Speed"),
+            json!({"rate_ms": 2000, "group": "slow", "together": true})
+        );
+        assert_eq!(
+            eff(&r, "Line.Axes[0].Pos"),
+            json!({"rate_ms": 50, "group": "tag", "together": false})
+        );
+        assert_eq!(
+            eff(&r, "Line.Axes[0].Drive.Amps"),
+            json!({"rate_ms": 250, "group": "fast", "together": false})
+        );
+    }
+
+    #[test]
+    fn value_fields_do_not_inherit_into_members() {
+        let r = with(
+            json!({}),
+            json!({"Line": ["sp", "alarm"], "Line.Pump": {"description": "pump", "bits": {"X": 1}}}),
+        );
+        assert_eq!(eff(&r, "Line")["writable"], true);
+        assert_eq!(
+            eff(&r, "Line.Pump"),
+            json!({"description": "pump", "bits": {"X": 1}})
+        );
+        assert_eq!(eff(&r, "Line.Pump.SpeedSP"), json!({}));
+    }
+
+    #[test]
+    fn array_elements_take_their_arrays_value_fields() {
+        let r = with(
+            json!({}),
+            json!({"Zone": "temp", "Zone[2]": {"units": "K"}, "Axes": "sp"}),
+        );
+        assert_eq!(
+            eff(&r, "Zone[3]"),
+            json!({"units": "C", "rate_ms": 1000, "group": "temp"})
+        );
+        assert_eq!(eff(&r, "Zone[2]")["units"], "K");
+        assert_eq!(eff(&r, "Axes[1]")["writable"], true);
+        assert!(eff(&r, "Axes[1].Pos").get("writable").is_none());
+    }
+
+    #[test]
+    fn nested_udts_and_program_scope() {
+        let r = with(
+            json!({"Drive": {"Temp": "temp"}, "Pump": {"SpeedSP": "sp"}}),
+            json!({"Program:Main.Axis.Jog": "cmd"}),
+        );
+        for path in [
+            "Axes[0].Drive.Temp",
+            "Line.Axes[1].Drive.Temp",
+            "Program:Main.Axis.Drive.Temp",
+        ] {
+            assert_eq!(eff(&r, path)["units"], "C");
+        }
+        assert_eq!(eff(&r, "Line.Pump.SpeedSP")["writable"], true);
+        assert_eq!(eff(&r, "program:main.axis.jog"), json!({"writable": true}));
+        assert_eq!(eff(&r, "Program:Main.Axis.Pos"), json!({}));
+    }
+
+    #[test]
+    fn bits() {
+        let r = with(
+            json!({}),
+            json!({"Word": {"bits": {"EStop": 0}, "writable": true, "units": "x", "rate_ms": 30},
+                   "Word.3": {"writable": false}}),
+        );
+        let data = json!({"decorator": decorators(), "plc": {"P": {"path": "x", "tags": {
+            "Word": {"bits": {"EStop": 0}}, "Program:Main.Axis.Pos": {"bits": {"Home": 4}}}}}});
+        let rules =
+            Rules::new(&crate::config::parse_config(&data, std::path::Path::new(".")).unwrap())
+                .unwrap();
+        assert_eq!(
+            eff(&r, "Word.0"),
+            json!({"writable": true, "rate_ms": 30, "group": "tag"})
+        );
+        assert_eq!(
+            eff(&r, "Word.3"),
+            json!({"writable": false, "rate_ms": 30, "group": "tag"})
+        );
+        assert_eq!(rules.resolve("P", "Word.estop"), "Word.0");
+        assert_eq!(
+            rules.resolve("P", "Program:Main.Axis.Pos.Home"),
+            "Program:Main.Axis.Pos.4"
+        );
+    }
+
+    #[test]
+    fn rules_are_the_fallback_and_groups_need_no_decorator_rate() {
+        let r = resolver_of(
+            json!({"Axis": {"Pos": {"units": "m"}, "Drive": "fast"}}),
+            json!({}),
+            json!([{"match": "Axes[*].*", "units": "rule", "max": 7, "description": "r"}]),
+            json!([{"name": "g", "rate_ms": 40, "match": "Axes[*].*"}]),
+            true,
+        );
+        assert_eq!(
+            eff(&r, "Axes[0].Pos"),
+            json!({"units": "m", "max": 7, "description": "r"})
+        );
+        assert_eq!(
+            group_of(&r, "Axes[0].Pos"),
+            Some(Group {
+                name: "g".into(),
+                rate_ms: 40
+            })
+        );
+        assert_eq!(
+            group_of(&r, "Axes[0].Drive"),
+            Some(Group {
+                name: "fast".into(),
+                rate_ms: 250
+            })
+        );
+    }
+
+    #[test]
+    fn types_unknown_before_connect_and_memo_cleared() {
+        let data = json!({"decorator": decorators(), "plc": {"P": {"path": "x", "udt": {"Axis": {"Pos": "sp"}},
+                                                                   "tags": {"Zone": "temp"}}}});
+        let rules =
+            Rules::new(&crate::config::parse_config(&data, std::path::Path::new(".")).unwrap())
+                .unwrap();
+        assert!(rules.effective("P", "Axes[0].Pos").is_empty()); // UDT entries need the types
+        assert_eq!(rules.effective("P", "Zone[1]")["units"], "C"); // [tags] entries do not
+        rules.set_types("P", &tag_list(), &obj(types()));
+        assert_eq!(rules.effective("P", "Axes[0].Pos")["writable"], true);
+        // a download changed its type
+        let tags: Vec<Json> = tag_list()
+            .into_iter()
+            .map(|mut t| {
+                if t["name"] == "Axes" {
+                    t["type"] = json!("Axis2");
+                }
+                t
+            })
+            .collect();
+        let mut types = obj(types());
+        types.insert("Axis2".into(), types["Axis"].clone());
+        rules.set_types("P", &tags, &types);
+        assert!(rules.effective("P", "Axes[0].Pos").is_empty());
+    }
+
+    #[test]
+    fn always_literal_keys_and_udt_instances() {
+        let r = resolver_of(
+            json!({"Pump": {"Alarm": "alarm"}, "Axis": {"Jog": "alarm"}}),
+            json!({"Word": "alarm", "Line.Axes[1].Jog": {"always": false}}),
+            json!([{"match": "Zone[2]", "always": true}]),
+            json!([]),
+            true,
+        );
+        // not Line.Axes[1].Jog: its [tags] entry wins
+        assert_eq!(
+            r.always(),
+            [
+                "Zone[2]",
+                "Word",
+                "Line.Pump.Alarm",
+                "Line.Axes[0].Jog",
+                "Axes[0].Jog",
+                "Axes[1].Jog",
+                "Program:Main.Axis.Jog"
+            ]
+        );
+        let untyped = resolver_of(
+            json!({"Pump": {"Alarm": "alarm"}}),
+            json!({}),
+            json!([]),
+            json!([]),
+            false,
+        );
+        assert!(untyped.always().is_empty());
+    }
+
+    #[test]
+    fn always_index_less_key_takes_every_element() {
+        let tags = json!({"Axes.Jog": "alarm", "Line.Axes.Drive.Faults": "alarm", "Zone": "alarm",
+                          "Axes[1].Pos": "alarm"});
+        assert_eq!(
+            with(json!({}), tags).always(),
+            [
+                "Axes[0].Jog",
+                "Axes[1].Jog",
+                "Line.Axes[0].Drive.Faults",
+                "Line.Axes[1].Drive.Faults",
+                "Zone",
+                "Axes[1].Pos"
+            ]
+        );
+        // until the types are known
+        let untyped = resolver_of(
+            json!({}),
+            json!({"Axes.Jog": "alarm"}),
+            json!([]),
+            json!([]),
+            false,
+        );
+        assert_eq!(untyped.always(), ["Axes.Jog"]);
+    }
+
+    #[test]
+    fn config_errors() {
+        for (plc, error) in [
+            (
+                json!({"udt": {"Axis": {"Pos": "nope"}}}),
+                "plc.P.udt.Axis.Pos: unknown decorator 'nope'",
+            ),
+            (
+                json!({"tags": {"Zone": {"use": ["temp", "nope"]}}}),
+                "plc.P.tags.Zone: unknown decorator 'nope'",
+            ),
+            (
+                json!({"tags": {"Zone": 3}}),
+                "plc.P.tags.Zone: expected a decorator name",
+            ),
+            (
+                json!({"tags": {"Zone": {"rate_ms": 0}}}),
+                "plc.P.tags.Zone: rate_ms",
+            ),
+        ] {
+            let mut p = obj(plc);
+            p.insert("path".into(), json!("x"));
+            let data = json!({"decorator": decorators(), "plc": {"P": p}});
+            let err = crate::config::parse_config(&data, std::path::Path::new(".")).unwrap_err();
+            assert!(err.contains(error), "{err}");
+        }
+    }
+
+    #[test]
+    fn unknown_decorator_names_the_file() {
+        let dir = crate::testing::TempDir::new();
+        let path = dir.path().join("t.toml");
+        std::fs::write(
+            &path,
+            "[decorator.d]\nunit = \"x\"\nmin = 1\n[plc.P]\npath = \"x\"\n[plc.P.tags]\nA = \"d\"\nB = \"e\"\n",
+        )
+        .unwrap();
+        let err = crate::config::load_config(&path).unwrap_err();
+        assert!(
+            err.contains("t.toml: plc.P.tags.B: unknown decorator 'e'"),
+            "{err}"
+        );
+        // the unknown key 'unit' is logged and ignored
+        std::fs::write(
+            &path,
+            "[decorator.d]\nunit = \"x\"\nmin = 1\n[plc.P]\npath = \"x\"\n[plc.P.tags]\nA = \"d\"\n",
+        )
+        .unwrap();
+        let rules = Rules::new(&crate::config::load_config(&path).unwrap()).unwrap();
+        assert_eq!(Json::Object(rules.effective("P", "A")), json!({"min": 1}));
+    }
+
+    #[test]
+    fn codegen_uses_the_same_resolution() {
+        let body = json!({"plc": "PLC1", "version": 1, "tags": tag_list(), "types": types(), "rules": [],
+                          "groups": [], "decorators": decorators(), "udt": {"Axis": {"Jog": "cmd"}},
+                          "tag_settings": {"Word": {"bits": {"EStop": 0}, "use": "cmd"}, "Word.0": {"writable": false}}});
+        let module = crate::codegen::tree_module(&[body], false).unwrap();
+        let tags = module.split("export interface PLC1Tags ").nth(1).unwrap();
+        assert!(tags.contains("      Jog: TagRef<boolean, true>;\n"));
+        assert!(tags.contains("    Pos: TagRef<number, false>;\n"));
+        assert!(tags.contains("  Word: IntRef<true> & { EStop: TagRef<boolean, false>; };\n"));
+    }
 }

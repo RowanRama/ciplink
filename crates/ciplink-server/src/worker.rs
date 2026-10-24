@@ -18,11 +18,41 @@ use crate::rules::{Group, Rules, split_bit, truthy};
 use crate::values::{Entry, merge, now_ms, to_value};
 
 /// Seconds between reconnect attempts, the last one repeats.
+#[cfg_attr(test, allow(dead_code))]
 const BACKOFF: [f64; 4] = [1.0, 2.0, 5.0, 10.0];
 /// Seconds before a tag the PLC doesn't have is asked for again, unless the tag table reloads.
 const MISSING_RETRY: f64 = 10.0;
 /// Seconds before a struct whose whole read failed is read whole again, unless it reloads.
 const GROUP_RETRY: f64 = 60.0;
+
+/// Test hooks: what the Python tests monkeypatch on `PlcWorker` (`backoff`, `missing_retry`, `group_retry`) and the
+/// clock and wait they swap for fake ones.
+#[cfg(test)]
+struct Hooks {
+    backoff: Vec<f64>,
+    missing_retry: f64,
+    group_retry: f64,
+    time: Option<Arc<dyn FakeTime>>,
+}
+
+#[cfg(test)]
+impl Default for Hooks {
+    fn default() -> Self {
+        Hooks {
+            backoff: vec![0.01, 0.02, 0.05, 0.1], // as the Python tests' autouse fixture
+            missing_retry: MISSING_RETRY,
+            group_retry: GROUP_RETRY,
+            time: None,
+        }
+    }
+}
+
+/// A fake clock: `now` replaces the clock, `wait` the wait (true once stopped).
+#[cfg(test)]
+trait FakeTime: Send + Sync {
+    fn now(&self) -> f64;
+    fn wait(&self, shared: &Shared, seconds: f64) -> bool;
+}
 
 /// What a worker tells the hub, from its thread.
 #[derive(Clone, Debug, PartialEq)]
@@ -179,6 +209,8 @@ struct Shared {
     version: Mutex<Json>,
     descriptions: Mutex<HashMap<String, Option<String>>>,
     stats: Mutex<Stats>,
+    #[cfg(test)]
+    hooks: Mutex<Hooks>,
 }
 
 /// The poller of one PLC; methods are called from the hub, the thread does the I/O.
@@ -223,6 +255,8 @@ impl PlcWorker {
                 version: Mutex::new(Json::Null),
                 descriptions: Mutex::new(HashMap::new()),
                 stats: Mutex::new(Stats::default()),
+                #[cfg(test)]
+                hooks: Mutex::default(),
             }),
             thread: Mutex::new(None),
         }
@@ -407,9 +441,77 @@ impl PlcWorker {
     }
 }
 
+/// Test hooks for the hub's tests, which drive a worker without its thread (as the Python tests' fake worker).
+#[cfg(test)]
+impl PlcWorker {
+    /// Tag -> tier.
+    pub(crate) fn tiers(&self) -> IndexMap<String, u8> {
+        lock(&self.shared.inner).tiers.clone()
+    }
+
+    /// Loads the controller structure from `plc` and marks the worker connected.
+    pub(crate) fn load(&self, plc: &mut dyn Plc) {
+        self.shared.check_version(plc, true);
+        *lock(&self.shared.state) = "connected";
+    }
+
+    /// Sets the connection state, without an event.
+    pub(crate) fn set_state(&self, state: &'static str) {
+        *lock(&self.shared.state) = state;
+    }
+
+    /// Sets a cache entry.
+    pub(crate) fn set_cache(&self, tag: &str, entry: Entry) {
+        lock(&self.shared.inner).cache.insert(tag.to_owned(), entry);
+    }
+
+    /// Sets a controller description.
+    pub(crate) fn set_description(&self, tag: &str, description: Option<&str>) {
+        lock(&self.shared.descriptions).insert(tag.to_owned(), description.map(str::to_owned));
+    }
+
+    /// Runs the queued writes on `plc`, as the thread does between packets.
+    pub(crate) fn run_writes(&self, plc: &mut dyn Plc) -> Result<(), String> {
+        self.shared.run_writes(plc)
+    }
+}
+
 impl Shared {
     fn clock(&self) -> f64 {
+        #[cfg(test)]
+        if let Some(time) = self.fake_time() {
+            return time.now();
+        }
         self.epoch.elapsed().as_secs_f64()
+    }
+
+    #[cfg(test)]
+    fn fake_time(&self) -> Option<Arc<dyn FakeTime>> {
+        lock(&self.hooks).time.clone()
+    }
+
+    fn backoff(&self, attempt: usize) -> f64 {
+        #[cfg(test)]
+        {
+            let hooks = lock(&self.hooks);
+            hooks.backoff[attempt.min(hooks.backoff.len() - 1)]
+        }
+        #[cfg(not(test))]
+        BACKOFF[attempt.min(BACKOFF.len() - 1)]
+    }
+
+    fn missing_retry(&self) -> f64 {
+        #[cfg(test)]
+        return lock(&self.hooks).missing_retry;
+        #[cfg(not(test))]
+        MISSING_RETRY
+    }
+
+    fn group_retry(&self) -> f64 {
+        #[cfg(test)]
+        return lock(&self.hooks).group_retry;
+        #[cfg(not(test))]
+        GROUP_RETRY
     }
 
     fn emit(&self, event: Event) {
@@ -581,6 +683,10 @@ impl Shared {
 
     /// The default wait: returns early when a write is queued, true once stopped.
     fn wait(&self, seconds: f64) -> bool {
+        #[cfg(test)]
+        if let Some(time) = self.fake_time() {
+            return time.wait(self, seconds);
+        }
         let writes = lock(&self.writes);
         if writes.is_empty() && !self.stop.load(Ordering::SeqCst) {
             let _ = self
@@ -623,7 +729,7 @@ impl Shared {
             self.fail_writes("PLC disconnected");
             self.mark_stale();
             self.set_state("disconnected");
-            let delay = BACKOFF[attempt.min(BACKOFF.len() - 1)];
+            let delay = self.backoff(attempt);
             attempt += 1;
             if self.wait(delay) {
                 break;
@@ -696,7 +802,9 @@ impl Shared {
                 let old = inner.cache.get(&tag).cloned();
                 let entry = merge(old.as_ref(), &result, t);
                 if entry.quality == "missing" {
-                    inner.missing.insert(tag.clone(), start + MISSING_RETRY); // don't ask every tick
+                    inner
+                        .missing
+                        .insert(tag.clone(), start + self.missing_retry()); // don't ask every tick
                 } else {
                     inner.missing.remove(&tag);
                 }
@@ -756,10 +864,11 @@ impl Shared {
                     .unwrap_or_else(PoisonError::into_inner),
             );
             let mut inner = lock(&self.inner);
+            let group_retry = self.group_retry();
             let retry: Vec<String> = inner
                 .no_group
                 .iter()
-                .filter(|(_, at)| start - **at >= GROUP_RETRY)
+                .filter(|(_, at)| start - **at >= group_retry)
                 .map(|(name, _)| name.clone())
                 .collect();
             if !retry.is_empty() {
@@ -889,8 +998,8 @@ impl Shared {
             let known = lock(&self.descriptions);
             tags.retain(|t| !known.contains_key(t));
         }
-        if tags.is_empty() {
-            return;
+        if tags.is_empty() || !plc.describes() {
+            return; // a driver without descriptions (the mock): no info to send again
         }
         let refs: Vec<&str> = tags.iter().map(String::as_str).collect();
         let found = match plc.descriptions(&refs) {
@@ -989,3 +1098,7 @@ impl Shared {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "worker_tests.rs"]
+mod tests;

@@ -1,0 +1,25 @@
+{
+  "types": {
+    "BenchData": {
+      "Running": "BOOL",
+      "StartPB": "BOOL",
+      "StopPB": "BOOL",
+      "SpeedSP": "REAL",
+      "Speed": "REAL",
+      "Axis": "AxisData",
+      "StatusWord": "DINT",
+      "Count": "DINT",
+      "Message": "STRING",
+      "Recipe": "RecipeData"
+    },
+    "AxisData": { "Position": "REAL", "Velocity": "REAL" },
+    "RecipeData": { "Name": "STRING", "Setpoints": "REAL[4]" },
+    "TankData": { "Level": "REAL", "Temp": "REAL", "Valve": "BOOL" }
+  },
+  "tags": {
+    "Bench": "BenchData",
+    "Tank": "TankData[4]",
+    "Trend": "REAL[16]",
+    "Program:Bench.Mode": "DINT"
+  }
+}

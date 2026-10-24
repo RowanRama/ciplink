@@ -18,6 +18,11 @@ pub mod service;
 pub mod values;
 pub mod worker;
 
+#[cfg(test)]
+mod server_tests;
+#[cfg(test)]
+mod testing;
+
 pub use config::{Config, load_config};
 pub use server::ServerHandle;
 

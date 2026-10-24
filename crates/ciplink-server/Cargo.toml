@@ -27,6 +27,7 @@ tower-http = { version = "0.6", features = ["cors"] }
 
 [dev-dependencies]
 ciplink-sim = { path = "../ciplink-sim" }
+tokio = { version = "1", features = ["test-util"] }
 tokio-tungstenite = "0.29"
 
 [[bin]]

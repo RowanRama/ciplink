@@ -1868,7 +1868,8 @@ pub unsafe extern "C" fn ciplink_server_start(
         check_out(out)?;
         let path = arg_str(config_path, "config_path")?;
         let options = options_map(options_json)?;
-        let mut config = ciplink_server::load_config(std::path::Path::new(path)).map_err(FfiError::Invalid)?;
+        let mut config =
+            ciplink_server::load_config(std::path::Path::new(path)).map_err(FfiError::Invalid)?;
         let mock = get_bool(&options, "mock", false)?;
         match options.get("host") {
             None | Some(Json::Null) => {}
@@ -1928,7 +1929,11 @@ pub unsafe extern "C" fn ciplink_server_stop(server: *mut CiplinkServer) -> Cipl
     // SAFETY: made by Box::into_raw in `ciplink_server_start`, freed once (caller contract).
     let server = unsafe { Box::from_raw(server) };
     guard(None, || {
-        let handle = server.handle.lock().unwrap_or_else(|p| p.into_inner()).take();
+        let handle = server
+            .handle
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take();
         match handle {
             Some(h) => h.stop().map_err(|e| FfiError::Core(Error::Comm(e))),
             None => Ok(()),

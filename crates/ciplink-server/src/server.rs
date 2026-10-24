@@ -34,17 +34,15 @@ struct AppState {
     closing: watch::Receiver<bool>,
 }
 
-/// Serves on `listener` until `shutdown` completes, then closes the WebSockets, releases every pressed button,
-/// stops the PLC workers (their queued writes still go out) and flushes the audit log.
-pub async fn serve(
+/// The shared state of a server on this config: its rules and a (not yet started) worker per PLC, whose events go
+/// to `tx`.
+pub(crate) fn build(
     config: Config,
     factory: Factory,
-    listener: TcpListener,
-    shutdown: impl Future<Output = ()> + Send + 'static,
-) -> Result<(), String> {
+    tx: &mpsc::UnboundedSender<Msg>,
+) -> Result<Arc<Shared>, String> {
     let config = Arc::new(config);
     let rules = Arc::new(Rules::new(&config)?);
-    let (tx, rx) = mpsc::unbounded_channel();
     let options = WorkerOptions {
         cycle: config.cycle_ms as f64 / 1000.0,
         tier2_period: config.tier2_period_s,
@@ -70,7 +68,7 @@ pub async fn serve(
             (name.clone(), Arc::new(worker))
         })
         .collect();
-    let shared = Arc::new(Shared {
+    Ok(Arc::new(Shared {
         config,
         rules,
         workers,
@@ -78,7 +76,29 @@ pub async fn serve(
         writes: AtomicU64::new(0),
         write_rejects: AtomicU64::new(0),
         momentary_timeouts: AtomicU64::new(0),
-    });
+    }))
+}
+
+/// Serves on `listener` until `shutdown` completes, then closes the WebSockets, releases every pressed button,
+/// stops the PLC workers (their queued writes still go out) and flushes the audit log.
+pub async fn serve(
+    config: Config,
+    factory: Factory,
+    listener: TcpListener,
+    shutdown: impl Future<Output = ()> + Send + 'static,
+) -> Result<(), String> {
+    let (tx, rx) = mpsc::unbounded_channel();
+    let shared = build(config, factory, &tx)?;
+    serve_built(shared, tx, rx, listener, shutdown).await
+}
+
+async fn serve_built(
+    shared: Arc<Shared>,
+    tx: mpsc::UnboundedSender<Msg>,
+    rx: mpsc::UnboundedReceiver<Msg>,
+    listener: TcpListener,
+    shutdown: impl Future<Output = ()> + Send + 'static,
+) -> Result<(), String> {
     let hub = Hub::new(Arc::clone(&shared), tx.clone());
     let hub_task = tokio::spawn(hub.run(rx));
 
@@ -136,6 +156,7 @@ pub async fn run(config: Config, factory: Factory) -> Result<(), String> {
 /// A server running on its own threads, for embedding (bindings, tests).
 pub struct ServerHandle {
     addr: SocketAddr,
+    shared: Arc<Shared>,
     stop: Option<oneshot::Sender<()>>,
     thread: Option<std::thread::JoinHandle<Result<(), String>>>,
 }
@@ -145,6 +166,9 @@ impl ServerHandle {
     pub fn start(config: Config, factory: Factory) -> Result<Self, String> {
         let (ready_tx, ready_rx) = std::sync::mpsc::channel();
         let (stop_tx, stop_rx) = oneshot::channel::<()>();
+        let (tx, rx) = mpsc::unbounded_channel();
+        let shared = build(config, factory, &tx)?;
+        let server = Arc::clone(&shared);
         let thread = std::thread::Builder::new()
             .name("ciplink-server".into())
             .spawn(move || {
@@ -153,19 +177,17 @@ impl ServerHandle {
                     .build()
                     .map_err(|e| e.to_string())?;
                 runtime.block_on(async move {
-                    let listener = match TcpListener::bind((config.host.as_str(), config.port))
-                        .await
-                    {
+                    let (host, port) = (server.config.host.clone(), server.config.port);
+                    let listener = match TcpListener::bind((host.as_str(), port)).await {
                         Ok(l) => l,
                         Err(e) => {
-                            let error =
-                                format!("cannot listen on {}:{}: {e}", config.host, config.port);
+                            let error = format!("cannot listen on {host}:{port}: {e}");
                             let _ = ready_tx.send(Err(error.clone()));
                             return Err(error);
                         }
                     };
                     let _ = ready_tx.send(listener.local_addr().map_err(|e| e.to_string()));
-                    serve(config, factory, listener, async {
+                    serve_built(server, tx, rx, listener, async {
                         let _ = stop_rx.await;
                     })
                     .await
@@ -177,9 +199,16 @@ impl ServerHandle {
             .map_err(|_| "the server thread ended".to_owned())??;
         Ok(ServerHandle {
             addr,
+            shared,
             stop: Some(stop_tx),
             thread: Some(thread),
         })
+    }
+
+    /// The server's shared state (config, rules, workers, counters).
+    #[doc(hidden)]
+    pub fn shared(&self) -> &Arc<Shared> {
+        &self.shared
     }
 
     /// The address the server listens on.

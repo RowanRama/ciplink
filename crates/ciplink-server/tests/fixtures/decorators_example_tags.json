@@ -1,0 +1,18 @@
+{
+  "types": {
+    "SpindleData": { "RPM": "REAL", "SpeedSP": "REAL", "Running": "BOOL" },
+    "MotorData": { "Current": "REAL", "Temp": "REAL" },
+    "DriveData": { "Motor": "MotorData", "Faults": "DINT[4]" },
+    "AxisData": { "Pos": "REAL", "Vel": "REAL", "Drive": "DriveData", "JogCmd": "BOOL" }
+  },
+  "tags": {
+    "Spindle": "SpindleData",
+    "Axes": "AxisData[2]",
+    "ZoneTemp": "REAL[8]",
+    "Grid": "REAL[32]",
+    "RecipeName": "STRING",
+    "Program:Main.AlarmWord": "DINT",
+    "Program:Main.StatusWord": "INT",
+    "Program:Main.CmdWord": "DINT"
+  }
+}

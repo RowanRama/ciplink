@@ -346,4 +346,135 @@ mod tests {
         assert_eq!(config.tokens["hmi"].write, vec!["P/A*"]);
         assert!(config.tokens["v"].write.is_empty());
     }
+
+    // ---- ports of ciplink-tagserver's tests/test_config_values.py
+
+    #[test]
+    fn load_config_file() {
+        let dir = crate::testing::TempDir::new();
+        let path = dir.path().join("tagserver.toml");
+        std::fs::write(
+            &path,
+            r#"
+[server]
+host = "0.0.0.0"
+port = 9000
+cycle_ms = 100
+
+[plc.PLC1]
+path = "10.0.0.1"
+tag_cache_file = "cache/PLC1.json"
+
+[plc.Other]
+path = "10.0.0.2/1/3"
+
+[[plc.PLC1.rule]]
+match = "Bench.SpeedSP"
+writable = true
+max = 1800
+
+[[plc.PLC1.rule]]
+match = ["Bench.Speed", "Bench.Rpm"]
+deadband = 0.5
+
+[[plc.PLC1.group]]
+name = "fast"
+rate_ms = 50
+match = ["Bench.Axis.*"]
+
+[token.hmi1]
+secret = "change-me"
+write = ["PLC1/Line1.*.SpeedSP"]
+
+[token.viewer]
+secret = "v"
+"#,
+        )
+        .unwrap();
+        let config = load_config(&path).unwrap();
+        assert_eq!(
+            (config.host.as_str(), config.port, config.cycle_ms),
+            ("0.0.0.0", 9000, 100)
+        );
+        assert_eq!(config.audit_log, Some(dir.path().join("audit.log")));
+        assert_eq!(config.plcs["PLC1"].path, "10.0.0.1");
+        assert_eq!(
+            config.plcs["PLC1"].tag_cache_file,
+            Some(dir.path().join("cache/PLC1.json"))
+        );
+        assert_eq!(config.plcs["Other"].tag_cache_file, None);
+        assert_eq!(config.tokens["hmi1"].write, ["PLC1/Line1.*.SpeedSP"]);
+        assert!(config.tokens["viewer"].write.is_empty());
+        let rows = |tables: &[Map<String, Json>]| -> Vec<Json> {
+            tables.iter().cloned().map(Json::Object).collect()
+        };
+        assert_eq!(
+            rows(&config.plcs["PLC1"].rules),
+            [
+                serde_json::json!({"match": "Bench.SpeedSP", "writable": true, "max": 1800}),
+                serde_json::json!({"match": ["Bench.Speed", "Bench.Rpm"], "deadband": 0.5}),
+            ]
+        );
+        assert_eq!(
+            rows(&config.plcs["PLC1"].groups),
+            [serde_json::json!({"name": "fast", "rate_ms": 50, "match": ["Bench.Axis.*"]})]
+        );
+        assert!(config.plcs["Other"].rules.is_empty() && config.plcs["Other"].groups.is_empty());
+        assert_eq!(config.momentary_timeout_ms, 1000);
+    }
+
+    #[test]
+    fn bad_group() {
+        for group in [
+            serde_json::json!({"name": "g", "rate_ms": 0}),
+            serde_json::json!({"name": "g", "rate_ms": 1.5}),
+            serde_json::json!({"rate_ms": 10}),
+        ] {
+            let data = serde_json::json!({"plc": {"A": {"path": "x", "group": [group]}}});
+            assert!(
+                parse_config(&data, Path::new("."))
+                    .unwrap_err()
+                    .contains("rate_ms")
+            );
+        }
+    }
+
+    #[test]
+    fn defaults() {
+        let config = parse_config(
+            &serde_json::json!({"plc": {"A": {"path": "1.2.3.4"}}}),
+            Path::new("."),
+        )
+        .unwrap();
+        assert_eq!(
+            (config.host.as_str(), config.port, config.cycle_ms),
+            ("127.0.0.1", 8765, 250)
+        );
+        assert!(config.tokens.is_empty());
+        let config = parse_config(
+            &serde_json::json!({"server": {"momentary_timeout_ms": 300}}),
+            Path::new("."),
+        )
+        .unwrap();
+        assert_eq!(config.momentary_timeout_ms, 300);
+    }
+
+    #[test]
+    fn qualify_one_plc() {
+        let config = parse("[plc.A]\npath = \"x\"\n").unwrap();
+        assert_eq!(config.qualify("Speed").unwrap(), ("A", "Speed"));
+        assert_eq!(
+            config.qualify("A/Program:Main.Speed").unwrap(),
+            ("A", "Program:Main.Speed")
+        );
+        assert!(config.qualify("B/Speed").is_err());
+    }
+
+    #[test]
+    fn qualify_several_plcs() {
+        let config = parse("[plc.A]\npath = \"x\"\n[plc.B]\npath = \"y\"\n").unwrap();
+        assert_eq!(config.qualify("B/Speed").unwrap(), ("B", "Speed"));
+        assert!(config.qualify("Speed").unwrap_err().contains("qualified"));
+        assert!(config.qualify("A/").is_err());
+    }
 }

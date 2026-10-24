@@ -117,11 +117,7 @@ pub fn main_as(
             name,
             log_file,
         } => {
-            let config = std::path::absolute(&config).map_err(|e| e.to_string())?;
-            let log_file = match log_file {
-                Some(f) => std::path::absolute(f).map_err(|e| e.to_string())?,
-                None => config.with_file_name("tagserver.log"),
-            };
+            let (config, log_file) = service_paths(&config, log_file.as_deref())?;
             return Ok(match action {
                 ServiceAction::Install => service::install(&name, launcher, &config, &log_file),
                 ServiceAction::Remove => service::remove(&name),
@@ -181,6 +177,16 @@ pub fn main_as(
     Ok(0)
 }
 
+/// The absolute config and log file paths of `service`; the log is tagserver.log next to the config by default.
+fn service_paths(config: &Path, log_file: Option<&Path>) -> Result<(PathBuf, PathBuf), String> {
+    let config = std::path::absolute(config).map_err(|e| e.to_string())?;
+    let log_file = match log_file {
+        Some(f) => std::path::absolute(f).map_err(|e| e.to_string())?,
+        None => config.with_file_name("tagserver.log"),
+    };
+    Ok((config, log_file))
+}
+
 /// Uploads the tag list of one PLC (reads only) and writes it in the mock_tags format.
 fn dump_tags(config_path: &Path, plc: &str, out: &Path) -> Result<(), String> {
     use crate::plc::{LogixPlc, Plc};
@@ -209,4 +215,23 @@ fn dump_tags(config_path: &Path, plc: &str, out: &Path) -> Result<(), String> {
     std::fs::write(out, text).map_err(|e| format!("{}: {e}", out.display()))?;
     println!("wrote {} tags to {}", tags.len(), out.display());
     Ok(())
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    /// test_service.py's `service run` test: the task's command line resolves to absolute paths, the log next to
+    /// the config.
+    #[test]
+    fn service_run_paths() {
+        let cwd = std::env::current_dir().unwrap();
+        let (config, log_file) = service_paths(Path::new("tagserver.toml"), None).unwrap();
+        assert_eq!(config, cwd.join("tagserver.toml"));
+        assert_eq!(log_file, cwd.join("tagserver.log"));
+        let (_, log_file) =
+            service_paths(Path::new("tagserver.toml"), Some(Path::new("logs/x.log"))).unwrap();
+        assert_eq!(log_file, cwd.join("logs/x.log"));
+    }
 }

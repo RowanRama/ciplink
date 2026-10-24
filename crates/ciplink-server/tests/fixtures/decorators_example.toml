@@ -1,0 +1,88 @@
+# Decorators example: the settings of a machine with a spindle, two axes and a temperature zone array.
+#   ciplink-tagserver run --config tests/fixtures/decorators_example.toml --mock
+# Structure (tags, UDTs, array sizes) comes from the controller (or the mock_tags file with --mock).
+# Intent (writable, limits, units, deadband, bit names, poll rates) comes from the decorators below.
+
+[server]
+host = "127.0.0.1"
+port = 8765
+cycle_ms = 500                 # tier-1 rate for anything without a rate_ms
+audit_log = "audit.log"        # every write attempt, JSON lines (relative to this file)
+pages_file = "pages.json"      # tags learned per page (/ and /tags)
+momentary_timeout_ms = 1000    # a held jog/command button with no hold message this long is released
+
+[plc.PLC1]
+path = "192.168.1.10/1/0"      # host 192.168.1.10, backplane, slot 0; never opened with --mock
+tag_cache_file = "cache/PLC1.json"
+mock_tags = "decorators_example_tags.json"   # only used with --mock
+
+# ---- Decorators: named bundles of settings, defined once.
+# Fields: units, min, max, deadband, writable, rate_ms, description, bits, together, always.
+# rate_ms applies only while the tag is on a loaded page; off screen the tiers decide.
+
+[decorator.temperature]
+units = "°C"
+rate_ms = 1000
+
+[decorator.current]
+units = "A"
+
+[decorator.rpm]
+units = "rpm"
+deadband = 0.5
+rate_ms = 100
+
+[decorator.speed]
+units = "rpm"
+min = 0
+max = 3000
+
+[decorator.position]
+units = "m"
+
+[decorator.velocity]
+units = "m/s"
+
+[decorator.setpoint]           # an operator-entered value
+writable = true
+
+[decorator.command]            # a button the HMI presses (momentary) or a command word
+writable = true
+
+[decorator.fast]               # whole UDTs polled at 250 ms; members inherit it unless they set their own
+rate_ms = 250
+
+# ---- Attach by UDT member: applies to every instance of the UDT, wherever it is in the controller.
+# A decorator on a struct member is inherited by everything under it; the closest setting wins.
+
+[plc.PLC1.udt.SpindleData]
+RPM = "rpm"
+SpeedSP = { use = ["speed", "setpoint"], description = "Spindle speed setpoint" }
+
+[plc.PLC1.udt.MotorData]
+Current = "current"
+Temp = "temperature"
+
+[plc.PLC1.udt.AxisData]
+Pos = "position"
+Vel = "velocity"
+Drive = "fast"                 # DriveData members at 250 ms, except Motor.Temp (temperature: 1000 ms)
+JogCmd = { use = "command", description = "Jog the axis while held" }
+
+# ---- Attach by tag name: for tags outside UDTs, or settings only one tag has.
+
+[plc.PLC1.tags]
+Spindle = "fast"               # all spindle members at 250 ms, except RPM (rpm: 100 ms)
+ZoneTemp = "temperature"       # applies to every element
+RecipeName = { rate_ms = 2000 }
+"Program:Main.StatusWord" = { bits = { EStop = 0, DoorOpen = 1, AirLow = 5 } }
+"Program:Main.CmdWord" = "command"   # bits .0 / .1 are the Start / Stop buttons
+
+# ---- Tokens. Writes need a token write pattern AND a writable decorator above.
+
+[token.viewer]
+secret = "view-secret"         # no write patterns: read-only (change the secrets on a real site)
+
+[token.hmi]
+secret = "hmi-secret"          # the operator panel
+write = ["PLC1/Spindle.SpeedSP", "PLC1/Axes[*].JogCmd", "PLC1/Program:Main.CmdWord*"]

@@ -202,4 +202,106 @@ mod tests {
         assert_eq!(missing.value, Json::Null);
         assert_eq!(missing.quality, "missing");
     }
+    // ---- ports of ciplink-tagserver's tests/test_config_values.py
+
+    fn with_error(error: Option<TagError>, value: Option<Value>) -> TagResult {
+        TagResult {
+            tag: "x".into(),
+            value,
+            data_type: Some("DINT".into()),
+            error,
+        }
+    }
+
+    #[test]
+    fn quality_from_error_kinds() {
+        for (kind, expected) in [
+            (None, "good"),
+            (Some(ErrorKind::NotFound), "missing"),
+            (Some(ErrorKind::Access), "missing"),
+            (Some(ErrorKind::BadValue), "bad"),
+            (Some(ErrorKind::Refused), "bad"),
+            (Some(ErrorKind::TableChanged), "bad"),
+            (Some(ErrorKind::Comm), "bad"),
+            (Some(ErrorKind::Other), "bad"),
+        ] {
+            let r = with_error(kind.map(|k| TagError::new("boom", k)), Some(Value::DInt(5)));
+            assert_eq!(to_value(&r).1, expected);
+        }
+    }
+
+    #[test]
+    fn quality_never_reads_message_text() {
+        // a plain string error is kind other
+        let r = with_error(
+            Some(TagError::new("Tag doesn't exist - Foo", ErrorKind::Other)),
+            Some(Value::DInt(5)),
+        );
+        assert_eq!(to_value(&r).1, "bad");
+        let r = with_error(
+            Some(TagError::new("General failure", ErrorKind::Other)),
+            Some(Value::DInt(5)),
+        );
+        assert_eq!(
+            to_value(&r).2,
+            json!({"kind": "other", "message": "General failure"})
+        );
+    }
+
+    #[test]
+    fn to_value_and_merge() {
+        let missing = with_error(
+            Some(TagError::new("Tag doesn't exist - x", ErrorKind::NotFound)),
+            Some(Value::DInt(5)),
+        );
+        let bad = with_error(
+            Some(TagError::new("Service not supported", ErrorKind::Device)),
+            Some(Value::DInt(5)),
+        );
+        let device = json!({"kind": "device", "message": "Service not supported"});
+        assert_eq!(
+            to_value(&with_error(None, Some(Value::DInt(5)))),
+            (json!(5), "good", Json::Null)
+        );
+        assert_eq!(to_value(&bad), (Json::Null, "bad", device.clone()));
+        let seven = merge(None, &with_error(None, Some(Value::DInt(7))), 10);
+        assert_eq!(seven.to_json(), json!([7, "good", 10, null]));
+        assert_eq!(
+            merge(Some(&seven), &bad, 11).to_json(),
+            json!([7, "bad", 11, device])
+        );
+        let first_bad = merge(None, &bad, 11);
+        assert_eq!((first_bad.value, first_bad.quality), (Json::Null, "bad"));
+        assert_eq!(
+            merge(Some(&seven), &missing, 12).to_json(),
+            json!([null, "missing", 12, {"kind": "not_found", "message": "Tag doesn't exist - x"}])
+        );
+    }
+
+    #[test]
+    fn jsonable_values() {
+        let value = Value::Struct(
+            [
+                ("A", Value::Array(vec![Value::DInt(1), Value::DInt(2)])),
+                ("B", Value::Bytes(vec![0x01, 0xff])),
+                (
+                    "C",
+                    Value::Struct(
+                        [("D".to_owned(), Value::LReal(f64::NAN))]
+                            .into_iter()
+                            .collect(),
+                    ),
+                ),
+                ("E", Value::LReal(f64::NEG_INFINITY)),
+                ("F", Value::Bool(true)),
+            ]
+            .into_iter()
+            .map(|(k, v)| (k.to_owned(), v))
+            .collect(),
+        );
+        assert_eq!(
+            jsonable(&value),
+            json!({"A": [1, 2], "B": "01ff", "C": {"D": "NaN"}, "E": "-Infinity", "F": true})
+        );
+    }
 }

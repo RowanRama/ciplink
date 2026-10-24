@@ -32,9 +32,16 @@ const FINAL: [&str; 7] = [
     "bad_value",
 ];
 /// Page learning is saved at most this often.
+#[cfg(not(test))]
 const SAVE_DELAY: Duration = Duration::from_secs(2);
 /// Before a release refused while connected is written again.
+#[cfg(not(test))]
 const RETRY_DELAY: Duration = Duration::from_millis(500);
+// shorter in tests, as the Python tests set them
+#[cfg(test)]
+const SAVE_DELAY: Duration = Duration::from_millis(10);
+#[cfg(test)]
+const RETRY_DELAY: Duration = Duration::from_millis(100);
 
 /// A session's id.
 pub type SessionId = u64;
@@ -60,11 +67,19 @@ impl Outbox {
 
     /// Queues the latest entry of a name; one values message carries all of them.
     pub fn push(&self, name: &str, entry: Json) {
+        self.push_all(vec![(name.to_owned(), entry)]);
+    }
+
+    /// Queues the latest entries of several names at once, so the sender never splits them across values messages.
+    pub fn push_all(&self, entries: Vec<(String, Json)>) {
+        if entries.is_empty() {
+            return;
+        }
         self.queue
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .1
-            .insert(name.to_owned(), entry);
+            .extend(entries);
         self.notify.notify_one();
     }
 
@@ -178,8 +193,8 @@ struct Session {
     outbox: Arc<Outbox>,
     subs: IndexMap<String, Sub>,
     info_sent: HashSet<String>,
-    /// qname -> (watchdog generation, name as sent)
-    pressed: HashMap<String, (u64, Json)>,
+    /// qname -> (watchdog generation, name as sent), in press order (released in that order on disconnect)
+    pressed: IndexMap<String, (u64, Json)>,
 }
 
 /// Python's `str()` of a JSON value, for names that are not strings.
@@ -342,37 +357,43 @@ impl Hub {
             worker.start();
         }
         while let Some(msg) = rx.recv().await {
-            match msg {
-                Msg::Open(id, token, outbox) => {
-                    self.sessions.insert(
-                        id,
-                        Session {
-                            token,
-                            outbox,
-                            subs: IndexMap::new(),
-                            info_sent: HashSet::new(),
-                            pressed: HashMap::new(),
-                        },
-                    );
-                    self.shared
-                        .sessions
-                        .store(self.sessions.len(), Ordering::Relaxed);
-                }
-                Msg::Text(id, text) => self.handle(id, &text),
-                Msg::Close(id) => self.drop_session(id),
-                Msg::Worker(event) => self.worker_event(event),
-                Msg::WriteDone(done) => self.write_done(*done),
-                Msg::Timeout(id, qname, generation) => self.timeout(id, &qname, generation),
-                Msg::Resend(qname) => self.resend(&qname),
-                Msg::SavePages => self.save_pages(),
-                Msg::Stop(done) => {
-                    self.stop();
-                    let _ = done.send(());
-                    return;
-                }
+            if let Some(done) = self.dispatch(msg) {
+                self.stop();
+                let _ = done.send(());
+                return;
             }
         }
         self.stop();
+    }
+
+    /// Handles one message; a Stop is returned for the caller to stop.
+    fn dispatch(&mut self, msg: Msg) -> Option<oneshot::Sender<()>> {
+        match msg {
+            Msg::Open(id, token, outbox) => {
+                self.sessions.insert(
+                    id,
+                    Session {
+                        token,
+                        outbox,
+                        subs: IndexMap::new(),
+                        info_sent: HashSet::new(),
+                        pressed: IndexMap::new(),
+                    },
+                );
+                self.shared
+                    .sessions
+                    .store(self.sessions.len(), Ordering::Relaxed);
+            }
+            Msg::Text(id, text) => self.handle(id, &text),
+            Msg::Close(id) => self.drop_session(id),
+            Msg::Worker(event) => self.worker_event(event),
+            Msg::WriteDone(done) => self.write_done(*done),
+            Msg::Timeout(id, qname, generation) => self.timeout(id, &qname, generation),
+            Msg::Resend(qname) => self.resend(&qname),
+            Msg::SavePages => self.save_pages(),
+            Msg::Stop(done) => return Some(done),
+        }
+        None
     }
 
     fn stop(&mut self) {
@@ -412,17 +433,21 @@ impl Hub {
     fn worker_event(&mut self, event: Event) {
         match event {
             Event::Values(plc, changes) => {
+                // one push per session: the changes of a read go out in one values message
+                let mut per_session: HashMap<SessionId, Vec<(String, Json)>> = HashMap::new();
                 for (tag, entry) in changes {
                     let Some(subs) = self.subscribers.get(&format!("{plc}/{tag}")) else {
                         continue;
                     };
                     let value = entry.to_json();
                     for (id, names) in subs {
-                        if let Some(session) = self.sessions.get(id) {
-                            for name in names {
-                                session.outbox.push(name, value.clone());
-                            }
-                        }
+                        let pending = per_session.entry(*id).or_default();
+                        pending.extend(names.iter().map(|name| (name.clone(), value.clone())));
+                    }
+                }
+                for (id, entries) in per_session {
+                    if let Some(session) = self.sessions.get(&id) {
+                        session.outbox.push_all(entries);
                     }
                 }
             }
@@ -806,9 +831,7 @@ impl Hub {
             if !info.is_empty() {
                 session.outbox.send(json!({"op": "info", "d": info}));
             }
-            for (name, entry) in snapshot {
-                session.outbox.push(&name, entry);
-            }
+            session.outbox.push_all(snapshot);
         }
         if let (Some(page), None, 1) = (page, &follow, tier) {
             self.learn(page, &qnames);
@@ -1222,6 +1245,7 @@ impl Hub {
         let Some(session) = self.sessions.get_mut(&id) else {
             return;
         };
+        session.pressed.shift_remove(qname); // held again: last, as the Python dict re-insert
         session
             .pressed
             .insert(qname.to_owned(), (generation, name.clone()));
@@ -1231,7 +1255,7 @@ impl Hub {
 
     fn disarm(&mut self, id: SessionId, qname: &str) {
         if let Some(session) = self.sessions.get_mut(&id) {
-            session.pressed.remove(qname);
+            session.pressed.shift_remove(qname);
         }
     }
 
@@ -1246,7 +1270,7 @@ impl Hub {
         {
             return; // released, or held again since
         }
-        let Some((_, name)) = session.pressed.remove(qname) else {
+        let Some((_, name)) = session.pressed.shift_remove(qname) else {
             return;
         };
         let token = session.token.clone();
@@ -1279,6 +1303,10 @@ fn write_audit(path: &Path, rx: &std::sync::mpsc::Receiver<String>) {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "hub_tests.rs"]
+mod hub_tests;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]

@@ -1,0 +1,76 @@
+# The Test Bench of ciplink-tagserver (examples/bench/tagserver.toml), for the conformance tests.
+
+[server]
+host = "127.0.0.1"
+port = 8765
+cycle_ms = 250
+audit_log = "audit.log"        # relative paths are relative to this file
+pages_file = "pages.json"      # pages learned from the app (Overview, Motion)
+momentary_timeout_ms = 1000    # a pressed button with no hold this long is released by the server
+
+[plc.PLC1]
+path = "192.168.1.10"          # never opened with --mock
+mock_tags = "bench_mock_tags.json"
+
+# Rules: intent the controller does not know. For each field the first matching rule wins.
+
+[[plc.PLC1.rule]]
+match = "Bench.SpeedSP"
+writable = true                # writes need this AND a token write pattern
+min = 0
+max = 1800
+units = "rpm"
+description = "Spindle speed setpoint"
+
+[[plc.PLC1.rule]]
+match = ["Bench.StartPB", "Bench.StopPB"]
+writable = true                # momentary push buttons
+
+[[plc.PLC1.rule]]
+match = "Bench.Speed"
+deadband = 0.5                 # the mock's ripple under 0.5 rpm is never sent
+units = "rpm"
+
+[[plc.PLC1.rule]]
+match = "Bench.StatusWord"
+always = true                  # polled at tier 1 even with no screen open
+bits = { EStop = 0, DoorOpen = 1, Fault = 2 }
+
+[[plc.PLC1.rule]]
+match = "Bench.Recipe"
+together = true                # name and setpoints always come from one read
+
+[[plc.PLC1.rule]]
+match = "Bench.Axis.Position"
+units = "mm"
+
+[[plc.PLC1.rule]]
+match = "Bench.Axis.Velocity"
+units = "mm/s"
+
+[[plc.PLC1.rule]]
+match = "Tank[*].Level"
+units = "%"
+
+[[plc.PLC1.rule]]
+match = "Tank[*].Temp"
+units = "°C"
+
+# Poll groups: only while a tag is at tier 1 (on a loaded page)
+
+[[plc.PLC1.group]]
+name = "fast"
+rate_ms = 50
+match = ["Bench.Axis.Position", "Bench.Axis.Velocity"]
+
+[[plc.PLC1.group]]
+name = "slow"
+rate_ms = 2000
+match = ["Tank[*].Temp"]
+
+[token.viewer]
+secret = "bench-viewer"        # no write patterns: read-only
+
+[token.hmi]
+secret = "bench-hmi"           # used by the app
+write = ["PLC1/Bench.*"]       # the rules above still decide which of these are writable
