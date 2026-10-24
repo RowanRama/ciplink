@@ -1110,7 +1110,11 @@ fn a_scan_calls_back_with_each_node_until_told_to_stop() {
 fn server_config(name: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!("ciplink-ffi-{name}-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("tags.json"), r#"{"Speed": "REAL", "Count": "DINT"}"#).unwrap();
+    std::fs::write(
+        dir.join("tags.json"),
+        r#"{"Speed": "REAL", "Count": "DINT"}"#,
+    )
+    .unwrap();
     let config = dir.join("tagserver.toml");
     std::fs::write(
         &config,
@@ -1123,7 +1127,11 @@ fn server_config(name: &str) -> std::path::PathBuf {
 fn http_get(addr: &str, path: &str) -> String {
     use std::io::{Read, Write};
     let mut stream = std::net::TcpStream::connect(addr).unwrap();
-    write!(stream, "GET {path} HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n\r\n").unwrap();
+    write!(
+        stream,
+        "GET {path} HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n\r\n"
+    )
+    .unwrap();
     let mut response = String::new();
     stream.read_to_string(&mut response).unwrap();
     response
@@ -1139,7 +1147,10 @@ fn server_starts_serves_and_stops() {
     assert_eq!(st, CiplinkStatus::Ok, "{}", last_error(ptr::null()));
     let mut addr = ptr::null_mut();
     // SAFETY: a live server and a writable out pointer.
-    assert_eq!(unsafe { ciplink_server_address(server, &mut addr) }, CiplinkStatus::Ok);
+    assert_eq!(
+        unsafe { ciplink_server_address(server, &mut addr) },
+        CiplinkStatus::Ok
+    );
     let addr = take(addr);
     assert!(addr.starts_with("127.0.0.1:"), "{addr}");
     let mut health = String::new();
@@ -1155,7 +1166,10 @@ fn server_starts_serves_and_stops() {
     // SAFETY: the server from ciplink_server_start, stopped once.
     assert_eq!(unsafe { ciplink_server_stop(server) }, CiplinkStatus::Ok);
     // SAFETY: NULL is ignored.
-    assert_eq!(unsafe { ciplink_server_stop(ptr::null_mut()) }, CiplinkStatus::Ok);
+    assert_eq!(
+        unsafe { ciplink_server_stop(ptr::null_mut()) },
+        CiplinkStatus::Ok
+    );
 }
 
 #[test]
@@ -1175,5 +1189,8 @@ fn server_start_reports_bad_configs() {
     assert_eq!(last_error(ptr::null()), "option port must be 0 to 65535");
     let mut addr = ptr::null_mut();
     // SAFETY: NULL server is reported, out pointer writable.
-    assert_eq!(unsafe { ciplink_server_address(ptr::null(), &mut addr) }, CiplinkStatus::InvalidArgument);
+    assert_eq!(
+        unsafe { ciplink_server_address(ptr::null(), &mut addr) },
+        CiplinkStatus::InvalidArgument
+    );
 }
