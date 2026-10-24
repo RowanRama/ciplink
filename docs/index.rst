@@ -16,6 +16,7 @@ Contents
     getting_started
     usage/index
     examples/index
+    server
     api_reference/index
     cip_reference
     contributing

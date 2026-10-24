@@ -12,6 +12,7 @@ use pyo3::sync::MutexExt;
 /// `launcher` is how a Task Scheduler task starts it again.
 #[pyfunction]
 pub fn server_main(py: Python<'_>, argv: Vec<String>, launcher: Vec<String>) -> PyResult<u8> {
+    crate::sync_log_level(py); // the caller has set up logging by now
     py.detach(|| ciplink_server::cli::main_as(argv.into_iter().map(Into::into), &launcher))
         .map_err(PyRuntimeError::new_err)
 }
@@ -35,6 +36,7 @@ impl PyTagServer {
         host: Option<String>,
         port: Option<u16>,
     ) -> PyResult<Self> {
+        crate::sync_log_level(py);
         let mut cfg = load_config(&config).map_err(PyValueError::new_err)?;
         if let Some(host) = host {
             cfg.host = host;

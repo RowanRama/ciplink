@@ -279,6 +279,8 @@ fn logger_name(target: &str) -> &'static str {
         "ciplink.slc_driver.SLCDriver"
     } else if target.starts_with("ciplink::cip") || target.starts_with("ciplink::transport") {
         "ciplink.cip_driver.CIPDriver"
+    } else if target.starts_with("ciplink_server") {
+        "ciplink.server"
     } else {
         "ciplink"
     }

@@ -5,8 +5,11 @@ Release History
 Unreleased
 ==========
 
-- |:sparkles:| ``pip install ciplink[server]`` installs the tag server, `ciplink-tagserver
-  <https://github.com/RowanRama/ciplink-tagserver>`_ (0.4.1 or later, Python 3.11+), with the driver.
+- |:sparkles:| ``ciplink-server``: the tag server on the Rust core, a port of the Python ciplink-tagserver 0.4 with
+  the same config files, WebSocket protocol and HTTP API (``@ciplink/react`` apps work unchanged).  It comes with
+  every binding: the ``ciplink-server`` command and ``ciplink.server.TagServer`` in the Python package, the
+  ``ciplink-server`` crate, ``ciplink_server_start`` in C, ``ciplink::Server`` in C++ and ``Ciplink.TagServer`` in C#,
+  and an executable per platform on the GitHub release.  See ``docs/server.md``.
 
 ciplink 0.3.3
 =============

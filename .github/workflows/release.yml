@@ -1,7 +1,8 @@
 name: release
 
 # Push a tag like v0.3.0 to build, test and publish ciplink: wheels and an sdist to PyPI, the ciplink crate to
-# crates.io, the C# binding to NuGet, and a GitHub release with the C header and prebuilt C libraries.
+# crates.io, the C# binding to NuGet, and a GitHub release with the C header, prebuilt C libraries and the
+# ciplink-server executables.
 # See "Releasing" in CONTRIBUTING.md.
 on:
   push:
@@ -30,6 +31,7 @@ jobs:
               "python/ciplink/_version.py": re.search(r'__version__ = "(.+)"', open("python/ciplink/_version.py").read())[1],
               "Cargo.toml": tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"],
               "Ciplink.csproj": re.search(r"<Version>(.+)</Version>", open("bindings/dotnet/Ciplink/Ciplink.csproj").read())[1],
+              "crates/ciplink-server/Cargo.toml (ciplink)": tomllib.load(open("crates/ciplink-server/Cargo.toml", "rb"))["dependencies"]["ciplink"]["version"],
           }
           bad = {f: v for f, v in versions.items() if f"v{v}" != tag}
           if bad:
@@ -110,23 +112,23 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
-      - name: Skip a version already on crates.io (the first one is published by hand, a re-run may follow a success)
-        id: published
-        run: |
-          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "ciplink") | .version')
-          status=$(curl -s -o /dev/null -w '%{http_code}' -A "ciplink-release (github.com/RowanRama/ciplink)" \
-                   "https://crates.io/api/v1/crates/ciplink/$version")
-          echo "exists=$([ "$status" = 200 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - uses: rust-lang/crates-io-auth-action@v1
-        if: steps.published.outputs.exists != 'true'
         id: crates-auth
+      # ciplink first: ciplink-server depends on it. A version already on crates.io is skipped (a re-run may follow a
+      # success); the first version of each crate is published by hand, before its trusted publishing is set up.
       - name: cargo publish
-        if: steps.published.outputs.exists != 'true'
-        run: cargo publish -p ciplink
+        run: |
+          for crate in ciplink ciplink-server; do
+            version=$(cargo metadata --no-deps --format-version 1 | jq -r ".packages[] | select(.name == \"$crate\") | .version")
+            status=$(curl -s -o /dev/null -w '%{http_code}' -A "ciplink-release (github.com/RowanRama/ciplink)" \
+                     "https://crates.io/api/v1/crates/$crate/$version")
+            if [ "$status" = 200 ]; then echo "$crate $version is already published"; else cargo publish -p "$crate"; fi
+          done
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.crates-auth.outputs.token }}
 
-  # crates/ciplink-ffi per platform: an archive for the GitHub release, and the shared library for the NuGet package
+  # crates/ciplink-ffi per platform: an archive for the GitHub release, and the shared library for the NuGet package;
+  # and the ciplink-server executable, in an archive of its own
   ffi:
     needs: version
     name: ffi ${{ matrix.rid }}
@@ -148,7 +150,7 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - name: cargo build
-        run: cargo build --release -p ciplink-ffi --target ${{ matrix.target }}
+        run: cargo build --release -p ciplink-ffi -p ciplink-server --target ${{ matrix.target }}
       - name: Package
         run: |
           built="target/${{ matrix.target }}/release"
@@ -158,8 +160,15 @@ jobs:
           cp LICENSE "out/$name/"
           for f in ${{ matrix.shared }} ${{ matrix.static }} ${{ matrix.import }}; do cp "$built/$f" "out/$name/lib/"; done
           cp "$built/${{ matrix.shared }}" "out/runtimes/${{ matrix.rid }}/native/"
+          server="ciplink-server-${GITHUB_REF_NAME}-${{ matrix.rid }}"
+          exe=""
+          [ "$RUNNER_OS" = Windows ] && exe=.exe
+          mkdir -p "out/$server"
+          cp "$built/ciplink-server$exe" crates/ciplink-server/README.md LICENSE "out/$server/"
           cd out
-          if [ "$RUNNER_OS" = Windows ]; then 7z a "$name.zip" "$name" >/dev/null; else tar -czf "$name.tar.gz" "$name"; fi
+          for archive in "$name" "$server"; do
+            if [ "$RUNNER_OS" = Windows ]; then 7z a "$archive.zip" "$archive" >/dev/null; else tar -czf "$archive.tar.gz" "$archive"; fi
+          done
       - uses: actions/upload-artifact@v7
         with:
           name: ffi-${{ matrix.rid }}

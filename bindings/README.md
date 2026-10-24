@@ -108,6 +108,9 @@ Every function takes the handle first, and output arguments come last. JSON resu
 | `ciplink_trend_read(trend, &json)` | trend | samples `[{"timestamp_us", "elapsed_us", "values"}]` | `Trend::read()` | `Trend.Read()` |
 | `ciplink_trend_info(trend, &json)` | trend | pens, running, received, dropped, error | `pens()`, `running()`, ... | `Pens`, `Running`, ... |
 | `ciplink_trend_close(trend)`, `ciplink_trend_free(trend)` | trend | - | `close()`, destructor | `Close()`, `Dispose()` |
+| `ciplink_server_start(config_path, options_json, &server)` | - | `CiplinkServer*` | `Server(config, mock, host, port)` | `new TagServer(config, mock, host, port)` |
+| `ciplink_server_address(server, &str)` | server | `"127.0.0.1:8765"` | `address()` | `Address` |
+| `ciplink_server_stop(server)` | server | - | `stop()`, destructor | `Stop()`, `Dispose()` |
 | `ciplink_slc_processor_type(h, &json)` | SLC | string or null | `get_processor_type()` | `GetProcessorType()` |
 | `ciplink_slc_file_directory(h, &json)` | SLC | `{"N7": {...}}` | `get_file_directory()` | `GetFileDirectory()` |
 | `ciplink_slc_datalog_queue(h, n, queue, &json)` | SLC | array | `get_datalog_queue(n, q)` | `GetDatalogQueue(n, q)` |
@@ -146,6 +149,12 @@ C# it is `CiplinkException`.
   Credentials that do not parse or do not match each other are `REQUEST`. A handshake the controller refuses is the
   result's `error`, not a failed status. Authentication covers the current connection only, so call it again after a
   reconnect.
+
+- **Tag server.** `ciplink_server_start` runs the tag server of a config file (see `docs/server.md`) on threads of
+  its own and returns once it listens. Its options are `mock` (simulated values from each PLC's `mock_tags` file),
+  `host` and `port` (they override the config's; port 0 picks a free port). A config that can't be read or is wrong
+  is `INVALID_ARGUMENT`; a port that is taken is `COMM`. `ciplink_server_stop` releases pressed momentary buttons,
+  closes the PLC connections and flushes the audit log before it frees the server.
 
 ## C example
 

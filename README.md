@@ -11,7 +11,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/ciplink?logo=python&logoColor=white)](https://pypi.org/project/ciplink/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-[Install](#install) · [Quick start](#quick-start) · [Simulator](#test-without-a-plc) · [Build from source](#build-from-source)
+[Install](#install) · [Tag server](#tag-server) · [Quick start](#quick-start) · [Simulator](#test-without-a-plc) · [Build from source](#build-from-source)
 
 </div>
 
@@ -53,9 +53,20 @@ flowchart LR
 
 The Python wheels and the NuGet package already contain the compiled core, so you don't need a Rust toolchain.
 
-`pip install ciplink[server]` (Python 3.11+) also installs [ciplink-tagserver](https://github.com/RowanRama/ciplink-tagserver):
-one server per site that owns the PLC connections and serves tag values to web apps over a WebSocket, with a React
-client ([@ciplink/react](https://www.npmjs.com/package/@ciplink/react)). Run it with `ciplink-tagserver run --config tagserver.toml`.
+## Tag server
+
+`ciplink-server` owns the PLC connections of a site and serves tag values to web apps over a WebSocket, with a React
+client ([@ciplink/react](https://www.npmjs.com/package/@ciplink/react)): one connection and one poll loop per PLC,
+however many screens are open, with write permissions, limits, momentary buttons and an audit log set in a TOML
+config.
+
+```
+ciplink-server run --config tagserver.toml          # pip install ciplink, cargo install ciplink-server, or the releases page
+ciplink-server run --config tagserver.toml --mock   # simulated values, no PLC needed
+```
+
+It also runs inside a program: `ciplink.server.TagServer` (Python), `ciplink_server::ServerHandle` (Rust),
+`ciplink::Server` (C++), `Ciplink.TagServer` (C#) and `ciplink_server_start` (C). See [docs/server.md](docs/server.md).
 
 ## Quick start
 
