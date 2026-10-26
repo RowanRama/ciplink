@@ -174,6 +174,13 @@ with CIPDriver("192.0.2.10") as drv:
             print(node["route"], node["identity"] and node["identity"]["product_name"])
 ```
 
+## Adapter (opt-in)
+
+`ciplink::adapter` turns an application into an EtherNet/IP I/O device: a Logix controller finds it in RSWho and
+owns it in its I/O tree, exchanging input and output assemblies every RPI. Nothing listens unless the application
+starts an `Adapter`. It needs the EtherNet/IP ports (TCP/UDP 44818, UDP 2222) of its IP address to itself, so it
+cannot run beside FactoryTalk Linx or RSLinx on the same address. See [docs/adapter.md](docs/adapter.md).
+
 ## Test without a PLC
 
 `ciplink-sim` is a simulated Logix or SLC controller that speaks real EtherNet/IP. Load it with tags and UDTs from

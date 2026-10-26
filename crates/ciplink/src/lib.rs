@@ -3,6 +3,7 @@
 //! The Rust core of the ciplink package (a pycomm3 fork). The same driver is bound to Python, C/C++ and C#.
 #![warn(missing_docs)]
 
+pub mod adapter;
 pub mod browse;
 pub mod cip;
 pub mod epath;

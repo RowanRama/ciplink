@@ -219,6 +219,7 @@ dependencies = [
  "num-traits",
  "serde_json",
  "sha1",
+ "socket2",
  "thiserror",
 ]
 

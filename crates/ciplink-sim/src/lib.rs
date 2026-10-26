@@ -34,6 +34,7 @@ mod logix;
 mod metadata;
 mod model;
 mod path;
+mod scanner;
 mod server;
 mod slc;
 mod transport;
@@ -44,6 +45,7 @@ pub use config::{
     TypeConfig,
 };
 pub use logix::Logix;
+pub use scanner::{IoRequest, ScanError, Scanner};
 pub use server::{Server, UdpServer};
 pub use slc::Slc;
 pub use transport::SimTransport;
