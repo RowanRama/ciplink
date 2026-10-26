@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/ciplink", "crates/ciplink-sim", "crates/ciplink-py", "crates/ciplink-ffi", "crates/ciplink-server"]
 
 [workspace.package]
-version = "0.3.3"
+version = "0.3.4"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT"

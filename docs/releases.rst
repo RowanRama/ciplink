@@ -2,8 +2,8 @@
 Release History
 ===============
 
-Unreleased
-==========
+ciplink 0.3.4
+=============
 
 - |:sparkles:| ``ciplink-server``: the tag server on the Rust core, a port of the Python ciplink-tagserver 0.4 with
   the same config files, WebSocket protocol and HTTP API (``@ciplink/react`` apps work unchanged).  It comes with

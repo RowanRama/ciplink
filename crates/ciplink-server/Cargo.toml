@@ -12,7 +12,7 @@ authors.workspace = true
 repository.workspace = true
 
 [dependencies]
-ciplink = { path = "../ciplink", version = "0.3.3" }
+ciplink = { path = "../ciplink", version = "0.3.4" }
 axum = { version = "0.8", features = ["ws"] }
 clap = { version = "4", features = ["derive"] }
 futures-util = "0.3"
