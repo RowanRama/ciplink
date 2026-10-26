@@ -313,7 +313,8 @@ def check_controller(plc, label):
                                        "NestedUDT", "STRING", "TIMER", "COUNTER", "CONTROL", "Valve", "Proc",
                                        "Holder", "AB:1756_IF4:I:0", "AB:1756_OF4:O:0"} <= set(plc.data_types))
     check(f"{label} big_ary dims", plc.tags["big_ary"]["dimensions"], [2000, 0, 0])
-    check(f"{label} bool_ary dims", plc.tags["bool_ary"]["dimensions"], [96, 0, 0])
+    # BOOL[96]: controllers list the 3 DWORDs that hold it
+    check(f"{label} bool_ary dims", plc.tags["bool_ary"]["dimensions"], [3, 0, 0])
     check(f"{label} ro access", plc.tags["ro_dint"]["external_access"], "Read Only")
     check(f"{label} STRING20 is a string", plc.data_types["STRING20"].get("string"), 20)
 

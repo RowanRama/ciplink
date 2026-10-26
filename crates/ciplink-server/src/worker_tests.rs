@@ -737,14 +737,14 @@ fn stop_runs_the_queued_writes_and_refuses_later_ones() {
     );
 }
 
-/// An intended difference: ciplink reports a BOOL array tag's dims in BOOLs (the Python test multiplies a tag's
-/// dims by 32 too, which is a bug there); a BOOL array member's dims count 32-bit words.
+/// Controllers report a BOOL array's dims in 32-bit words, a tag's as well as a member's (a GuardLogix lists a
+/// BOOL[64] tag as [2]); clients see BOOLs.
 #[test]
 fn bool_arrays_are_bool_with_dims_in_bools() {
     let fake = Fake::default();
     {
         let mut f = fake.lock();
-        f.tags.insert("Flags".into(), atomic("DWORD", &[64])); // ciplink's BOOL[64]
+        f.tags.insert("Flags".into(), atomic("DWORD", &[2])); // a BOOL[64]
         f.tags.insert("Box".into(), strct("BoxT", 8, &[]));
         f.types.insert(
             "BoxT".into(),

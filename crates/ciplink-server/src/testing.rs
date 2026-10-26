@@ -23,8 +23,7 @@ use crate::server::ServerHandle;
 
 // ------------------------------------------------------------------------------------------------ structure
 
-/// A tag or member of an atomic type; `dims` as ciplink reports them (a BOOL array tag counts BOOLs, a BOOL array
-/// member 32-bit words).
+/// A tag or member of an atomic type; `dims` as ciplink reports them (a BOOL array counts 32-bit words).
 pub fn atomic(type_name: &str, dims: &[u64]) -> Node {
     Node {
         type_name: type_name.into(),

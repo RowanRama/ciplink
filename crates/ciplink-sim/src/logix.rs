@@ -87,7 +87,12 @@ impl Scope {
             .iter()
             .map(|t| {
                 let mut dims = [0u32; 3];
-                dims[..t.dims.len()].copy_from_slice(&t.dims);
+                if t.ty == Ty::Atomic(Atomic::DWord) && !t.dims.is_empty() {
+                    // a BOOL array: controllers report the 32-bit words that hold it, not its BOOLs
+                    dims[0] = t.elements as u32;
+                } else {
+                    dims[..t.dims.len()].copy_from_slice(&t.dims);
+                }
                 Symbol {
                     instance_id: t.instance_id,
                     name: &t.name,

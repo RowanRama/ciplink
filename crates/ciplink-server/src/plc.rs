@@ -61,8 +61,8 @@ pub struct Node {
     pub type_name: String,
     /// Atomic, structure or string.
     pub kind: Kind,
-    /// Array dims: a tag's dimensions (a BOOL array tag counts BOOLs), a member's `[array]` (a BOOL array member
-    /// counts 32-bit words); empty for a scalar.
+    /// Array dims: a tag's dimensions, a member's `[array]`; empty for a scalar. A BOOL array (tag or member)
+    /// counts the 32-bit words that hold it, as controllers report it.
     pub dims: Vec<u64>,
     /// True for a structure member.
     pub member: bool,
@@ -89,10 +89,10 @@ impl Node {
         }
     }
 
-    /// The dims as clients see them: a BOOL array member's words as BOOLs.
+    /// The dims as clients see them: a BOOL array's words as BOOLs.
     pub fn client_dims(&self) -> Vec<u64> {
         let mut dims = self.dims.clone();
-        if self.member && self.bool_array() {
+        if self.bool_array() {
             if let Some(last) = dims.last_mut() {
                 *last *= 32;
             }
@@ -508,7 +508,7 @@ mod tests {
         udt.members
             .insert("Speed".into(), atomic("REAL", vec![], true));
         let mut tags = IndexMap::new();
-        tags.insert("Bits".into(), atomic("DWORD", vec![96], false));
+        tags.insert("Bits".into(), atomic("DWORD", vec![3], false)); // BOOL[96]
         tags.insert("Word".into(), atomic("DWORD", vec![], false));
         tags.insert(
             "Motor".into(),
@@ -554,7 +554,7 @@ mod tests {
             c.info("Motor.Flags[3]").map(|n| n.type_name.as_str()),
             Some("DWORD")
         );
-        assert_eq!(c.info("Bits{4}").map(|n| n.dims.clone()), Some(vec![96]));
+        assert_eq!(c.info("Bits{4}").map(|n| n.dims.clone()), Some(vec![3]));
         assert!(c.info("Motor.Nope").is_none());
         assert_eq!(c.struct_size(c.info("Motor").unwrap()), Some(8));
     }

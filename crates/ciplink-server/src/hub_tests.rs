@@ -930,8 +930,8 @@ async fn index_spelling_does_not_bypass_element_rules() {
 #[tokio::test(start_paused = true)]
 async fn an_array_written_by_name_is_refused() {
     let mut h = hub();
-    // StartPB is ciplink's BOOL[64]
-    h.types(&[("Recipe", "REAL", &[4]), ("StartPB", "DWORD", &[64])]);
+    // StartPB is a BOOL[64]: 2 words
+    h.types(&[("Recipe", "REAL", &[4]), ("StartPB", "DWORD", &[2])]);
     let (id, outbox) = h.session("op");
     let a = h.write((id, &outbox), json!("Recipe"), json!(99.0)).await;
     let b = h.momentary((id, &outbox), "StartPB", "press").await;

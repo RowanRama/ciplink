@@ -5,9 +5,8 @@ gets one connection and one poll loop, however many screens are open. It is the 
 ciplink-tagserver 0.4: the same config files, protocol and HTTP API, so `@ciplink/react` apps and existing configs
 work unchanged. See [crates/ciplink-server/README.md](../crates/ciplink-server/README.md) for how to get and run it.
 
-Two things differ from the Python server: BYTE, WORD, DWORD and LWORD values are lists of bools (as ciplink reads
-them), typed `boolean[]` with `.bit(n)` by `types`; and a BOOL array tag's `dims` count BOOLs (the Python server
-multiplied them by 32 a second time).
+One thing differs from the Python server: BYTE, WORD, DWORD and LWORD values are lists of bools (as ciplink reads
+them), typed `boolean[]` with `.bit(n)` by `types`.
 
 ## Config
 

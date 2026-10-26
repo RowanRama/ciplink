@@ -14,6 +14,8 @@ Unreleased
   0), ``Name.n`` reads bit n of a ``BYTE``, ``WORD``, ``DWORD`` or ``LWORD`` (a tag, member or array element) and
   writes it with a Read-Modify-Write of ``Name`` itself.  Only a ``DWORD`` with dimensions is a BOOL array.
   ``ciplink-sim`` has ``BYTE``, ``WORD`` and ``LWORD`` tags and members.
+- |:bug:| ``ciplink-sim`` lists a BOOL array tag's dimensions in the 32-bit words that hold it, as controllers do (a
+  ``BOOL[64]`` is ``[2]``), not in BOOLs.
 
 ciplink 0.3.3
 =============

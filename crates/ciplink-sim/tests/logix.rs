@@ -256,7 +256,8 @@ fn symbol_lists_page_to_the_connection_size() {
     assert_eq!(find("Program:Main").2, 0x1068);
     assert_eq!(find("ary").2, 0x20C4);
     assert_eq!((find("grid").2, find("grid").3), (0x40C3, [2, 3, 0]));
-    assert_eq!((find("bits").2, find("bits").3), (0x20D3, [64, 0, 0]));
+    // BOOL[40], held in 2 DWORDs: a controller lists the words (a GuardLogix lists a BOOL[64] as [2])
+    assert_eq!((find("bits").2, find("bits").3), (0x20D3, [2, 0, 0]));
     assert_eq!(find("pt").2 & 0x8000, 0x8000);
     assert_eq!((find("ro").4, find("far").0), (2, 70000));
 
