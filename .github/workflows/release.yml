@@ -158,6 +158,7 @@ jobs:
           mkdir -p "out/$name/include" "out/$name/lib" "out/runtimes/${{ matrix.rid }}/native"
           cp crates/ciplink-ffi/include/ciplink.h "out/$name/include/"
           cp LICENSE "out/$name/"
+          echo "ciplink $GITHUB_REF_NAME C library. Documentation: https://rowanrama.github.io/ciplink/" > "out/$name/README.txt"
           for f in ${{ matrix.shared }} ${{ matrix.static }} ${{ matrix.import }}; do cp "$built/$f" "out/$name/lib/"; done
           cp "$built/${{ matrix.shared }}" "out/runtimes/${{ matrix.rid }}/native/"
           server="ciplink-server-${GITHUB_REF_NAME}-${{ matrix.rid }}"

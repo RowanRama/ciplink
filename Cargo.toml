@@ -9,6 +9,7 @@ rust-version = "1.85"
 license = "MIT"
 authors = ["Rowan Ramamurthy <rramamurthy@factoryautomation.com>"]
 repository = "https://github.com/RowanRama/ciplink"
+homepage = "https://rowanrama.github.io/ciplink/"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -49,5 +49,6 @@ arrays, and `Dictionary<string, object?>` for UDTs. `ReadAsync` and `WriteAsync`
 
 ## More
 
-- Source, issues, and the Python, C, C++ and Rust APIs: https://github.com/RowanRama/ciplink
+- Documentation, with examples in C# and every other language: https://rowanrama.github.io/ciplink/
+- Source and issues: https://github.com/RowanRama/ciplink
 - License: MIT

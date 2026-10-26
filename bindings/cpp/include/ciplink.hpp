@@ -1,4 +1,5 @@
 // ciplink.hpp - header-only C++17 RAII wrapper over the ciplink C ABI (ciplink.h).
+// Documentation: https://rowanrama.github.io/ciplink/
 //
 //   ciplink::Logix plc("192.168.1.10/0");
 //   plc.open();

@@ -2,6 +2,7 @@
 
 EtherNet/IP (CIP) client driver for Allen-Bradley Logix, Micro800 and SLC/MicroLogix PLCs: the Rust core of the
 [ciplink](https://github.com/RowanRama/ciplink) Python package (a pycomm3 fork), also bound to C, C++ and C#.
+The [documentation](https://rowanrama.github.io/ciplink/) has guides with Rust examples next to the other languages'.
 
 ```rust
 use ciplink::logix::driver::{LogixDriver, LogixOptions};

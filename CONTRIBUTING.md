@@ -189,7 +189,7 @@ Each publishing job waits for every wheel to build and pass its tests.  To relea
 1. Make sure CI is green on `main`.
 2. Set the new version in `python/ciplink/_version.py`, `[workspace.package]` in `Cargo.toml` and `<Version>` in
    `bindings/dotnet/Ciplink/Ciplink.csproj` (the first job stops the release if they differ from the tag), run
-   `cargo check` so `Cargo.lock` follows, and add the release notes to `docs/releases.rst`.
+   `cargo check` so `Cargo.lock` follows, and add the release notes to `docs/releases.md`.
 3. Commit, then tag and push: `git tag v0.3.0 && git push origin v0.3.0`.
 4. Approve the `pypi`, `crates` and `nuget` deployments if those environments require reviewers.
 

@@ -1,5 +1,4 @@
-sphinx
-sphinx-autodoc-typehints==1.15.3
-furo
-m2r2
-sphinxemoji
+mkdocs==1.6.1
+mkdocs-material==9.8.0
+mkdocstrings[python]==1.0.8
+mkdocstrings-python==2.0.10

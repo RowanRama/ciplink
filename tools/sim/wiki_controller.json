@@ -1,0 +1,48 @@
+{
+  "kind": "logix",
+  "identity": {
+    "vendor": 1,
+    "product_type": 14,
+    "product_code": 166,
+    "revision": [33, 11],
+    "serial": "c0ffee02",
+    "product_name": "1756-L83E/B",
+    "keyswitch": "REMOTE RUN"
+  },
+  "slot": 0,
+  "ip": "192.0.2.10",
+  "netmask": "255.255.255.0",
+  "network": [
+    {
+      "ip": "192.0.2.30",
+      "identity": {"product_type": 12, "product_code": 145, "revision": [5, 12], "serial": "00a1b2c3", "product_name": "1734-AENTR/C", "keyswitch": "RUN"}
+    }
+  ],
+  "program_name": "Line2",
+  "modules": [
+    {"slot": 1, "identity": {"product_type": 12, "product_code": 166, "revision": [11, 2], "serial": "00e2c0de", "product_name": "1756-EN2T/D", "keyswitch": "RUN"}}
+  ],
+  "types": [
+    {"name": "TankData", "members": [
+      {"name": "Level", "type": "REAL", "description": "Tank level, %"},
+      {"name": "Setpoint", "type": "REAL"}
+    ]},
+    {"name": "MotorData", "members": [
+      {"name": "Speed", "type": "REAL"},
+      {"name": "Running", "type": "BOOL"},
+      {"name": "Start", "type": "BOOL"}
+    ]}
+  ],
+  "programs": [
+    {"name": "MainProgram", "routines": ["MainRoutine"], "tags": [{"name": "Step", "type": "DINT", "value": 3}]}
+  ],
+  "tags": [
+    {"name": "Counter", "type": "DINT", "value": 42, "descriptions": {"": "Parts made this shift"}},
+    {"name": "Tank", "type": "TankData", "value": {"Level": 50.0, "Setpoint": 75.5}, "descriptions": {"": "Mixing tank"}},
+    {"name": "Recipe", "type": "DINT", "dims": [10], "value": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], "descriptions": {"[3]": "Step 4 time, s"}},
+    {"name": "Motor", "type": "MotorData", "value": {"Speed": 1450.0, "Running": true, "Start": false}},
+    {"name": "Message", "type": "STRING", "value": "Line 2 idle"},
+    {"name": "Flags", "type": "BOOL", "dims": [64], "value": []},
+    {"name": "Status", "type": "WORD", "value": 0}
+  ]
+}

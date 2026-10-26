@@ -31,7 +31,7 @@ ciplink-server = "ciplink.server:main"
 [project.urls]
 Source = "https://github.com/RowanRama/ciplink"
 Upstream = "https://github.com/ottowayi/pycomm3"
-Documentation = "https://docs.pycomm3.dev"
+Documentation = "https://rowanrama.github.io/ciplink/"
 
 [tool.maturin]
 # the Python half of the package lives in python/ciplink, the extension module ciplink._core is built from the

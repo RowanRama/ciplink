@@ -54,7 +54,7 @@ write = ["PLC1/Line1.*.SpeedSP"]
 Tags are named `<plc>/<tag>` (unqualified with one PLC). Structure comes from the controller; intent (writable,
 min/max, units, deadband, bit names, poll rates) comes from decorators, rules and poll groups in the config. The
 full reference (decorators, rules, poll groups, tiers and pages, the read planner, writes and momentary buttons,
-the protocol and the HTTP endpoints) is [docs/server.md](https://github.com/RowanRama/ciplink/blob/main/docs/server.md).
+the protocol and the HTTP endpoints) is the [Tag server page of the ciplink wiki](https://rowanrama.github.io/ciplink/server/).
 
 ## Safety
 

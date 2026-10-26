@@ -10,8 +10,9 @@
 [![NuGet](https://img.shields.io/nuget/v/Ciplink?logo=nuget&label=NuGet)](https://www.nuget.org/packages/Ciplink)
 [![Python](https://img.shields.io/pypi/pyversions/ciplink?logo=python&logoColor=white)](https://pypi.org/project/ciplink/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-wiki-indigo)](https://rowanrama.github.io/ciplink/)
 
-[Install](#install) · [Tag server](#tag-server) · [Quick start](#quick-start) · [Simulator](#test-without-a-plc) · [Build from source](#build-from-source)
+**[Documentation](https://rowanrama.github.io/ciplink/)** · [Install](#install) · [Tag server](#tag-server) · [Quick start](#quick-start) · [Simulator](#test-without-a-plc) · [Build from source](#build-from-source)
 
 </div>
 
@@ -20,6 +21,9 @@
 ciplink is a fork of [pycomm3](https://github.com/ottowayi/pycomm3) rebuilt on a **shared Rust core**. Every
 language calls the same driver, so tag reads, packet packing and error handling behave the same everywhere.
 In Python it keeps the familiar pycomm3-style API and uses several times less CPU per call.
+
+The **[documentation](https://rowanrama.github.io/ciplink/)** has a guide to every feature with examples in Python, Rust, C#, C++ and C side
+by side.
 
 ```mermaid
 flowchart LR

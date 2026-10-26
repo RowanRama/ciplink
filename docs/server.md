@@ -3,10 +3,97 @@
 `ciplink-server` owns the PLC connections of a site and serves tag values to web apps over a WebSocket: each PLC
 gets one connection and one poll loop, however many screens are open. It is the Rust port of the Python
 ciplink-tagserver 0.4: the same config files, protocol and HTTP API, so `@ciplink/react` apps and existing configs
-work unchanged. See [crates/ciplink-server/README.md](../crates/ciplink-server/README.md) for how to get and run it.
+work unchanged.
 
 One thing differs from the Python server: BYTE, WORD, DWORD and LWORD values are lists of bools (as ciplink reads
 them), typed `boolean[]` with `.bit(n)` by `types`.
+
+## Run it
+
+The `ciplink-server` command comes with the Python package (`pip install ciplink`), with `cargo install
+ciplink-server`, and as an executable per platform on the [releases page](https://github.com/RowanRama/ciplink/releases).
+
+```sh
+ciplink-server run --config tagserver.toml          # real PLCs
+ciplink-server run --config tagserver.toml --mock   # simulated values from each PLC's mock_tags file
+ciplink-server dump-tags --config tagserver.toml --plc PLC1 --out PLC1_tags.json
+ciplink-server types --url http://127.0.0.1:8765 --token T --out src/plc.ts
+ciplink-server service install --config C:\TagServer\tagserver.toml   # Windows: start at boot (administrator)
+```
+
+`--log-file FILE` on `run` logs to a file (rotated at 10 MB, 5 kept) instead of the console.
+
+It also runs inside a program, on threads of its own, until it is stopped. `host` and `port` override the config
+file's (port 0 picks a free port); stopping it releases pressed momentary buttons, closes the PLC connections and
+flushes the audit log.
+
+=== "Python"
+
+    ```python
+    from ciplink.server import TagServer
+
+    with TagServer("tagserver.toml", mock=True, port=0) as server:
+        print("listening on", server.address)       # ('127.0.0.1', 51234)
+        input("Enter stops the server")
+    ```
+
+=== "Rust"
+
+    ```rust
+    let config = ciplink_server::load_config("tagserver.toml".as_ref())?;
+    let server = ciplink_server::ServerHandle::start(config, ciplink_server::factory(false))?;
+    println!("listening on {}", server.addr());
+    server.stop()?;
+    ```
+
+    Add the `ciplink-server` crate (`cargo add ciplink-server`); `factory(true)` serves mock values.
+
+=== "C#"
+
+    ```csharp
+    using Ciplink;
+
+    using var server = new TagServer("tagserver.toml", mock: true, port: 0);
+    Console.WriteLine($"listening on {server.Address}");
+    Console.ReadLine();
+    server.Stop();
+    ```
+
+=== "C++"
+
+    ```cpp
+    #include <iostream>
+    #include "ciplink.hpp"
+
+    ciplink::Server server("tagserver.toml", /*mock*/ true, std::nullopt, /*port*/ 0);
+    std::cout << "listening on " << server.address() << "\n";
+    std::cin.get();
+    server.stop();
+    ```
+
+=== "C"
+
+    ```c
+    #include <stdio.h>
+    #include "ciplink.h"
+
+    CiplinkServer *server = NULL;
+    if (ciplink_server_start("tagserver.toml", "{\"mock\": true, \"port\": 0}", &server) == CIPLINK_STATUS_OK) {
+        char *address = NULL;
+        ciplink_server_address(server, &address);
+        printf("listening on %s\n", address);
+        ciplink_string_free(address);
+        getchar();
+        ciplink_server_stop(server);     /* stops and frees it */
+    } else {
+        char *err = ciplink_last_error(NULL);
+        fprintf(stderr, "%s\n", err);
+        ciplink_string_free(err);
+    }
+    ```
+
+Web apps connect with the [`@ciplink/react`](https://www.npmjs.com/package/@ciplink/react) client. The rest of this
+page is the config and protocol reference.
 
 ## Config
 

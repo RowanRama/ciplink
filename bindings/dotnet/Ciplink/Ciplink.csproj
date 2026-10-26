@@ -19,7 +19,7 @@
     <PackageTags>ethernetip;cip;plc;logix;allen-bradley</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageProjectUrl>https://github.com/RowanRama/ciplink</PackageProjectUrl>
+    <PackageProjectUrl>https://rowanrama.github.io/ciplink/</PackageProjectUrl>
     <RepositoryUrl>https://github.com/RowanRama/ciplink</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
 
