@@ -175,8 +175,10 @@ impl AppInfo {
     pub fn decode(data: &[u8]) -> Option<AppInfo> {
         let mut r = Reader::new(data);
         let mut text = || -> Option<String> {
-            let len = r.u8().ok()?;
-            Some(String::from_utf8_lossy(r.take(len.into()).ok()?).into_owned())
+            match r.u8().ok()? {
+                0 => Some(String::new()), // take(0) is an error, an empty string is not
+                len => Some(String::from_utf8_lossy(r.take(len.into()).ok()?).into_owned()),
+            }
         };
         if text()? != CIPLINK_SIGNATURE {
             return None;
@@ -660,6 +662,18 @@ mod tests {
             only_listener.summary(),
             "Station · station 2 · read by 192.0.2.6, RPI 2.5 ms"
         );
+    }
+
+    #[test]
+    fn empty_names_and_no_connections_decode() {
+        let mut data = b"ciplink0.3.5   ".to_vec();
+        data.extend([0, 0]); // no assemblies, no connections
+        let app = AppInfo::decode(&data).expect("a ciplink device");
+        assert_eq!(
+            (app.name.as_str(), app.version.as_str(), app.detail.as_str()),
+            ("", "", "")
+        );
+        assert_eq!(app.summary(), "ciplink · no connection");
     }
 
     #[test]
