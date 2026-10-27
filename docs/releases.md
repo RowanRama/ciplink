@@ -1,5 +1,17 @@
 # Release History
 
+## Unreleased
+
+- :sparkles: the adapter is in every binding: `ciplink.Adapter` in Python, `ciplink_adapter_start` and the other
+  `ciplink_adapter_*` functions in C, `ciplink::Adapter` in C++ and `Ciplink.Adapter` in C#, with the Rust core's
+  events, connections and stats.  See [Adapter](adapter.md).
+- :sparkles: browsing marks ciplink devices: `browse_port` and `scan_port` read the ciplink object of every device
+  found at an IP address, so a node has an `app` (name, version, status text, assemblies, connections and a
+  `summary` line); `get_app(route)` reads it for one device (`app_at` in Rust, `GetApp` in C#, `ciplink_get_app` in
+  C).  `examples/device_browser.py` shows the badge and app line.
+- :white_check_mark: the adapter's socket tests no longer flake on Windows: test scanners pick their own T→O
+  connection IDs, and port 0 tries random ports, since Windows reserves blocks of UDP ports.
+
 ## ciplink 0.3.5
 
 - :sparkles: an opt-in EtherNet/IP adapter role in the Rust core (`ciplink::adapter`): an application that starts

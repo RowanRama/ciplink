@@ -183,4 +183,16 @@ it answers instead of waiting for all of them.
 
 `get_module_info(slot)` is a shortcut for the identity of a slot in the driver's own backplane.
 
+## ciplink devices
+
+A ciplink [adapter](adapter.md) answers like any other EtherNet/IP device, and it also says what it runs. Every node
+that `browse_port` or `scan_port` finds at an IP address carries an `app` field: null for other devices, else the
+application's `name`, `version` and `detail` (status text), its `assemblies` and `connections`, the `ciplink_version`,
+and a `summary` for a device browser, such as `Station · station 2 · owned by 192.0.2.5, RPI 20 ms`. Reading it costs
+one request per device found, and none for the slots of a backplane, since an adapter is a PC on a network.
+
+`get_app(route)` reads it for a single device: Python `drv.get_app("")`, Rust `drv.app_at("")`, C# `drv.GetApp()`,
+C++ `drv.get_app()`, C `ciplink_get_app(drv, "", &json)`. `examples/device_browser.py` shows ciplink devices with
+their app line.
+
 `python -m examples.device_browser` in the repository is a small RSWho-style tree browser built on these calls.

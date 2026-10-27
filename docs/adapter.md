@@ -3,15 +3,11 @@
 By default ciplink is a client: it connects to PLCs and reads and writes their tags, and it listens on no
 EtherNet/IP port. The adapter is the opposite role, and it is opt-in. An application that starts one becomes an
 EtherNet/IP device that a Logix controller can find in RSWho and own in its I/O tree, like a camera or an I/O
-module. Nothing listens until the application calls `Adapter::start`, so programs that only use the client never
+module. Nothing listens until the application starts an `Adapter`, so programs that only use the client never
 see it.
 
 Use it when a ciplink application is a service host the PLC should talk to directly, e.g. a vision station that
 takes a trigger from the PLC and returns results every RPI.
-
-!!! note "Rust and Python for now"
-    The adapter is in the Rust core (`ciplink::adapter`) and in Python (`ciplink.adapter`); the C, C++ and C#
-    bindings follow.
 
 ## What it does
 
@@ -75,6 +71,104 @@ closed or timed out, new output data, and new config data.
 
     The I/O runs on the core's threads, so a slow Python loop never makes a packet late. `identity={...}` sets
     the Identity object, RPIs are in seconds, and the other keywords are those of `AdapterConfig`.
+
+=== "C#"
+
+    ```csharp
+    using Ciplink;
+
+    using var adapter = new Adapter(new AdapterConfig
+    {
+        Inputs = new Dictionary<uint, int> { [100] = 148 },
+        Outputs = new Dictionary<uint, int> { [150] = 32 },
+        Configs = new Dictionary<uint, int> { [199] = 0 },
+        AppName = "Station",
+    });
+    adapter.SetInput(100, new byte[] { 1, 2, 3 });
+    while (true)
+    {
+        var e = adapter.NextEvent(TimeSpan.FromSeconds(1));   // null after 1 s
+        if (e is null) continue;
+        if ((string)e["event"]! == "opened")
+            Console.WriteLine($"{e["connection"]!["kind"]} opened by {e["connection"]!["originator"]}");
+        else if ((string)e["event"]! == "output")
+        {
+            AdapterOutput output = adapter.Output((uint)e["instance"]!);
+            Console.WriteLine($"trigger {output.Data[0] & 1} (run {output.Run})");
+        }
+    }
+    ```
+
+=== "C++"
+
+    ```cpp
+    #include <iostream>
+    #include "ciplink.hpp"
+
+    ciplink::AdapterConfig config;
+    config.inputs = {{100, 148}};
+    config.outputs = {{150, 32}};
+    config.configs = {{199, 0}};
+    config.app_name = "Station";
+    ciplink::Adapter adapter(config);
+    adapter.set_input(100, {1, 2, 3});
+    for (;;) {
+        ciplink::Value e = adapter.next_event(1.0);   // null after 1 s
+        if (e.is_null()) continue;
+        if (e["event"].as_string() == "opened") {
+            std::cout << e["connection"]["kind"].as_string() << " opened by "
+                      << e["connection"]["originator"].as_string() << "\n";
+        } else if (e["event"].as_string() == "output") {
+            ciplink::AdapterOutput out = adapter.output(uint32_t(e["instance"].as_int()));
+            std::cout << "trigger " << (out.data[0] & 1) << " (run " << out.run << ")\n";
+        }
+    }
+    ```
+
+=== "C"
+
+    ```c
+    #include <stdio.h>
+    #include "ciplink.h"
+
+    CiplinkAdapter *adapter = NULL;
+    if (ciplink_adapter_start("{\"inputs\": {\"100\": 148}, \"outputs\": {\"150\": 32}, \"configs\": {\"199\": 0},"
+                              " \"app_name\": \"Station\"}", &adapter) != CIPLINK_STATUS_OK) {
+        char *err = ciplink_last_error(NULL);
+        fprintf(stderr, "%s\n", err);   /* e.g. the port is taken */
+        ciplink_string_free(err);
+        return 1;
+    }
+    const uint8_t input[] = {1, 2, 3};
+    ciplink_adapter_set_input(adapter, 100, input, sizeof input);
+    for (;;) {
+        char *event = NULL;   /* JSON: {"event": "opened", "connection": {...}}, {"event": "output", "instance": 150}, ... */
+        if (ciplink_adapter_next_event(adapter, 1.0, &event) != CIPLINK_STATUS_OK)
+            break;
+        printf("%s\n", event);   /* null after 1 s */
+        ciplink_string_free(event);
+        uint8_t *data = NULL;
+        size_t len = 0;
+        bool run = false;
+        if (ciplink_adapter_output(adapter, 150, &data, &len, &run) == CIPLINK_STATUS_OK) {
+            if (len) printf("trigger %d (run %d)\n", data[0] & 1, run);
+            ciplink_bytes_free(data, len);
+        }
+    }
+    ciplink_adapter_free(adapter);   /* stops it */
+    ```
+
+    The config is JSON with the Python binding's keywords (`inputs`, `outputs`, `configs`, `identity`, `app_name`,
+    `bind`, `port`, `rpi_min` ...); events, connections and stats come back as JSON in the same shapes.
+    `ciplink_adapter_stop` makes a thread waiting in `ciplink_adapter_next_event` return within 0.1 s.
+
+## In device browsers
+
+RSWho and Studio 5000 list the adapter from its standard objects, under its product name (and its EDS icon once the
+EDS is registered). ciplink's own browsing also reads the ciplink object of every device it finds at an IP address,
+so a running adapter carries an `app` field: the application's name, version and status text, its assemblies and
+connections, and a `summary` line such as `Station · station 2 · owned by 192.0.2.5, RPI 20 ms`.
+`set_detail("station 2")` sets the status text. See [Discovering and browsing devices](browsing.md#ciplink-devices).
 
 ## Adding it to a Logix project
 

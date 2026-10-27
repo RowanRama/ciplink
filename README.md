@@ -180,9 +180,9 @@ with CIPDriver("192.0.2.10") as drv:
 
 ## Adapter (opt-in)
 
-`ciplink::adapter` turns an application into an EtherNet/IP I/O device: a Logix controller finds it in RSWho and
-owns it in its I/O tree, exchanging input and output assemblies every RPI. Nothing listens unless the application
-starts an `Adapter`. It needs the EtherNet/IP ports (TCP/UDP 44818, UDP 2222) of its IP address to itself, so it
+An `Adapter` (in every binding) turns an application into an EtherNet/IP I/O device: a Logix controller finds it in
+RSWho and owns it in its I/O tree, exchanging input and output assemblies every RPI, and ciplink's browsing shows
+it with a ciplink badge and what it runs. Nothing listens unless the application starts an `Adapter`. It needs the EtherNet/IP ports (TCP/UDP 44818, UDP 2222) of its IP address to itself, so it
 cannot run beside FactoryTalk Linx or RSLinx on the same address. See [docs/adapter.md](docs/adapter.md).
 
 ## Test without a PLC

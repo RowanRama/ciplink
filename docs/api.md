@@ -30,7 +30,10 @@ API is documented and how its calls map to the others.
 | `CIPDriver.discover()` | `CipDriver::discover(broadcast)` | `CipDriver.Discover()` | `ciplink::discover()` | `ciplink_discover` |
 | `get_ports(route)` | `ports_at(route)` | `GetPorts(route)` | `get_ports(route)` | `ciplink_get_ports` |
 | `browse_port(route, port)`, `iter_port` | `browse_port(...)`, `scan_port(...)` | `BrowsePort`, `ScanPort` | `browse_port`, `scan_port` | `ciplink_browse_port`, `ciplink_scan_port` |
+| `get_app(route)` | `app_at(route)` | `GetApp(route)` | `get_app(route)` | `ciplink_get_app` |
 | `ciplink.server.TagServer` | `ciplink_server::ServerHandle` | `TagServer` | `ciplink::Server` | `ciplink_server_start` |
+| `ciplink.Adapter(inputs=..., ...)` | `adapter::Adapter::start(AdapterConfig)` | `new Adapter(AdapterConfig)` | `ciplink::Adapter(AdapterConfig)` | `ciplink_adapter_start(config_json)` |
+| `next_event(timeout)` | `next_event(Some(timeout))` | `NextEvent(timeout)` | `next_event(timeout)` | `ciplink_adapter_next_event` |
 
 In C# every driver is thread-safe and `IDisposable`; `ReadAsync` and `WriteAsync` run a read or write on the thread
 pool. In C++ the classes are movable RAII wrappers that throw `ciplink::Error`; `handle()` gives the raw C handle for
@@ -46,8 +49,8 @@ include `ciplink.h`; for C++ also add `ciplink.hpp`. A CMake project can follow
 Rules of the C ABI:
 
 - Every function returns a `CiplinkStatus`; 0 (`CIPLINK_STATUS_OK`) is success.
-- Handles (`CiplinkDriver`, `CiplinkTrend`, `CiplinkServer`) are opaque. Free each with its own function:
-  `ciplink_driver_free`, `ciplink_trend_free`, `ciplink_server_stop`.
+- Handles (`CiplinkDriver`, `CiplinkTrend`, `CiplinkServer`, `CiplinkAdapter`) are opaque. Free each with its own
+  function: `ciplink_driver_free`, `ciplink_trend_free`, `ciplink_server_stop`, `ciplink_adapter_free`.
 - A driver handle can be used from several threads at once; calls are serialized inside the driver.
 - Values cross as UTF-8 JSON (see [Values and results](values.md)), and every returned string is freed with
   `ciplink_string_free`.
