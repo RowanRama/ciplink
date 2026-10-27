@@ -620,7 +620,11 @@ impl CipConnection {
         };
         let error = reply.error();
         match &error {
-            Some(err) => log::error!("Generic message {:?} failed: {err}", msg.name),
+            Some(err) => log::log!(
+                failure_level(&reply),
+                "Generic message {:?} failed: {err}",
+                msg.name
+            ),
             None => log::info!("Generic message {:?} completed", msg.name),
         }
         Ok(GenericReply {
@@ -956,9 +960,44 @@ fn local_addresses() -> Vec<Ipv4Addr> {
     out
 }
 
+/// The level for a generic message reply with an error: debug for a partial transfer (general status 0x06),
+/// which fragmented reads (templates, trends) continue from the next offset, error for anything else.
+fn failure_level(reply: &Reply) -> log::Level {
+    if reply.command_status == Some(0)
+        && reply.service_status == Some(packets::INSUFFICIENT_PACKETS)
+    {
+        log::Level::Debug
+    } else {
+        log::Level::Error
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn reply(command_status: i32, service_status: u8) -> Reply {
+        Reply {
+            kind: ReplyKind::SendUnitData,
+            raw: None,
+            command: Some(vec![0x70, 0x00]),
+            command_status: Some(command_status),
+            session: None,
+            service: Some(0x4C),
+            service_status: Some(service_status),
+            data: Some(Vec::new()),
+            identity: None,
+            parse_error: None,
+        }
+    }
+
+    #[test]
+    fn partial_transfer_logs_at_debug_and_real_failures_at_error() {
+        assert_eq!(failure_level(&reply(0, 0x06)), log::Level::Debug);
+        assert_eq!(failure_level(&reply(0, 0x05)), log::Level::Error);
+        assert_eq!(failure_level(&reply(0, 0x1E)), log::Level::Error);
+        assert_eq!(failure_level(&reply(0x65, 0x06)), log::Level::Error);
+    }
 
     fn conn() -> CipConnection {
         let connector: Connector = Box::new(|_, _, _| Err(Error::comm("no network in unit tests")));
