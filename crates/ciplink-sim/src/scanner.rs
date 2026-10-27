@@ -6,7 +6,7 @@
 
 use std::io::{self, Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpStream, UdpSocket};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -263,11 +263,10 @@ impl Scanner {
         let rpi = request.rpi.as_micros() as u32;
         let mut data = vec![0x0A, 0x0E]; // priority/tick, timeout ticks
         data.extend(0u32.to_le_bytes()); // O->T id: the target chooses
-        data.extend(
-            0x5EED_0000u32
-                .wrapping_add(u32::from(request.serial))
-                .to_le_bytes(),
-        );
+        // a T->O ID of its own: a port freed by a scanner in another test may be bound again while that test's
+        // adapter still sends to it, and those packets must not count here
+        static NEXT_T_O_ID: AtomicU32 = AtomicU32::new(0x5EED_0000);
+        data.extend(NEXT_T_O_ID.fetch_add(1, Ordering::Relaxed).to_le_bytes());
         data.extend(request.serial.to_le_bytes());
         data.extend(0x0001u16.to_le_bytes()); // originator vendor
         data.extend(0x0BAD_CAFEu32.to_le_bytes()); // originator serial
@@ -438,7 +437,8 @@ impl Scanner {
 
     /// Closes the connection with a Forward Close; the reply's general and extended status.
     pub fn close(mut self) -> Result<(u8, Vec<u16>), ScanError> {
-        self.stop_threads();
+        // the Forward Close goes out while I/O still runs, as a controller sends it: stopping first could let the
+        // connection time out before the close arrives
         let mut data = vec![0x0A, 0x0E];
         data.extend(self.request.serial.to_le_bytes());
         data.extend(0x0001u16.to_le_bytes());
@@ -455,6 +455,7 @@ impl Scanner {
             .find(|(k, _)| *k == 0x00B2)
             .map(|(_, d)| d.clone())
             .ok_or_else(|| ScanError::BadReply("no unconnected data item".into()))?;
+        self.stop_threads();
         let (general, extended, _) = status_of(&reply)?;
         Ok((general, extended))
     }

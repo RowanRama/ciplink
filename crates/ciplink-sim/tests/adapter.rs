@@ -13,6 +13,14 @@ use std::time::{Duration, Instant};
 const RPI: Duration = Duration::from_millis(10);
 
 /// A station layout: three inputs, three outputs, one configuration assembly.
+/// The socket tests run one at a time: they measure RPIs and time out after a few of them, which a dozen tests
+/// at once, each with I/O threads at 10 ms, would turn into flakes.
+fn one_at_a_time() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    LOCK.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 fn adapter() -> Adapter {
     Adapter::start(AdapterConfig {
         identity: AdapterIdentity {
@@ -85,6 +93,7 @@ fn eventually(limit: Duration, mut check: impl FnMut() -> bool) -> bool {
 
 #[test]
 fn an_exclusive_owner_exchanges_data_both_ways_at_the_rpi() {
+    let _one_at_a_time = one_at_a_time();
     let adapter = adapter();
     adapter.set_input(101, &[0xAB; 276]).unwrap();
     let scanner = open(&adapter, IoRequest::owner(151, 64, 101, 276, RPI)).unwrap();
@@ -138,6 +147,7 @@ fn an_exclusive_owner_exchanges_data_both_ways_at_the_rpi() {
 
 #[test]
 fn every_input_and_output_pair_opens() {
+    let _one_at_a_time = one_at_a_time();
     let adapter = adapter();
     let mut serial = 0;
     for (input, input_size) in [(100, 148), (101, 276), (102, 500)] {
@@ -158,13 +168,14 @@ fn every_input_and_output_pair_opens() {
             );
             assert!(scanner.wait_for_packets(2, Duration::from_secs(2)));
             assert_eq!(scanner.input().unwrap().len(), input_size);
-            assert_eq!(scanner.close().unwrap().0, 0);
+            assert_eq!(scanner.close().unwrap(), (0, vec![]));
         }
     }
 }
 
 #[test]
 fn refusals_carry_the_extended_status() {
+    let _one_at_a_time = one_at_a_time();
     let adapter = adapter();
     // wrong sizes: the extended status names the right connection size
     assert_eq!(
@@ -212,6 +223,7 @@ fn refusals_carry_the_extended_status() {
 
 #[test]
 fn configuration_data_reaches_the_application() {
+    let _one_at_a_time = one_at_a_time();
     let adapter = adapter();
     let _scanner = open(
         &adapter,
@@ -238,6 +250,7 @@ fn configuration_data_reaches_the_application() {
 
 #[test]
 fn a_quiet_scanner_times_out_and_the_next_open_recovers() {
+    let _one_at_a_time = one_at_a_time();
     let adapter = adapter();
     // timeout 10 ms x 4 << 0 = 40 ms
     let quiet = open(
@@ -285,6 +298,7 @@ fn a_quiet_scanner_times_out_and_the_next_open_recovers() {
 
 #[test]
 fn input_only_and_listen_only_open_beside_the_owner() {
+    let _one_at_a_time = one_at_a_time();
     let adapter = adapter();
     let listen = |serial| IoRequest {
         serial,
@@ -360,6 +374,7 @@ fn driver(adapter: &Adapter) -> CipDriver {
 
 #[test]
 fn browsers_read_its_identity_ports_and_ciplink_object() {
+    let _one_at_a_time = one_at_a_time();
     let adapter = adapter();
     adapter.set_detail("station 2");
     let driver = driver(&adapter);
@@ -395,6 +410,7 @@ fn list_identity_over_udp_finds_the_adapter() {
 
 #[test]
 fn the_eds_uploads_through_the_file_object() {
+    let _one_at_a_time = one_at_a_time();
     let adapter = adapter();
     let driver = driver(&adapter);
     let ask = |service: u8, data: Vec<u8>| {
@@ -430,6 +446,7 @@ fn the_eds_uploads_through_the_file_object() {
 
 #[test]
 fn a_second_adapter_on_the_same_port_says_why_it_cannot_start() {
+    let _one_at_a_time = one_at_a_time();
     let first = adapter();
     let err = Adapter::start(AdapterConfig {
         assemblies: vec![Assembly::input(100, 4)],
@@ -447,6 +464,7 @@ fn a_second_adapter_on_the_same_port_says_why_it_cannot_start() {
 #[test]
 #[ignore = "a measurement, not a check: shared CI runners have no timing guarantees"]
 fn timing() {
+    let _one_at_a_time = one_at_a_time();
     for rpi in [Duration::from_millis(2), Duration::from_millis(20)] {
         let adapter = adapter();
         let scanner = open(&adapter, IoRequest::owner(150, 32, 100, 148, rpi)).unwrap();

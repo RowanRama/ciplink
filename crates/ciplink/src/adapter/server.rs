@@ -140,23 +140,30 @@ fn io_error(what: &str, addr: impl std::fmt::Display, err: std::io::Error) -> Er
     Error::comm(format!("cannot {what} {addr}: {err}{hint}"))
 }
 
-/// The TCP listener and the UDP ListIdentity socket, on the same port. For port 0 a free TCP port is tried
-/// until UDP gets it too: Windows excludes port ranges per protocol.
+/// The TCP listener and the UDP ListIdentity socket, on the same port. Port 0 tries random ports of the dynamic
+/// range until both protocols get one: Windows reserves blocks of ports per protocol, and the next free TCP
+/// port is often inside a reserved UDP block.
 fn bind_explicit(bind: Ipv4Addr, port: u16) -> Result<(TcpListener, UdpSocket)> {
-    let mut attempt = 0;
-    loop {
+    let both = |port: u16| -> Result<(TcpListener, UdpSocket)> {
         let listener = TcpListener::bind((bind, port))
             .map_err(|e| io_error("listen on TCP", format!("{bind}:{port}"), e))?;
-        let actual = listener
-            .local_addr()
-            .map_err(|e| io_error("read the address of", bind, e))?
-            .port();
-        match UdpSocket::bind((bind, actual)) {
-            Ok(udp) => return Ok((listener, udp)),
-            Err(_) if port == 0 && attempt < 20 => attempt += 1,
-            Err(e) => return Err(io_error("listen on UDP", format!("{bind}:{actual}"), e)),
+        let udp = UdpSocket::bind((bind, port))
+            .map_err(|e| io_error("listen on UDP", format!("{bind}:{port}"), e))?;
+        Ok((listener, udp))
+    };
+    if port != 0 {
+        return both(port);
+    }
+    let mut last = None;
+    for _ in 0..64 {
+        let mut random = [0u8; 2];
+        getrandom::fill(&mut random).map_err(|e| Error::comm(format!("no random numbers: {e}")))?;
+        match both(49152 + u16::from_le_bytes(random) % 16384) {
+            Ok(sockets) => return Ok(sockets),
+            Err(e) => last = Some(e),
         }
     }
+    Err(last.unwrap_or_else(|| Error::comm("no free port")))
 }
 
 /// Binds the sockets and starts the threads.
