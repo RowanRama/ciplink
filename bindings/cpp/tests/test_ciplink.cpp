@@ -446,6 +446,46 @@ int main(int argc, char** argv) {
         CHECK(thrown);
     });
 
+    run("adapter_serves_its_assemblies_identity_and_app_line", [] {
+        ciplink::AdapterConfig config;
+        config.inputs = {{100, 8}};
+        config.outputs = {{150, 4}};
+        config.configs = {{199, 0}};
+        config.product_name = "Station";
+        config.product_code = 7;
+        config.app_name = "Station";
+        config.bind = "127.0.0.1";
+        config.port = 0;
+        config.io_port = 0;
+        ciplink::Adapter adapter(config);
+        adapter.set_input(100, {1, 2});
+        CHECK((adapter.input(100) == std::vector<uint8_t>{1, 2, 0, 0, 0, 0, 0, 0}));
+        ciplink::AdapterOutput out = adapter.output(150);
+        CHECK(out.data == std::vector<uint8_t>(4, 0) && !out.run);
+        CHECK(adapter.config(199).empty());
+        CHECK(adapter.next_event(0.05).is_null());
+        CHECK(adapter.connections().as_array().empty());
+        expect_error(CIPLINK_STATUS_REQUEST, [&] { adapter.set_input(101, {}); });
+
+        adapter.set_detail("station 2");
+        ciplink::Cip browser(adapter.address());
+        browser.open();
+        CHECK(browser.get_identity()["product_name"].as_string() == "Station");
+        CHECK(browser.get_app()["summary"].as_string() == "Station \xC2\xB7 station 2 \xC2\xB7 no connection");
+        browser.close();
+
+        adapter.stop();
+        CHECK(adapter.next_event(1.0).is_null());
+        expect_error(CIPLINK_STATUS_INVALID_ARGUMENT, [&] { adapter.input(100); });
+
+        ciplink::AdapterConfig twice;
+        twice.inputs = {{100, 8}};
+        twice.outputs = {{100, 4}};
+        twice.port = 0;
+        twice.io_port = 0;
+        expect_error(CIPLINK_STATUS_REQUEST, [&] { ciplink::Adapter bad(twice); });
+    });
+
     run("tag_server_starts_and_stops", [&] {
         namespace fs = std::filesystem;
         fs::path dir = fs::temp_directory_path() / "ciplink-cpp-server";

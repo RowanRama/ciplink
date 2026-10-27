@@ -876,6 +876,153 @@ private:
     std::unique_ptr<CiplinkServer, Stop> handle_;
 };
 
+// ---------------------------------------------------------------------------------------------- adapter
+
+/// The setup of an Adapter: ciplink as an EtherNet/IP I/O device that a Logix controller owns. Assemblies are
+/// (instance, size in bytes). The keys are those of ciplink_adapter_start.
+struct AdapterConfig {
+    std::vector<std::pair<uint32_t, size_t>> inputs, outputs, configs;
+    /// Identity object. vendor_id 0 is a placeholder: a device shipped with an EDS needs its vendor's own ID.
+    uint16_t vendor_id = 0, device_type = 0x2B, product_code = 1;
+    std::pair<uint8_t, uint8_t> revision{1, 1};
+    uint32_t serial = 0;
+    std::string product_name = "ciplink adapter";
+    /// Shown by device browsers next to the ciplink badge.
+    std::string app_name, app_version;
+    /// The EDS served by the File object (empty for none).
+    std::vector<uint8_t> eds;
+    std::string eds_name = "ciplink.eds";
+    /// The local IPv4 address (the network card); ports 0 pick free ones.
+    std::string bind = "0.0.0.0";
+    uint16_t port = 44818, io_port = 2222;
+    /// Accepted RPIs, in seconds.
+    double rpi_min = 0.002, rpi_max = 3.2;
+    uint32_t input_only_heartbeat = 238, listen_only_heartbeat = 237;
+
+    std::string to_json() const {
+        auto sizes = [](const std::vector<std::pair<uint32_t, size_t>>& list) {
+            Struct out;
+            for (auto& [instance, size] : list) out.emplace_back(std::to_string(instance), Value(int64_t(size)));
+            return Value(out);
+        };
+        Struct identity{{"vendor_id", Value(int64_t(vendor_id))},
+                        {"device_type", Value(int64_t(device_type))},
+                        {"product_code", Value(int64_t(product_code))},
+                        {"revision", Value(Array{Value(int64_t(revision.first)), Value(int64_t(revision.second))})},
+                        {"serial", Value(int64_t(serial))},
+                        {"product_name", Value(product_name)}};
+        Struct config{
+            {"inputs", sizes(inputs)},
+            {"outputs", sizes(outputs)},
+            {"configs", sizes(configs)},
+            {"identity", Value(identity)},
+            {"app_name", Value(app_name)},
+            {"app_version", Value(app_version)},
+            {"eds_name", Value(eds_name)},
+            {"bind", Value(bind)},
+            {"port", Value(int64_t(port))},
+            {"io_port", Value(int64_t(io_port))},
+            {"rpi_min", Value(rpi_min)},
+            {"rpi_max", Value(rpi_max)},
+            {"input_only_heartbeat", Value(int64_t(input_only_heartbeat))},
+            {"listen_only_heartbeat", Value(int64_t(listen_only_heartbeat))},
+        };
+        if (!eds.empty()) config.emplace_back("eds", Value(Bytes{eds}));
+        return ciplink::to_json(Value(config));
+    }
+};
+
+/// An output assembly's latest data and the controller's run bit.
+struct AdapterOutput {
+    std::vector<uint8_t> data;
+    bool run = false;
+};
+
+/// A running adapter (movable, not copyable); destroying it stops it. The I/O runs on the library's threads, so
+/// a slow application never makes a packet late. Thread-safe: one thread can wait in next_event() while others
+/// set inputs.
+class Adapter {
+public:
+    explicit Adapter(const AdapterConfig& config) {
+        CiplinkAdapter* raw = nullptr;
+        detail::check(ciplink_adapter_start(config.to_json().c_str(), &raw));
+        handle_.reset(raw);
+    }
+    Adapter(Adapter&&) noexcept = default;
+    Adapter& operator=(Adapter&&) noexcept = default;
+
+    /// "ip:port" of explicit messages and ListIdentity.
+    std::string address() const { return addresses()["address"].as_string(); }
+    /// "ip:port" of class 1 I/O.
+    std::string io_address() const { return addresses()["io_address"].as_string(); }
+
+    /// Sets an input assembly's data, sent in the next T->O packets; shorter data leaves the rest zero.
+    void set_input(uint32_t instance, const std::vector<uint8_t>& data) {
+        detail::check(ciplink_adapter_set_input(h(), instance, data.data(), data.size()));
+    }
+    std::vector<uint8_t> input(uint32_t instance) {
+        return bytes_([&](uint8_t** o, size_t* n) { return ciplink_adapter_input(h(), instance, o, n); });
+    }
+    /// The latest data and run bit of an output assembly (run is false before the first packet and after the owner
+    /// closed or timed out).
+    AdapterOutput output(uint32_t instance) {
+        AdapterOutput out;
+        out.data = bytes_([&](uint8_t** o, size_t* n) { return ciplink_adapter_output(h(), instance, o, n, &out.run); });
+        return out;
+    }
+    /// A configuration assembly's data, as the last Forward Open with data sent it.
+    std::vector<uint8_t> config(uint32_t instance) {
+        return bytes_([&](uint8_t** o, size_t* n) { return ciplink_adapter_config(h(), instance, o, n); });
+    }
+
+    /// The next event, waiting up to `timeout_seconds` (nullopt: until one comes or the adapter stops); null if
+    /// none came. An event has "event": "opened", "closed" or "timed_out" with "connection", "output" with
+    /// "instance", or "config" with "instance" and "data".
+    Value next_event(std::optional<double> timeout_seconds = std::nullopt) {
+        double timeout = timeout_seconds ? *timeout_seconds : -1.0;
+        return json_([&](char** o) { return ciplink_adapter_next_event(h(), timeout, o); });
+    }
+    /// The open class 1 connections: kind, originator, o_t_rpi and t_o_rpi (seconds), input, input_size, output
+    /// (null unless an owner), output_size, multicast, o_t_id and t_o_id.
+    Value connections() { return json_([&](char** o) { return ciplink_adapter_connections(h(), o); }); }
+    /// Sets the status text device browsers show, e.g. "station 2".
+    void set_detail(const std::string& text) { detail::check(ciplink_adapter_set_detail(h(), text.c_str())); }
+    /// produced packets, late ones (1 ms or more) and max_late (seconds).
+    Value stats() { return json_([&](char** o) { return ciplink_adapter_stats(h(), o); }); }
+    /// Stops the adapter: a thread waiting in next_event() returns null; later calls throw.
+    void stop() { detail::check(ciplink_adapter_stop(h())); }
+
+    /// The raw handle for calls this wrapper does not cover.
+    CiplinkAdapter* handle() const { return h(); }
+
+private:
+    CiplinkAdapter* h() const { return handle_.get(); }
+
+    Value addresses() const { return json_([&](char** o) { return ciplink_adapter_addresses(h(), o); }); }
+
+    template <class F>
+    static Value json_(F f) {
+        char* out = nullptr;
+        detail::check(f(&out));
+        return parse_json(detail::take(out));
+    }
+
+    template <class F>
+    static std::vector<uint8_t> bytes_(F f) {
+        uint8_t* data = nullptr;
+        size_t len = 0;
+        detail::check(f(&data, &len));
+        std::vector<uint8_t> out(data, data + len);
+        ciplink_bytes_free(data, len);
+        return out;
+    }
+
+    struct Free {
+        void operator()(CiplinkAdapter* p) const noexcept { ciplink_adapter_free(p); }
+    };
+    std::unique_ptr<CiplinkAdapter, Free> handle_;
+};
+
 inline std::string version() { return ciplink_version(); }
 
 }  // namespace ciplink
