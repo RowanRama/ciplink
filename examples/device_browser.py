@@ -11,6 +11,8 @@ Run from the repository root:  python -m examples.device_browser [address ...]
   its identity, WORKERS at a time, and the devices that answer are listed as they are found.
 - Select a row for its identity and the connection path to use with LogixDriver or CIPDriver.
   F5 browses the selected row again.
+- A ciplink adapter (ciplink as an I/O device) shows what it runs after its name, e.g.
+  "Station · station 2 · owned by 10.0.0.5, RPI 20 ms", and lists its assemblies and connections.
 """
 
 import ctypes
@@ -30,6 +32,11 @@ WORKERS = 32  # connections probing a port at once; each missing device costs th
 
 def label(identity):
     return identity.get("product_name", "") if identity else ""
+
+
+def app_line(app):
+    """The badge and application line of a ciplink device, "" for any other"""
+    return f"   [ciplink] {app['summary']}" if app else ""
 
 
 def address_key(address):
@@ -83,6 +90,7 @@ class DeviceBrowser:
         self.tree.tag_configure("network", font=self.fonts["bold"])
         self.tree.tag_configure("port", foreground="#1f4e8c")
         self.tree.tag_configure("note", foreground="#8a8f98")
+        self.tree.tag_configure("ciplink", foreground="#1a7f37")
         scroll = ttk.Scrollbar(left, command=self.tree.yview)
         self.tree.configure(yscrollcommand=scroll.set)
         scroll.pack(side="right", fill="y")
@@ -178,7 +186,8 @@ class DeviceBrowser:
         for device in sorted(devices, key=lambda d: tuple(map(int, d["ip_address"].split(".")))):
             if (device["ip_address"], "") not in known:
                 known.add((device["ip_address"], ""))
-                self._device_row(device["ip_address"], "", device)
+                iid = self._device_row(device["ip_address"], "", device)
+                self.jobs.put(lambda iid=iid, ip=device["ip_address"]: self._read_app(iid, ip, ""))
         self.status_var.set(f"Discovery found {len(devices)} device(s).")
 
     def add(self, address=None):
@@ -197,6 +206,22 @@ class DeviceBrowser:
         except Exception as e:
             identity, error = None, str(e)
         self.post(self._set_identity, iid, identity, error)
+        if identity:
+            self._read_app(iid, ip, route)
+
+    def _read_app(self, iid, ip, route):
+        with suppress(Exception):  # no badge is not an error
+            app = self.driver(ip).get_app(route)
+            if app:
+                self.post(self._set_app, iid, app)
+
+    def _set_app(self, iid, app):
+        if not self.tree.exists(iid):
+            return
+        row = self.rows[iid]
+        row["app"] = app
+        self.tree.item(iid, text=self._device_text(row), tags=("ciplink",))
+        self._render()
 
     def _set_identity(self, iid, identity, error):
         if not self.tree.exists(iid):
@@ -209,7 +234,7 @@ class DeviceBrowser:
 
     def _device_text(self, row):
         name = label(row["identity"]) or ("not reachable" if row.get("error") else "")
-        return f"{connection_path(row['ip'], row['route'])}   {name}"
+        return f"{connection_path(row['ip'], row['route'])}   {name}{app_line(row.get('app'))}"
 
     def _device_row(self, ip, route, identity):
         row = {"kind": "device", "ip": ip, "route": route, "identity": identity}
@@ -323,10 +348,11 @@ class DeviceBrowser:
             rows = [c for c in self.tree.get_children(iid) if self.rows.get(c, {}).get("kind") == "node"]
             index = sum(address_key(self.rows[c]["address"]) < key for c in rows)
             address = f"{int(node['address']):02d}" if node["address"].isdigit() else node["address"]
-            child = self.tree.insert(iid, index, text=f"{address}   {label(node['identity']) if found else 'Empty'}",
-                                     tags=() if found else ("note",))
+            text = f"{address}   {label(node['identity']) if found else 'Empty'}{app_line(node.get('app'))}"
+            tags = ("ciplink",) if node.get("app") else () if found else ("note",)
+            child = self.tree.insert(iid, index, text=text, tags=tags)
             self.rows[child] = {"kind": "node", "ip": row["ip"], "route": node["route"], "address": node["address"],
-                                "identity": node["identity"], "error": node["error"]}
+                                "identity": node["identity"], "error": node["error"], "app": node.get("app")}
             if found:
                 self.tree.insert(child, "end", text=LOADING, tags=("note",))
             else:
@@ -374,6 +400,18 @@ class DeviceBrowser:
                                     ("IP address", identity.get("ip_address")), ("State", identity.get("state"))):
                     if value is not None:
                         self._row(name, value)
+            app = row.get("app")
+            if app:
+                self._section("ciplink")
+                self._row("Application", f"{app['name'] or '-'} {app['version']}".strip())
+                self._row("Status", app["summary"])
+                self._row("ciplink", app["ciplink_version"])
+                for a in app["assemblies"]:
+                    self._row(f"{a['kind'].capitalize()} {a['instance']}", f"{a['size']} bytes")
+                for c in app["connections"]:
+                    pair = f"in {c['input']}" + (f", out {c['output']}" if "output" in c else "")
+                    rpi = c["t_o_rpi_us"] / 1000
+                    self._row(c["kind"].replace("_", " "), f"{c['originator']}, {pair}, RPI {rpi:g} ms")
         self.details.configure(state="disabled")
 
     def _section(self, title):
