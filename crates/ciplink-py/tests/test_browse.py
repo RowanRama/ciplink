@@ -78,7 +78,8 @@ def test_iter_port_streams_and_stops_when_closed(sim):
         nodes = drv.iter_port("", 2, workers=4)
         first = next(n for n in nodes if n["identity"])
         nodes.close()
-        assert first["identity"]["product_name"] == "2198-H008-ERS2"
+        # whichever device answers first: each found device is also asked for its ciplink app line
+        assert first["identity"]["product_name"] in ("2198-H008-ERS2", "2198-H015-ERS2")
         assert drv.get_identity()["product_name"] == "1756-SIM/A"  # the driver's own connection is free
 
         def fail(node):

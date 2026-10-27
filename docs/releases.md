@@ -9,6 +9,8 @@
   found at an IP address, so a node has an `app` (name, version, status text, assemblies, connections and a
   `summary` line); `get_app(route)` reads it for one device (`app_at` in Rust, `GetApp` in C#, `ciplink_get_app` in
   C).  `examples/device_browser.py` shows the badge and app line.
+- :construction_worker: the wiki is published from main whenever the docs change (a tag cannot deploy to the
+  github-pages environment).
 - :white_check_mark: the adapter's socket tests no longer flake on Windows: test scanners pick their own T→O
   connection IDs, and port 0 tries random ports, since Windows reserves blocks of UDP ports.
 

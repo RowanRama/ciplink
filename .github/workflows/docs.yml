@@ -1,10 +1,11 @@
 name: docs
 
-# Publishes the wiki (docs/, mkdocs.yml) to GitHub Pages for every release, so it matches the released packages.
-# Run it by hand (Actions > docs > Run workflow) to publish between releases.
+# Publishes the wiki (docs/, mkdocs.yml) to GitHub Pages from main: the github-pages environment only deploys main.
+# Features not released yet are under "Unreleased" in the release notes.
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+    paths: ["docs/**", "mkdocs.yml", "python/ciplink/**", ".github/workflows/docs.yml"]
   workflow_dispatch:
 
 permissions:
