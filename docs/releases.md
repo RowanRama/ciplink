@@ -1,5 +1,15 @@
 # Release History
 
+## ciplink 0.3.5
+
+- :sparkles: an opt-in EtherNet/IP adapter role in the Rust core (`ciplink::adapter`): an application that starts
+  an `Adapter` answers Forward Open and exchanges class 1 I/O, so a Logix controller can own it in its I/O tree
+  like an I/O module.  Nothing listens unless an app starts one.  Bindings follow.  See [Adapter](adapter.md).
+- :sparkles: the docs are a MkDocs wiki on GitHub Pages, with Python, Rust, C#, C++ and C examples in every guide.
+- :bug: a fragmented template or trend read no longer logs `ERROR ... Insufficient Packet Space` for each piece:
+  a generic message reply with general status 0x06 (partial transfer, more to read) logs at debug.  Real failures
+  still log at error.
+
 ## ciplink 0.3.4
 
 - :sparkles: `ciplink-server`: the tag server on the Rust core, a port of the Python ciplink-tagserver 0.4 with

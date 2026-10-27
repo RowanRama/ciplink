@@ -13,7 +13,7 @@
     <AssemblyName>Ciplink.Net</AssemblyName>
 
     <PackageId>Ciplink</PackageId>
-    <Version>0.3.4</Version>
+    <Version>0.3.5</Version>
     <Authors>Rowan Rama</Authors>
     <Description>.NET binding for ciplink, an EtherNet/IP (CIP) driver for Allen-Bradley ControlLogix, CompactLogix, Micro800 and SLC/MicroLogix PLCs.</Description>
     <PackageTags>ethernetip;cip;plc;logix;allen-bradley</PackageTags>
