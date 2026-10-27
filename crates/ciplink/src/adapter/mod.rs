@@ -91,6 +91,36 @@ pub enum AssemblyKind {
     Config,
 }
 
+impl AssemblyKind {
+    /// The lowercase name, e.g. `"input"`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            AssemblyKind::Input => "input",
+            AssemblyKind::Output => "output",
+            AssemblyKind::Config => "config",
+        }
+    }
+
+    /// The code in the ciplink object.
+    pub(crate) fn code(self) -> u8 {
+        match self {
+            AssemblyKind::Input => 1,
+            AssemblyKind::Output => 2,
+            AssemblyKind::Config => 3,
+        }
+    }
+
+    pub(crate) fn from_code(code: u8) -> Option<Self> {
+        [
+            AssemblyKind::Input,
+            AssemblyKind::Output,
+            AssemblyKind::Config,
+        ]
+        .into_iter()
+        .find(|k| k.code() == code)
+    }
+}
+
 /// An assembly instance of the adapter.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Assembly {
@@ -242,6 +272,36 @@ pub enum ConnectionKind {
     InputOnly,
     /// Receives an owner's multicast input; closes when the owner (and every input-only connection) does.
     ListenOnly,
+}
+
+impl ConnectionKind {
+    /// The lowercase name, e.g. `"exclusive_owner"`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ConnectionKind::ExclusiveOwner => "exclusive_owner",
+            ConnectionKind::InputOnly => "input_only",
+            ConnectionKind::ListenOnly => "listen_only",
+        }
+    }
+
+    /// The code in the ciplink object.
+    pub(crate) fn code(self) -> u8 {
+        match self {
+            ConnectionKind::ExclusiveOwner => 1,
+            ConnectionKind::InputOnly => 2,
+            ConnectionKind::ListenOnly => 3,
+        }
+    }
+
+    pub(crate) fn from_code(code: u8) -> Option<Self> {
+        [
+            ConnectionKind::ExclusiveOwner,
+            ConnectionKind::InputOnly,
+            ConnectionKind::ListenOnly,
+        ]
+        .into_iter()
+        .find(|k| k.code() == code)
+    }
 }
 
 /// A class 1 connection.

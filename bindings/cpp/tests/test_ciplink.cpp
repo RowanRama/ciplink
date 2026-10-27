@@ -407,6 +407,7 @@ int main(int argc, char** argv) {
         cip.open();
         CHECK(cip.get_identity()["product_name"].as_string() == "1756-SIM/A");
         CHECK(cip.get_identity("bp/1")["product_name"].as_string() == "1756-EN2T/D");
+        CHECK(cip.get_app().is_null());  // a controller is no ciplink device
         Value ports = cip.get_ports();
         CHECK(ports[0]["type_name"].as_string() == "Backplane");
         CHECK(ports[0]["nodes"].as_array().size() == 10);

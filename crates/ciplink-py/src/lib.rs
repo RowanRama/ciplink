@@ -501,6 +501,10 @@ fn nodes_py(py: Python<'_>, nodes: Vec<Node>) -> PyResult<Py<PyList>> {
                 None => dict.set_item("identity", py.None())?,
             }
             dict.set_item("error", &n.error)?;
+            match &n.app {
+                Some(app) => dict.set_item("app", value_to_py(py, &app.to_value())?)?,
+                None => dict.set_item("app", py.None())?,
+            }
             Ok(dict)
         })
         .collect::<PyResult<Vec<_>>>()?;
@@ -672,6 +676,13 @@ impl PyCipDriver {
         sync_log_level(py);
         let id = py.detach(|| self.inner.identity_at(route)).py()?;
         value_to_py(py, &id.to_value())
+    }
+
+    #[pyo3(signature = (route=""))]
+    fn get_app<'py>(&self, py: Python<'py>, route: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
+        sync_log_level(py);
+        let app = py.detach(|| self.inner.app_at(route)).py()?;
+        app.map(|app| value_to_py(py, &app.to_value())).transpose()
     }
 
     #[pyo3(signature = (route=""))]
@@ -865,6 +876,13 @@ impl PySlcDriver {
         sync_log_level(py);
         let id = py.detach(|| self.inner.cip().identity_at(route)).py()?;
         value_to_py(py, &id.to_value())
+    }
+
+    #[pyo3(signature = (route=""))]
+    fn get_app<'py>(&self, py: Python<'py>, route: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
+        sync_log_level(py);
+        let app = py.detach(|| self.inner.cip().app_at(route)).py()?;
+        app.map(|app| value_to_py(py, &app.to_value())).transpose()
     }
 
     #[pyo3(signature = (route=""))]
@@ -1239,6 +1257,13 @@ impl PyLogixDriver {
         sync_log_level(py);
         let id = py.detach(|| self.inner.identity_at(route)).py()?;
         value_to_py(py, &id.to_value())
+    }
+
+    #[pyo3(signature = (route=""))]
+    fn get_app<'py>(&self, py: Python<'py>, route: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
+        sync_log_level(py);
+        let app = py.detach(|| self.inner.app_at(route)).py()?;
+        app.map(|app| value_to_py(py, &app.to_value())).transpose()
     }
 
     #[pyo3(signature = (route=""))]

@@ -150,6 +150,9 @@ internal static partial class Native
     internal static partial int ciplink_get_identity(DriverHandle handle, string? route, out IntPtr json);
 
     [LibraryImport(Lib, StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial int ciplink_get_app(DriverHandle handle, string? route, out IntPtr json);
+
+    [LibraryImport(Lib, StringMarshalling = StringMarshalling.Utf8)]
     internal static partial int ciplink_get_ports(DriverHandle handle, string? route, out IntPtr json);
 
     [LibraryImport(Lib, StringMarshalling = StringMarshalling.Utf8)]

@@ -481,6 +481,11 @@ public:
     Value get_identity(const std::string& route = "") {
         return parse_json(json_call([&](char** o) { return ciplink_get_identity(h(), route.c_str(), o); }));
     }
+    /// What the ciplink device at `route` runs (name, version, detail, summary, ciplink_version, assemblies,
+    /// connections), null for any other device. `summary` is the line a device browser shows.
+    Value get_app(const std::string& route = "") {
+        return parse_json(json_call([&](char** o) { return ciplink_get_app(h(), route.c_str(), o); }));
+    }
     /// The ports of the device at `route`: an array of {number, type, type_name, name, address, ip, netmask,
     /// nodes}; `nodes` are the addresses browse_port probes (the slots, or every host of an EtherNet/IP port's
     /// subnet, at most a /24).

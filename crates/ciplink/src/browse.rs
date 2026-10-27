@@ -8,6 +8,7 @@
 //! An empty slot or missing device costs a reply from the bridge, which may wait for its Unconnected Send
 //! timeout (about 4 s), so a [`Scan`] probes the addresses of a port from several connections of its own.
 
+use crate::adapter::{Assembly, AssemblyKind, CIPLINK_OBJECT, CIPLINK_SIGNATURE, ConnectionKind};
 use crate::cip::{CipConnection, CipOptions, GenericMessage, RoutePath};
 use crate::epath::{LogicalValue, encode_epath, parse_cip_route};
 use crate::identity::ModuleIdentity;
@@ -15,6 +16,7 @@ use crate::reader::Reader;
 use crate::transport::Connector;
 use crate::types::Elementary;
 use crate::{Error, Result, Value};
+use indexmap::IndexMap;
 use std::net::Ipv4Addr;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, mpsc};
@@ -125,6 +127,165 @@ pub struct Node {
     pub identity: Option<ModuleIdentity>,
     /// Why there is no identity (e.g. an empty slot).
     pub error: Option<String>,
+    /// What a ciplink device runs (see [`AppInfo`]); probed only at IP addresses, since a ciplink adapter is
+    /// a PC on a network, never a module in a slot.
+    pub app: Option<AppInfo>,
+}
+
+/// What a ciplink [adapter](crate::adapter) runs, read from its ciplink object: the badge and application
+/// line of a device browser.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AppInfo {
+    /// The ciplink version of the device.
+    pub ciplink_version: String,
+    /// The application's name, e.g. `"Station"`.
+    pub name: String,
+    /// The application's version.
+    pub version: String,
+    /// The application's status text, e.g. `"station 2"`.
+    pub detail: String,
+    /// Its assemblies.
+    pub assemblies: Vec<Assembly>,
+    /// Its open class 1 connections (at most 16 are listed).
+    pub connections: Vec<AppConnection>,
+}
+
+/// A class 1 connection of a ciplink device, as its ciplink object lists it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AppConnection {
+    /// Exclusive owner, input only or listen only.
+    pub kind: ConnectionKind,
+    /// The scanner's IP address.
+    pub originator: Ipv4Addr,
+    /// O->T RPI in microseconds.
+    pub o_t_rpi_us: u32,
+    /// T->O RPI in microseconds.
+    pub t_o_rpi_us: u32,
+    /// T->O data is multicast.
+    pub multicast: bool,
+    /// The input assembly.
+    pub input: u16,
+    /// The output assembly, None without one.
+    pub output: Option<u16>,
+}
+
+impl AppInfo {
+    /// Decodes the ciplink object's Get_Attributes_All reply; None unless it carries the ciplink signature (other
+    /// devices may answer the class differently: a Logix controller with its program name).
+    pub fn decode(data: &[u8]) -> Option<AppInfo> {
+        let mut r = Reader::new(data);
+        let mut text = || -> Option<String> {
+            let len = r.u8().ok()?;
+            Some(String::from_utf8_lossy(r.take(len.into()).ok()?).into_owned())
+        };
+        if text()? != CIPLINK_SIGNATURE {
+            return None;
+        }
+        let (ciplink_version, name, version, detail) = (text()?, text()?, text()?, text()?);
+        let mut assemblies = Vec::new();
+        for _ in 0..r.u8().ok()? {
+            let instance = r.u16().ok()?;
+            let kind = AssemblyKind::from_code(r.u8().ok()?)?;
+            let size = r.u16().ok()?;
+            assemblies.push(Assembly {
+                instance: instance.into(),
+                kind,
+                size: size.into(),
+            });
+        }
+        let mut connections = Vec::new();
+        for _ in 0..r.u8().ok()? {
+            let kind = ConnectionKind::from_code(r.u8().ok()?)?;
+            let originator = Ipv4Addr::from(<[u8; 4]>::try_from(r.take(4).ok()?).ok()?);
+            let (o_t_rpi_us, t_o_rpi_us) = (r.u32().ok()?, r.u32().ok()?);
+            let multicast = r.u8().ok()? != 0;
+            let (input, output) = (r.u16().ok()?, r.u16().ok()?);
+            connections.push(AppConnection {
+                kind,
+                originator,
+                o_t_rpi_us,
+                t_o_rpi_us,
+                multicast,
+                input,
+                output: (output != 0).then_some(output),
+            });
+        }
+        Some(AppInfo {
+            ciplink_version,
+            name,
+            version,
+            detail,
+            assemblies,
+            connections,
+        })
+    }
+
+    /// The application line of a device browser, e.g. `"Station · station 2 · owned by 10.0.0.5, RPI 20 ms"`.
+    pub fn summary(&self) -> String {
+        let rpi = |us: u32| match us % 1000 {
+            0 => format!("RPI {} ms", us / 1000),
+            _ => format!("RPI {} ms", f64::from(us) / 1000.0),
+        };
+        let owners: Vec<_> = (self.connections.iter())
+            .filter(|c| c.kind == ConnectionKind::ExclusiveOwner)
+            .map(|c| format!("{}, {}", c.originator, rpi(c.t_o_rpi_us)))
+            .collect();
+        let state = match (owners.is_empty(), self.connections.first()) {
+            (false, _) => format!("owned by {}", owners.join("; ")),
+            (true, Some(c)) => format!("read by {}, {}", c.originator, rpi(c.t_o_rpi_us)),
+            (true, None) => "no connection".to_owned(),
+        };
+        let name = if self.name.is_empty() {
+            CIPLINK_SIGNATURE
+        } else {
+            &self.name
+        };
+        [name, &self.detail, &state]
+            .into_iter()
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join(" · ")
+    }
+
+    /// The application as the Python driver's dict (`summary` included).
+    pub fn to_value(&self) -> Value {
+        let s = |text: &str| Value::String(text.to_owned());
+        let assemblies = (self.assemblies.iter())
+            .map(|a| {
+                Value::Struct(IndexMap::from([
+                    ("instance".to_owned(), Value::UDInt(a.instance)),
+                    ("kind".to_owned(), s(a.kind.as_str())),
+                    ("size".to_owned(), Value::UDInt(a.size as u32)),
+                ]))
+            })
+            .collect();
+        let connections = (self.connections.iter())
+            .map(|c| {
+                let mut conn = IndexMap::from([
+                    ("kind".to_owned(), s(c.kind.as_str())),
+                    ("originator".to_owned(), s(&c.originator.to_string())),
+                    ("o_t_rpi_us".to_owned(), Value::UDInt(c.o_t_rpi_us)),
+                    ("t_o_rpi_us".to_owned(), Value::UDInt(c.t_o_rpi_us)),
+                    ("multicast".to_owned(), Value::Bool(c.multicast)),
+                    ("input".to_owned(), Value::UInt(c.input)),
+                ]);
+                // only an exclusive owner has an output assembly
+                if let Some(output) = c.output {
+                    conn.insert("output".to_owned(), Value::UInt(output));
+                }
+                Value::Struct(conn)
+            })
+            .collect();
+        Value::Struct(IndexMap::from([
+            ("ciplink_version".to_owned(), s(&self.ciplink_version)),
+            ("name".to_owned(), s(&self.name)),
+            ("version".to_owned(), s(&self.version)),
+            ("detail".to_owned(), s(&self.detail)),
+            ("summary".to_owned(), s(&self.summary())),
+            ("assemblies".to_owned(), Value::Array(assemblies)),
+            ("connections".to_owned(), Value::Array(connections)),
+        ]))
+    }
 }
 
 /// The route one hop past `route` on `port`.
@@ -212,6 +373,20 @@ impl CipConnection {
             .request_at(route, GET_ATTRIBUTES_ALL, 0x01, 1, None, "identity")?
             .map_err(Error::response)?;
         ModuleIdentity::decode(&mut Reader::new(&data))
+    }
+
+    /// What the ciplink device at `route` runs (its ciplink object), None for any other device. CommErrors pass
+    /// through.
+    pub fn app_at(&mut self, route: &str) -> Result<Option<AppInfo>> {
+        let reply = self.request_at(
+            route,
+            GET_ATTRIBUTES_ALL,
+            CIPLINK_OBJECT,
+            1,
+            None,
+            "ciplink",
+        )?;
+        Ok(reply.ok().and_then(|data| AppInfo::decode(&data)))
     }
 
     /// The ports of the device at `route`, none if it has no Port Object.
@@ -403,15 +578,28 @@ impl Scan {
                 *conn = Some(c);
             }
             let c = conn.as_mut().ok_or_else(|| Error::comm("no connection"))?;
-            c.identity_at(&route)
+            let identity = c.identity_at(&route)?;
+            // a ciplink adapter is a PC: only a node at an IP address can be one, so slots cost nothing extra
+            let app = match address.parse::<Ipv4Addr>().map(|_| c.app_at(&route)) {
+                Ok(Ok(app)) => app,
+                Ok(Err(err)) => {
+                    // the identity stands; a lost connection is opened again for the next address
+                    if matches!(err, Error::Comm(_)) {
+                        *conn = None;
+                    }
+                    None
+                }
+                Err(_) => None,
+            };
+            Ok((identity, app))
         })();
-        let (identity, error) = match result {
-            Ok(identity) => (Some(identity), None),
+        let (identity, app, error) = match result {
+            Ok((identity, app)) => (Some(identity), app, None),
             Err(err) => {
                 if matches!(err, Error::Comm(_)) {
                     *conn = None;
                 }
-                (None, Some(err.to_string()))
+                (None, None, Some(err.to_string()))
             }
         };
         Node {
@@ -419,6 +607,7 @@ impl Scan {
             address: address.to_owned(),
             identity,
             error,
+            app,
         }
     }
 }
@@ -437,6 +626,55 @@ mod tests {
         assert_eq!(seg(&[0x0F, 0x12, 0x00, 0x05]).as_deref(), Some("18/5"));
         assert_eq!(seg(&[0x20, 0x01]), None);
         assert_eq!(seg(&[]), None);
+    }
+
+    fn ciplink_object(connections: &[[u8; 18]]) -> Vec<u8> {
+        let mut data = b"ciplink0.3.4Station1.0	station 2".to_vec();
+        data.extend([1, 100, 0, 1, 148, 0]); // input 100 of 148 bytes
+        data.push(connections.len() as u8);
+        connections.iter().for_each(|c| data.extend(c));
+        data
+    }
+
+    // kind, originator, O->T and T->O RPI (us), multicast, input, output
+    const OWNER: [u8; 18] = [
+        1, 192, 0, 2, 5, 0x20, 0x4E, 0, 0, 0x20, 0x4E, 0, 0, 1, 100, 0, 150, 0,
+    ];
+    const LISTENER: [u8; 18] = [
+        3, 192, 0, 2, 6, 0x20, 0x4E, 0, 0, 0xC4, 0x09, 0, 0, 1, 100, 0, 0, 0,
+    ];
+
+    #[test]
+    fn the_ciplink_object_decodes_into_the_app_line() {
+        let app = AppInfo::decode(&ciplink_object(&[OWNER, LISTENER])).expect("a ciplink device");
+        assert_eq!(app.assemblies, [Assembly::input(100, 148)]);
+        assert_eq!(app.connections[0].kind, ConnectionKind::ExclusiveOwner);
+        assert_eq!(app.connections[0].output, Some(150));
+        assert_eq!(app.connections[1].output, None);
+        assert_eq!(
+            app.summary(),
+            "Station · station 2 · owned by 192.0.2.5, RPI 20 ms"
+        );
+        let only_listener = AppInfo::decode(&ciplink_object(&[LISTENER])).expect("app");
+        assert_eq!(
+            only_listener.summary(),
+            "Station · station 2 · read by 192.0.2.6, RPI 2.5 ms"
+        );
+    }
+
+    #[test]
+    fn other_answers_of_the_class_are_not_ciplink_devices() {
+        // a Logix controller answers class 0x64 with its program name, a STRING with a 2-byte length
+        assert_eq!(AppInfo::decode(b" ciplink"), None);
+        assert_eq!(AppInfo::decode(b""), None);
+        let full = ciplink_object(&[OWNER]);
+        for cut in 0..full.len() {
+            assert_eq!(AppInfo::decode(&full[..cut]), None, "cut at {cut}");
+        }
+        let mut bad_kind = full.clone();
+        let at = full.len() - 18;
+        bad_kind[at] = 9;
+        assert_eq!(AppInfo::decode(&bad_kind), None);
     }
 
     #[test]

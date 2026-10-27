@@ -400,7 +400,30 @@ fn browsers_read_its_identity_ports_and_ciplink_object() {
 }
 
 #[test]
+fn browsers_show_what_the_adapter_runs_and_who_owns_it() {
+    let _one_at_a_time = one_at_a_time();
+    let adapter = adapter();
+    adapter.set_detail("station 2");
+    let driver = driver(&adapter);
+    let idle = driver.app_at("").unwrap().unwrap();
+    assert_eq!(idle.summary(), "Station · station 2 · no connection");
+    let _owner = open(&adapter, IoRequest::owner(150, 32, 100, 148, RPI)).unwrap();
+    let app = driver.app_at("").unwrap().unwrap();
+    assert_eq!(app.connections.len(), 1);
+    assert_eq!(
+        app.summary(),
+        "Station · station 2 · owned by 127.0.0.1, RPI 10 ms"
+    );
+    // a scan of a network probes each device it finds for the app line
+    let nodes = driver
+        .browse_port("", 2, Some(&["127.0.0.1".to_owned()]), 1)
+        .unwrap();
+    assert_eq!(nodes[0].app.as_ref(), Some(&app));
+}
+
+#[test]
 fn list_identity_over_udp_finds_the_adapter() {
+    let _one_at_a_time = one_at_a_time();
     let adapter = adapter();
     let found = CipDriver::discover_at(None, "127.0.0.1", adapter.addr().port());
     assert_eq!(found.len(), 1);

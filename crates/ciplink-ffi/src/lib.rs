@@ -1449,11 +1449,16 @@ fn node_json(n: &Node) -> FfiResult<Json> {
         Some(id) => parse_json(&value_string(&id.to_value()), "identity")?,
         None => Json::Null,
     };
+    let app = match &n.app {
+        Some(app) => parse_json(&value_string(&app.to_value()), "app")?,
+        None => Json::Null,
+    };
     Ok(serde_json::json!({
         "route": n.route,
         "address": n.address,
         "identity": identity,
         "error": n.error,
+        "app": app,
     }))
 }
 
@@ -1500,6 +1505,36 @@ pub unsafe extern "C" fn ciplink_get_identity(
     })
 }
 
+/// Reads what the ciplink device at `route` runs (its ciplink object) as a JSON object, or `null` for any other
+/// device: `{"name": str, "version": str, "detail": str, "summary": str, "ciplink_version": str, "assemblies":
+/// [{"instance": int, "kind": str, "size": int}], "connections": [{"kind": str, "originator": str, "o_t_rpi_us":
+/// int, "t_o_rpi_us": int, "multicast": bool, "input": int, "output": int (exclusive owners only)}]}`. `summary` is
+/// the line a device browser shows, e.g. `"Station · station 2 · owned by 10.0.0.5, RPI 20 ms"`.
+///
+/// # Safety
+/// `handle` is NULL or a live handle; `route` is NULL or a NUL-terminated string; `out_json` is writable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ciplink_get_app(
+    handle: *const CiplinkDriver,
+    route: *const c_char,
+    out_json: *mut *mut c_char,
+) -> CiplinkStatus {
+    with_handle(handle, |h| {
+        check_out(out_json)?;
+        let route = opt_str(route, "route")?.unwrap_or("");
+        let app = match &h.driver {
+            Driver::Logix(d) => d.app_at(route)?,
+            Driver::Slc(d) => d.cip().app_at(route)?,
+            Driver::Cip(d) => d.app_at(route)?,
+        };
+        let json = match app {
+            Some(app) => value_string(&app.to_value()),
+            None => "null".to_owned(),
+        };
+        put_string(out_json, json)
+    })
+}
+
 /// Reads the ports of the device at `route` (its Port Object, like the networks RSWho shows under a device) as a
 /// JSON array of `{"number": int, "type": int, "type_name": str, "name": str, "address": null|str, "ip":
 /// null|str, "netmask": null|str, "nodes": null|[str]}`; `nodes` are the addresses [`ciplink_browse_port`] probes
@@ -1531,7 +1566,8 @@ pub unsafe extern "C" fn ciplink_get_ports(
 /// Probes every address on `port` of the device at `route` for its identity, like expanding a backplane or
 /// network in RSWho, from `workers` connections of their own at once (each missing device may cost the bridge's
 /// ~4 s timeout). `nodes_json` is NULL for the port's own addresses, or a JSON array of them. The nodes in
-/// address order as a JSON array of `{"route": str, "address": str, "identity": null|object, "error": null|str}`.
+/// address order as a JSON array of `{"route": str, "address": str, "identity": null|object, "error": null|str,
+/// "app": null|object}` (`app` as [`ciplink_get_app`], read only for a ciplink device at an IP address).
 ///
 /// # Safety
 /// `handle` is NULL or a live handle; `route` and `nodes_json` are NULL or NUL-terminated strings; `out_json`

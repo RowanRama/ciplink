@@ -240,6 +240,15 @@ class CIPDriver:
         """
         return self._core.get_identity(route)
 
+    def get_app(self, route: str = "") -> Optional[Dict[str, Any]]:
+        """
+        What the ciplink device at ``route`` runs (its ciplink object), None for any other device: ``name``,
+        ``version``, ``detail``, ``summary`` (the line a device browser shows, e.g.
+        ``"Station · station 2 · owned by 10.0.0.5, RPI 20 ms"``), ``ciplink_version``, ``assemblies`` and
+        ``connections``.  :meth:`browse_port` reads it for every device it finds at an IP address (``node["app"]``).
+        """
+        return self._core.get_app(route)
+
     def get_ports(self, route: str = "") -> List[Dict[str, Any]]:
         """
         Get the ports of the device at ``route`` (its Port Object, class 0xF4), like the networks RSWho
@@ -264,7 +273,8 @@ class CIPDriver:
         :param port: a port dict from :meth:`get_ports`, or a port number
         :param nodes: the addresses to probe, by default the port's ``nodes``
         :return: a dict per address, in their order: ``route`` (to browse it further), ``address``,
-                 ``identity`` (as :meth:`get_identity`, None if nothing answered) and ``error``
+                 ``identity`` (as :meth:`get_identity`, None if nothing answered), ``error`` and ``app`` (as
+                 :meth:`get_app`, only for a ciplink device at an IP address, else None)
         """
         number, nodes = _port_nodes(port, nodes)
         return self._core.browse_port(route, number, nodes, workers)

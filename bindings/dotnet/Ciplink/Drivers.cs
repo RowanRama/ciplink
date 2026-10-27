@@ -70,6 +70,14 @@ public abstract class Driver : IDisposable
         (JsonObject)CallNode((out IntPtr j) => Native.ciplink_get_identity(_handle, route, out j))!;
 
     /// <summary>
+    /// What the ciplink device at <paramref name="route"/> runs (name, version, detail, summary, ciplink_version,
+    /// assemblies, connections), or null for any other device. <c>summary</c> is the line a device browser shows,
+    /// e.g. "Station · station 2 · owned by 10.0.0.5, RPI 20 ms".
+    /// </summary>
+    public JsonObject? GetApp(string route = "") =>
+        CallNode((out IntPtr j) => Native.ciplink_get_app(_handle, route, out j)) as JsonObject;
+
+    /// <summary>
     /// The ports of the device at <paramref name="route"/>: objects with number, type, type_name, name, address,
     /// ip, netmask and nodes, the addresses <see cref="BrowsePort"/> probes (the slots, or every host of an
     /// EtherNet/IP port's subnet, at most a /24).

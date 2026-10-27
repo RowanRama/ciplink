@@ -263,6 +263,7 @@ public sealed class BrowseTests
         cip.Open();
         Assert.Equal("1756-SIM/A", cip.GetIdentity()["product_name"]!.GetValue<string>());
         Assert.Equal("1756-EN2T/D", cip.GetIdentity("bp/1")["product_name"]!.GetValue<string>());
+        Assert.Null(cip.GetApp()); // a controller is no ciplink device
         JsonArray ports = cip.GetPorts();
         Assert.Equal("Backplane", ports[0]!["type_name"]!.GetValue<string>());
         Assert.Equal(10, ports[0]!["nodes"]!.AsArray().Count);

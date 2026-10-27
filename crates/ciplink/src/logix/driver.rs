@@ -2301,6 +2301,11 @@ impl LogixDriver {
         self.lock().conn.identity_at(route)
     }
 
+    /// What the ciplink device at `route` runs, None for any other device (see [`crate::browse::AppInfo`]).
+    pub fn app_at(&self, route: &str) -> Result<Option<crate::browse::AppInfo>> {
+        self.lock().conn.app_at(route)
+    }
+
     /// The ports of the device at `route` (see [`crate::browse`]).
     pub fn ports_at(&self, route: &str) -> Result<Vec<crate::browse::PortInfo>> {
         self.lock().conn.ports_at(route)

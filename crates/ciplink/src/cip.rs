@@ -822,6 +822,11 @@ impl CipDriver {
         self.lock().identity_at(route)
     }
 
+    /// What the ciplink device at `route` runs, None for any other device (see [`crate::browse::AppInfo`]).
+    pub fn app_at(&self, route: &str) -> Result<Option<crate::browse::AppInfo>> {
+        self.lock().app_at(route)
+    }
+
     /// The ports of the device at `route` (see [`crate::browse`]).
     pub fn ports_at(&self, route: &str) -> Result<Vec<PortInfo>> {
         self.lock().ports_at(route)

@@ -3,7 +3,7 @@
 
 use super::state::State;
 use super::wire::{self, Seg, reply, short_string};
-use super::{AssemblyKind, CIPLINK_OBJECT, CIPLINK_SIGNATURE, ConnectionKind};
+use super::{CIPLINK_OBJECT, CIPLINK_SIGNATURE};
 use std::net::Ipv4Addr;
 
 const GET_ATTRIBUTES_ALL: u8 = 0x01;
@@ -358,21 +358,13 @@ fn ciplink(state: &State, service: u8, instance: u32) -> Result<Vec<u8>, u8> {
     out.push(state.assemblies.len().min(255) as u8);
     for a in state.assemblies.iter().take(255) {
         out.extend((a.instance as u16).to_le_bytes());
-        out.push(match a.kind {
-            AssemblyKind::Input => 1,
-            AssemblyKind::Output => 2,
-            AssemblyKind::Config => 3,
-        });
+        out.push(a.kind.code());
         out.extend((a.data.len() as u16).to_le_bytes());
     }
     let listed = state.conns.len().min(MAX_LISTED);
     out.push(listed as u8);
     for c in state.conns.iter().take(listed) {
-        out.push(match c.kind {
-            ConnectionKind::ExclusiveOwner => 1,
-            ConnectionKind::InputOnly => 2,
-            ConnectionKind::ListenOnly => 3,
-        });
+        out.push(c.kind.code());
         out.extend(c.originator.octets());
         out.extend((c.o_t_rpi.as_micros() as u32).to_le_bytes());
         out.extend((c.t_o_rpi.as_micros() as u32).to_le_bytes());
@@ -587,5 +579,24 @@ mod tests {
         expected.extend(b"\x07Station\x032.1\x09station 2");
         expected.extend([2, 100, 0, 1, 4, 0, 150, 0, 2, 2, 0, 0]);
         assert_eq!(rest, expected);
+    }
+
+    #[test]
+    fn browsers_decode_the_ciplink_object() {
+        let (mut s, mut c) = (state(None), ctx());
+        s.detail = "station 2".into();
+        let reply = ask(&mut s, &mut c, 0x01, &[0x20, 0x64, 0x24, 0x01], &[]);
+        let app = crate::browse::AppInfo::decode(&reply[4..]).expect("a ciplink device");
+        assert_eq!(app.ciplink_version, env!("CARGO_PKG_VERSION"));
+        assert_eq!(
+            (app.name.as_str(), app.version.as_str()),
+            ("Station", "2.1")
+        );
+        assert_eq!(
+            app.assemblies,
+            [Assembly::input(100, 4), Assembly::output(150, 2)]
+        );
+        assert!(app.connections.is_empty());
+        assert_eq!(app.summary(), "Station · station 2 · no connection");
     }
 }

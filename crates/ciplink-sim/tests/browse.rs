@@ -156,3 +156,18 @@ fn a_scan_probes_the_port_from_several_connections_and_can_stop_early() {
     // a port the device does not have has nothing to scan
     assert!(driver.browse_port("", 9, None, 4).unwrap().is_empty());
 }
+
+#[test]
+fn only_ciplink_devices_have_an_app() {
+    let sim = chassis();
+    let driver = driver(&sim);
+    // the controller answers class 0x64 with its program name, which is not a ciplink object
+    assert_eq!(driver.app_at("").unwrap(), None);
+    let nodes = driver
+        .browse_port("", 2, Some(&["10.1.2.40".to_owned()]), 1)
+        .unwrap();
+    assert!(nodes[0].identity.is_some());
+    assert_eq!(nodes[0].app, None);
+    let slots = driver.browse_port("", 1, None, 4).unwrap();
+    assert!(slots.iter().all(|n| n.app.is_none()));
+}

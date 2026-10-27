@@ -369,6 +369,18 @@ enum CiplinkStatus ciplink_get_identity(const struct CiplinkDriver *handle,
                                         const char *route,
                                         char **out_json);
 
+// Reads what the ciplink device at `route` runs (its ciplink object) as a JSON object, or `null` for any other
+// device: `{"name": str, "version": str, "detail": str, "summary": str, "ciplink_version": str, "assemblies":
+// [{"instance": int, "kind": str, "size": int}], "connections": [{"kind": str, "originator": str, "o_t_rpi_us":
+// int, "t_o_rpi_us": int, "multicast": bool, "input": int, "output": int (exclusive owners only)}]}`. `summary` is
+// the line a device browser shows, e.g. `"Station · station 2 · owned by 10.0.0.5, RPI 20 ms"`.
+//
+// # Safety
+// `handle` is NULL or a live handle; `route` is NULL or a NUL-terminated string; `out_json` is writable.
+enum CiplinkStatus ciplink_get_app(const struct CiplinkDriver *handle,
+                                   const char *route,
+                                   char **out_json);
+
 // Reads the ports of the device at `route` (its Port Object, like the networks RSWho shows under a device) as a
 // JSON array of `{"number": int, "type": int, "type_name": str, "name": str, "address": null|str, "ip":
 // null|str, "netmask": null|str, "nodes": null|[str]}`; `nodes` are the addresses [`ciplink_browse_port`] probes
@@ -383,7 +395,8 @@ enum CiplinkStatus ciplink_get_ports(const struct CiplinkDriver *handle,
 // Probes every address on `port` of the device at `route` for its identity, like expanding a backplane or
 // network in RSWho, from `workers` connections of their own at once (each missing device may cost the bridge's
 // ~4 s timeout). `nodes_json` is NULL for the port's own addresses, or a JSON array of them. The nodes in
-// address order as a JSON array of `{"route": str, "address": str, "identity": null|object, "error": null|str}`.
+// address order as a JSON array of `{"route": str, "address": str, "identity": null|object, "error": null|str,
+// "app": null|object}` (`app` as [`ciplink_get_app`], read only for a ciplink device at an IP address).
 //
 // # Safety
 // `handle` is NULL or a live handle; `route` and `nodes_json` are NULL or NUL-terminated strings; `out_json`

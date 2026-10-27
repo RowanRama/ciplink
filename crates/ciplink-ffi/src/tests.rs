@@ -1014,6 +1014,9 @@ fn browsing_lists_ports_slots_and_the_devices_on_the_network() {
         &h,
     );
     assert_eq!(id["product_name"], "1756-EN2T/D");
+    // a controller is no ciplink device
+    let app = json_out(|o| unsafe { ciplink_get_app(h.0, ptr::null(), o) }, &h);
+    assert!(app.is_null());
 
     let ports = json_out(|o| unsafe { ciplink_get_ports(h.0, ptr::null(), o) }, &h);
     assert_eq!(ports[0]["type_name"], "Backplane");
