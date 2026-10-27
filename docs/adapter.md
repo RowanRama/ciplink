@@ -9,8 +9,9 @@ see it.
 Use it when a ciplink application is a service host the PLC should talk to directly, e.g. a vision station that
 takes a trigger from the PLC and returns results every RPI.
 
-!!! note "Rust only for now"
-    The adapter is in the Rust core (`ciplink::adapter`); the Python, C, C++ and C# bindings follow.
+!!! note "Rust and Python for now"
+    The adapter is in the Rust core (`ciplink::adapter`) and in Python (`ciplink.adapter`); the C, C++ and C#
+    bindings follow.
 
 ## What it does
 
@@ -54,6 +55,26 @@ closed or timed out, new output data, and new config data.
         }
     }
     ```
+
+=== "Python"
+
+    ```python
+    from ciplink.adapter import Adapter
+
+    with Adapter(inputs={100: 148}, outputs={150: 32}, configs={199: 0}, app_name="Station") as adapter:
+        adapter.set_input(100, bytes([1, 2, 3]))
+        while True:
+            event = adapter.next_event(1.0)  # a dict, or None after 1 s
+            if event and event["event"] == "opened":
+                c = event["connection"]
+                print(c["kind"], "opened by", c["originator"])
+            elif event and event["event"] == "output":
+                data, run = adapter.output(event["instance"])
+                print("trigger", data[0] & 1, "run", run)
+    ```
+
+    The I/O runs on the core's threads, so a slow Python loop never makes a packet late. `identity={...}` sets
+    the Identity object, RPIs are in seconds, and the other keywords are those of `AdapterConfig`.
 
 ## Adding it to a Logix project
 

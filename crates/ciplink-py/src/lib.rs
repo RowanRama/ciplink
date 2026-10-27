@@ -4,6 +4,7 @@
 //! the GIL around every call that may touch the network or the driver lock, and raise the exception classes of
 //! the pure-Python `ciplink.exceptions` module.  The `ciplink` package wraps these classes in its public API.
 
+mod adapter;
 mod defs;
 mod server;
 
@@ -1699,6 +1700,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyLogixDriver>()?;
     m.add_class::<PyTrend>()?;
     m.add_class::<server::PyTagServer>()?;
+    m.add_class::<adapter::PyAdapter>()?;
     m.add_function(wrap_pyfunction!(server::server_main, m)?)?;
     Ok(())
 }

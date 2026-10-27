@@ -27,6 +27,10 @@ Generated from the docstrings of the `ciplink` package. The other languages are 
 
 ::: ciplink.TrendPen
 
+## Adapter
+
+::: ciplink.adapter.Adapter
+
 ## Tag server
 
 ::: ciplink.server.TagServer
