@@ -41,6 +41,18 @@ internal sealed class ServerHandle : SafeHandleZeroOrMinusOneIsInvalid
     }
 }
 
+/// <summary>Owns a <c>CiplinkAdapter*</c>; releasing it stops the adapter and frees it.</summary>
+internal sealed class AdapterHandle : SafeHandleZeroOrMinusOneIsInvalid
+{
+    public AdapterHandle() : base(ownsHandle: true) { }
+
+    protected override bool ReleaseHandle()
+    {
+        Native.ciplink_adapter_free(handle);
+        return true;
+    }
+}
+
 /// <summary>The <c>CiplinkMessage</c> struct of ciplink.h (x64 size 56).</summary>
 [StructLayout(LayoutKind.Sequential)]
 internal struct NativeMessage
@@ -211,6 +223,42 @@ internal static partial class Native
 
     [LibraryImport(Lib)]
     internal static partial int ciplink_server_stop(IntPtr server);
+
+    [LibraryImport(Lib, StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial int ciplink_adapter_start(string? configJson, out AdapterHandle adapter);
+
+    [LibraryImport(Lib)]
+    internal static partial int ciplink_adapter_addresses(AdapterHandle adapter, out IntPtr json);
+
+    [LibraryImport(Lib)]
+    internal static unsafe partial int ciplink_adapter_set_input(AdapterHandle adapter, uint instance, byte* data, nuint len);
+
+    [LibraryImport(Lib)]
+    internal static partial int ciplink_adapter_input(AdapterHandle adapter, uint instance, out IntPtr data, out nuint len);
+
+    [LibraryImport(Lib)]
+    internal static partial int ciplink_adapter_output(AdapterHandle adapter, uint instance, out IntPtr data, out nuint len, out byte run);
+
+    [LibraryImport(Lib)]
+    internal static partial int ciplink_adapter_config(AdapterHandle adapter, uint instance, out IntPtr data, out nuint len);
+
+    [LibraryImport(Lib)]
+    internal static partial int ciplink_adapter_next_event(AdapterHandle adapter, double timeoutSeconds, out IntPtr json);
+
+    [LibraryImport(Lib)]
+    internal static partial int ciplink_adapter_connections(AdapterHandle adapter, out IntPtr json);
+
+    [LibraryImport(Lib, StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial int ciplink_adapter_set_detail(AdapterHandle adapter, string detail);
+
+    [LibraryImport(Lib)]
+    internal static partial int ciplink_adapter_stats(AdapterHandle adapter, out IntPtr json);
+
+    [LibraryImport(Lib)]
+    internal static partial int ciplink_adapter_stop(AdapterHandle adapter);
+
+    [LibraryImport(Lib)]
+    internal static partial void ciplink_adapter_free(IntPtr adapter);
 
     /// <summary>Always called with NULL: the calling thread's latest error, which every failing call sets.</summary>
     [LibraryImport(Lib)]
