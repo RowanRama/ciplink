@@ -29,6 +29,11 @@ typedef enum CiplinkStatus {
   CIPLINK_STATUS_PANIC = 7,
 } CiplinkStatus;
 
+// A running adapter, made by [`ciplink_adapter_start`], stopped by [`ciplink_adapter_stop`] (other threads' calls
+// then fail or return no event) and freed by [`ciplink_adapter_free`]. The adapter functions report failures on
+// the calling thread: [`ciplink_last_error`](super::ciplink_last_error) with NULL.
+typedef struct CiplinkAdapter CiplinkAdapter;
+
 // A driver handle: a Logix, SLC or plain CIP driver.
 typedef struct CiplinkDriver CiplinkDriver;
 
@@ -533,6 +538,118 @@ void ciplink_bytes_free(uint8_t *data,
 
 // The library version, a static string (do not free).
 const char *ciplink_version(void);
+
+// Starts an adapter: binds its ports (TCP/UDP 44818 and UDP 2222 by default) and starts its I/O threads. A config
+// the adapter refuses (e.g. one instance used twice) is a [`CiplinkStatus::Request`] error, a port that is taken a
+// [`CiplinkStatus::Comm`] error.
+//
+// `config_json` keys (all optional): `inputs`, `outputs` and `configs` (assemblies as `{"instance": size in
+// bytes}`), `identity` (`{"vendor_id", "device_type", "product_code", "revision": [major, minor], "serial",
+// "product_name"}`), `app_name`, `app_version`, `eds` (`{"$bytes": hex}`) or `eds_file` (a path), `eds_name`, `bind`
+// (the local IPv4 address, default `"0.0.0.0"`), `port` (44818) and `io_port` (2222; 0 picks a free port),
+// `rpi_min` and `rpi_max` (seconds, default 0.002 and 3.2), `input_only_heartbeat` (238), `listen_only_heartbeat`
+// (237) and `mac` (6 numbers).
+//
+// # Safety
+// `config_json` is NULL or NUL-terminated; `out` is writable.
+enum CiplinkStatus ciplink_adapter_start(const char *config_json,
+                                         struct CiplinkAdapter **out);
+
+// The addresses the adapter listens on, as JSON `{"address": "ip:port", "io_address": "ip:port"}`: explicit
+// messages and ListIdentity, and class 1 I/O.
+//
+// # Safety
+// `adapter` is NULL or a live adapter; `out_json` is writable.
+enum CiplinkStatus ciplink_adapter_addresses(const struct CiplinkAdapter *adapter,
+                                             char **out_json);
+
+// Sets an input assembly's data, sent in the next T->O packets; shorter data leaves the rest zero.
+//
+// # Safety
+// `adapter` is NULL or a live adapter; `data` is NULL (with `len` 0) or `len` readable bytes.
+enum CiplinkStatus ciplink_adapter_set_input(const struct CiplinkAdapter *adapter,
+                                             uint32_t instance,
+                                             const uint8_t *data,
+                                             size_t len);
+
+// An input assembly's current data; free it with [`ciplink_bytes_free`](super::ciplink_bytes_free).
+//
+// # Safety
+// `adapter` is NULL or a live adapter; `out` and `out_len` are writable.
+enum CiplinkStatus ciplink_adapter_input(const struct CiplinkAdapter *adapter,
+                                         uint32_t instance,
+                                         uint8_t **out,
+                                         size_t *out_len);
+
+// An output assembly's latest data (free it with [`ciplink_bytes_free`](super::ciplink_bytes_free)) and in
+// `*out_run` the controller's run bit (false before the first packet and after the owner closed or timed out).
+//
+// # Safety
+// `adapter` is NULL or a live adapter; `out`, `out_len` and `out_run` are writable.
+enum CiplinkStatus ciplink_adapter_output(const struct CiplinkAdapter *adapter,
+                                          uint32_t instance,
+                                          uint8_t **out,
+                                          size_t *out_len,
+                                          bool *out_run);
+
+// A configuration assembly's data, as the last Forward Open with data sent it; free it with
+// [`ciplink_bytes_free`](super::ciplink_bytes_free).
+//
+// # Safety
+// `adapter` is NULL or a live adapter; `out` and `out_len` are writable.
+enum CiplinkStatus ciplink_adapter_config(const struct CiplinkAdapter *adapter,
+                                          uint32_t instance,
+                                          uint8_t **out,
+                                          size_t *out_len);
+
+// The next event as JSON, waiting up to `timeout_seconds` (negative: until one comes or the adapter is stopped);
+// `null` if none came. An event is `{"event": "opened" | "closed" | "timed_out", "connection": {...}}` (a
+// connection as [`ciplink_adapter_connections`] lists it), `{"event": "output", "instance": int}` (an output
+// assembly's data or run bit changed; sent once until it is read) or `{"event": "config", "instance": int,
+// "data": {"$bytes": hex}}`.
+//
+// # Safety
+// `adapter` is NULL or a live adapter; `out_json` is writable.
+enum CiplinkStatus ciplink_adapter_next_event(const struct CiplinkAdapter *adapter,
+                                              double timeout_seconds,
+                                              char **out_json);
+
+// The open class 1 connections as a JSON array of `{"kind": "exclusive_owner" | "input_only" | "listen_only",
+// "originator": str, "o_t_rpi": seconds, "t_o_rpi": seconds, "input": int, "input_size": int, "output": int |
+// null, "output_size": int, "multicast": bool, "o_t_id": int, "t_o_id": int}`.
+//
+// # Safety
+// `adapter` is NULL or a live adapter; `out_json` is writable.
+enum CiplinkStatus ciplink_adapter_connections(const struct CiplinkAdapter *adapter,
+                                               char **out_json);
+
+// Sets the application's status text that device browsers show, e.g. `"station 2"`.
+//
+// # Safety
+// `adapter` is NULL or a live adapter; `detail` is NUL-terminated.
+enum CiplinkStatus ciplink_adapter_set_detail(const struct CiplinkAdapter *adapter,
+                                              const char *detail);
+
+// I/O timing counters as JSON `{"produced": int, "late": int, "max_late": seconds}`: packets sent, those 1 ms or
+// more late, and the latest one.
+//
+// # Safety
+// `adapter` is NULL or a live adapter; `out_json` is writable.
+enum CiplinkStatus ciplink_adapter_stats(const struct CiplinkAdapter *adapter,
+                                         char **out_json);
+
+// Stops the adapter: closes its sockets and joins its threads, and controllers then time out. A thread waiting in
+// [`ciplink_adapter_next_event`] returns `null` within 0.1 s; later calls fail. Stopping twice is fine.
+//
+// # Safety
+// `adapter` is NULL or a live adapter.
+enum CiplinkStatus ciplink_adapter_stop(const struct CiplinkAdapter *adapter);
+
+// Frees an adapter, stopping it first if needed. NULL is ignored.
+//
+// # Safety
+// `adapter` is NULL or an adapter from [`ciplink_adapter_start`] not yet freed, and no other thread is using it.
+void ciplink_adapter_free(struct CiplinkAdapter *adapter);
 
 #ifdef __cplusplus
 }  // extern "C"

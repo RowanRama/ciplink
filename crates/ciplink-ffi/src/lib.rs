@@ -10,6 +10,8 @@
 //!   with [`ciplink_trend_free`].
 //! - A tag server is a third handle type, [`CiplinkServer`], made by [`ciplink_server_start`] and stopped and
 //!   freed with [`ciplink_server_stop`].
+//! - An adapter (ciplink as an I/O device a Logix controller owns) is a fourth, [`CiplinkAdapter`], made by
+//!   `ciplink_adapter_start`, stopped by `ciplink_adapter_stop` and freed by `ciplink_adapter_free`.
 //! - Every function returns a [`CiplinkStatus`]; 0 is success. The message of the latest failure is kept on the
 //!   handle and on the calling thread: [`ciplink_last_error`] with the handle, or with NULL for the calling
 //!   thread's latest failure (the one to use for constructors, handle-less calls, or a handle shared by threads).
@@ -1976,6 +1978,9 @@ pub unsafe extern "C" fn ciplink_server_stop(server: *mut CiplinkServer) -> Cipl
         }
     })
 }
+
+mod adapter;
+pub use adapter::CiplinkAdapter;
 
 // ------------------------------------------------------------------------------------------------ errors, memory
 
