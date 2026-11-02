@@ -627,8 +627,8 @@ impl Logix {
             .unwrap_or_else(|| (now_us() + self.clock_offset_us).max(0) as u64)
     }
 
-    /// Fixes the controller clock (class 0x8B) at `us` since 1970 UTC, as an emulator's virtual clock does;
-    /// a clock set then moves the fixed value. None goes back to the host clock (plus any earlier offset).
+    /// Fixes the controller clock (class 0x8B) at `us` since 1970 UTC, so clock reads are deterministic; a
+    /// clock set then moves the fixed value. None goes back to the host clock (plus any earlier offset).
     pub fn set_clock_us(&mut self, us: Option<u64>) {
         self.fixed_clock_us = us;
     }
@@ -638,7 +638,7 @@ impl Logix {
         self.mem.bytes.len()
     }
 
-    /// Swaps the controller memory with `other`, which must be as long: an emulator lends its memory for a
+    /// Swaps the controller memory with `other`, which must be as long: a test lends its own memory for a
     /// while (requests then read and write it) and takes it back with a second swap.
     pub fn swap_memory(&mut self, other: &mut Vec<u8>) -> Result<(), ConfigError> {
         if other.len() != self.mem.bytes.len() {
@@ -652,7 +652,8 @@ impl Logix {
         Ok(())
     }
 
-    /// The layout of a data type (any case), None if there is none: an emulator checks it against its own.
+    /// The layout of a data type (any case), None if there is none: to check a driver's decoded definition
+    /// against.
     pub fn type_layout(&self, name: &str) -> Option<TypeLayout> {
         let Some(Ty::Struct(index)) = self.types.lookup(name) else {
             return None;
@@ -1617,7 +1618,7 @@ impl Logix {
             });
         }
         let at = target.offset + offset;
-        // a placed (emulator's) BOOL holds 0 or 1, as a controller's does
+        // a placed BOOL holds 0 or 1, as a controller's does
         let normalize = target.ty == Ty::Atomic(Atomic::Bool)
             && self.scope(target.program).tags[target.tag].placed;
         let written = &mut self.data_mut(target)[at..at + value.len()];

@@ -1076,7 +1076,7 @@ pub(crate) struct Tag {
     pub access: u8,
     pub alias: bool,
     pub at: Region,
-    /// Placed with `at` (an emulator's memory): a BOOL written stores 0 or 1.
+    /// Placed with `at`: a BOOL written stores 0 or 1.
     pub placed: bool,
     /// Descriptions by path below the tag (see `TagConfig::descriptions`).
     pub descriptions: Vec<(String, String)>,

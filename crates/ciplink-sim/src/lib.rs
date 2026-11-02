@@ -234,7 +234,7 @@ impl Simulator {
         Server::start(Arc::clone(&self.inner), Arc::clone(&self.deferred), addr)
     }
 
-    /// Defers requests until [`Simulator::service`], as an emulator answers them between rungs. Deferred, an
+    /// Defers requests until [`Simulator::service`], so a test decides when each is answered. Deferred, an
     /// in-memory transport's `send` queues the request and returns at once and its `receive` waits for the
     /// answer (so run such a client on its own thread, not the one calling `service`); a TCP connection
     /// waits too. UDP ListIdentity is still answered at once. Switching it off answers every request

@@ -1,5 +1,5 @@
-//! Hooks for an emulator that owns the controller memory: placed and overlapping tags, bit aliases, explicit
-//! layouts, lent memory, deferred service, a fixed clock, the identity status and trends switched off.
+//! The test hooks: placed and overlapping tags, bit aliases, explicit layouts, lent memory, deferred service,
+//! a fixed clock, the identity status and trends switched off.
 #![allow(clippy::unwrap_used)]
 
 mod common;
