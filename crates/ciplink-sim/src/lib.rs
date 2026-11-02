@@ -44,7 +44,7 @@ pub use config::{
     NamedConfig, NetworkDeviceConfig, ProgramConfig, SlcConfig, SystemTagConfig, TagConfig,
     TypeConfig,
 };
-pub use logix::Logix;
+pub use logix::{Logix, MemberLayout, Serviced, TypeLayout};
 pub use scanner::{IoRequest, ScanError, Scanner};
 pub use server::{Server, UdpServer};
 pub use slc::Slc;
@@ -52,10 +52,74 @@ pub use transport::SimTransport;
 
 use ciplink::Error;
 use ciplink::transport::{Connector, Transport};
-use encap::{Device, Inner};
+use encap::{Device, Inner, Outcome, Session};
 use serde_json::Value as Json;
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::collections::VecDeque;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, mpsc};
 use std::time::Duration;
+
+/// A handled request: its session back, what to send and the delay to wait first.
+pub(crate) type Answer = (Session, Outcome, Duration);
+
+/// A request frame waiting for [`Simulator::service`], with its connection's session.
+struct Job {
+    session: Session,
+    frame: Vec<u8>,
+    answer: mpsc::Sender<Answer>,
+}
+
+/// The requests of a deferred simulator, in arrival order.
+#[derive(Default)]
+pub(crate) struct Deferred {
+    queue: Mutex<(bool, VecDeque<Job>)>,
+    count: AtomicUsize,
+}
+
+impl Deferred {
+    fn queue(&self) -> MutexGuard<'_, (bool, VecDeque<Job>)> {
+        self.queue.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Queues a frame when deferred (the answer comes on the receiver), else gives the session back for the
+    /// caller to handle the frame at once.
+    pub(crate) fn push(
+        &self,
+        session: Session,
+        frame: &[u8],
+    ) -> Result<mpsc::Receiver<Answer>, Session> {
+        let mut queue = self.queue();
+        if !queue.0 {
+            return Err(session);
+        }
+        let (answer, receiver) = mpsc::channel();
+        queue.1.push_back(Job {
+            session,
+            frame: frame.to_vec(),
+            answer,
+        });
+        self.count.fetch_add(1, Ordering::SeqCst);
+        Ok(receiver)
+    }
+
+    /// Takes up to `max` queued jobs, oldest first.
+    fn take(&self, max: usize) -> Vec<Job> {
+        let mut queue = self.queue();
+        let n = max.min(queue.1.len());
+        self.count.fetch_sub(n, Ordering::SeqCst);
+        queue.1.drain(..n).collect()
+    }
+}
+
+/// Handles queued jobs with the simulator locked and answers each.
+fn answer(inner: &mut Inner, jobs: Vec<Job>) {
+    for job in jobs {
+        let mut session = job.session;
+        let (outcome, delay) = inner.handle(&mut session, &job.frame);
+        // the client may have gone: nobody to answer then
+        let _ = job.answer.send((session, outcome, delay));
+    }
+}
 
 /// A fault injected into a simulator.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -93,6 +157,7 @@ pub enum Fault {
 #[derive(Clone)]
 pub struct Simulator {
     inner: Arc<Mutex<Inner>>,
+    deferred: Arc<Deferred>,
 }
 
 impl std::fmt::Debug for Simulator {
@@ -118,6 +183,7 @@ impl Simulator {
         };
         Ok(Simulator {
             inner: Arc::new(Mutex::new(Inner::new(device))),
+            deferred: Arc::default(),
         })
     }
 
@@ -144,21 +210,93 @@ impl Simulator {
                     "Failed to open socket to {host}:{port}"
                 )));
             }
-            Ok(
-                Box::new(SimTransport::new(Arc::clone(&sim.inner), port, timeout))
-                    as Box<dyn Transport>,
-            )
+            Ok(Box::new(SimTransport::new(
+                Arc::clone(&sim.inner),
+                Arc::clone(&sim.deferred),
+                port,
+                timeout,
+            )) as Box<dyn Transport>)
         })
     }
 
     /// A new in-memory connection.
     pub fn transport(&self) -> SimTransport {
-        SimTransport::new(Arc::clone(&self.inner), 44818, Some(Duration::from_secs(5)))
+        SimTransport::new(
+            Arc::clone(&self.inner),
+            Arc::clone(&self.deferred),
+            44818,
+            Some(Duration::from_secs(5)),
+        )
     }
 
     /// Serves EtherNet/IP over TCP on `addr`, e.g. `"127.0.0.1:0"` for a free port.
     pub fn serve(&self, addr: &str) -> std::io::Result<Server> {
-        Server::start(Arc::clone(&self.inner), addr)
+        Server::start(Arc::clone(&self.inner), Arc::clone(&self.deferred), addr)
+    }
+
+    /// Defers requests until [`Simulator::service`], as an emulator answers them between rungs. Deferred, an
+    /// in-memory transport's `send` queues the request and returns at once and its `receive` waits for the
+    /// answer (so run such a client on its own thread, not the one calling `service`); a TCP connection
+    /// waits too. UDP ListIdentity is still answered at once. Switching it off answers every request
+    /// waiting, from the simulator's own memory.
+    pub fn set_deferred(&self, on: bool) {
+        let mut inner = self.lock();
+        let jobs = {
+            let mut queue = self.deferred.queue();
+            queue.0 = on;
+            self.deferred.count.store(0, Ordering::SeqCst);
+            queue.1.drain(..).collect()
+        };
+        answer(&mut inner, jobs);
+    }
+
+    /// Some request waits for [`Simulator::service`].
+    pub fn pending(&self) -> bool {
+        self.deferred.count.load(Ordering::SeqCst) > 0
+    }
+
+    /// Answers up to `max_frames` waiting requests, oldest first, with `mem` lent as the Logix memory (it
+    /// must be [`Logix::memory_len`] long), and reports what they wrote and any clock set. A request hook
+    /// runs as usual and must not panic here.
+    pub fn service(&self, mem: &mut Vec<u8>, max_frames: usize) -> Result<Serviced, ConfigError> {
+        let mut inner = self.lock();
+        let Device::Logix(logix) = &mut inner.device else {
+            return Err(ConfigError::new("only a Logix controller is serviced"));
+        };
+        logix.swap_memory(mem)?;
+        logix.serviced = Some(Serviced::default());
+        let jobs = self.deferred.take(max_frames);
+        let requests = u32::try_from(jobs.len()).unwrap_or(u32::MAX);
+        let mut answered = Vec::with_capacity(jobs.len());
+        for job in jobs {
+            let mut session = job.session;
+            let (outcome, delay) = inner.handle(&mut session, &job.frame);
+            answered.push((job.answer, (session, outcome, delay)));
+        }
+        let mut serviced = Serviced::default();
+        if let Device::Logix(logix) = &mut inner.device {
+            serviced = logix.serviced.take().unwrap_or_default();
+            // a download from a hook can change the length: the lent memory comes back either way
+            std::mem::swap(&mut logix.mem.bytes, mem);
+        }
+        drop(inner);
+        for (to, answer) in answered {
+            let _ = to.send(answer);
+        }
+        serviced.requests = requests;
+        Ok(serviced)
+    }
+
+    /// Sets the identity status word (mode and major fault bits) and the ListIdentity state byte, as a
+    /// controller's change with its mode.
+    pub fn set_identity_status(&self, status: u16, state: u8) {
+        let mut inner = self.lock();
+        let identity = match &mut inner.device {
+            Device::Logix(l) => &mut l.identity,
+            Device::Slc(s) => &mut s.identity,
+        };
+        identity.status = status;
+        identity.state = state;
     }
 
     /// Answers ListIdentity over UDP on `addr`, e.g. `"127.0.0.1:44818"`.

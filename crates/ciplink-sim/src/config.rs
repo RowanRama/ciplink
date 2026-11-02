@@ -176,6 +176,12 @@ pub struct LogixConfig {
     /// Description reads are refused (0x0F) on a connection until it passes the metadata authentication
     /// handshake (services 0x4B and 0x4C of class 0x64), as on controllers that restrict metadata access.
     pub metadata_auth: bool,
+    /// Bytes of controller memory (at most 2^26) that tags placed with `at` must lie in; tags without `at`
+    /// are appended after it. None: memory grows to hold every tag.
+    pub memory_len: Option<u32>,
+    /// Controller-side trends (class 0xB2) are answered; if not, every trend request gets 0x08 (service not
+    /// supported).
+    pub trends: bool,
 }
 
 impl Default for LogixConfig {
@@ -203,6 +209,8 @@ impl Default for LogixConfig {
             system_tags: Vec::new(),
             modules: Vec::new(),
             metadata_auth: false,
+            memory_len: None,
+            trends: true,
         }
     }
 }
@@ -253,8 +261,12 @@ pub struct TypeConfig {
     pub aoi: bool,
     /// A custom string type of this many characters (members are then LEN and DATA).
     pub string: Option<u32>,
-    /// Template instance ID, else the next free one from 0x100.
+    /// Template instance ID, else the next free one from 0x100. Up to 0xEFF (a user type), or up to 0xFFF
+    /// with `size` (above 0xEFF the type reports as predefined, like TIMER).
     pub template_id: Option<u16>,
+    /// An explicit layout of this many bytes: every member then gives its `offset` (and a BOOL its `bit`),
+    /// used as given, and an AOI gets no EnableIn and EnableOut added.
+    pub size: Option<u32>,
 }
 
 impl TypeConfig {
@@ -283,6 +295,19 @@ impl TypeConfig {
             ..TypeConfig::default()
         }
     }
+
+    /// A type with an explicit layout of `size` bytes: each member gives its offset (see
+    /// [`MemberConfig::at`]).
+    pub fn explicit(
+        name: &str,
+        size: u32,
+        members: impl IntoIterator<Item = MemberConfig>,
+    ) -> Self {
+        TypeConfig {
+            size: Some(size),
+            ..TypeConfig::udt(name, members)
+        }
+    }
 }
 
 /// A member of a data type.
@@ -302,6 +327,12 @@ pub struct MemberConfig {
     pub external_access: String,
     /// The member's default Description (language 0x007F), in the controller's Description index.
     pub description: Option<String>,
+    /// Hidden from the outside (a bit host, a status word): not addressable by name, not in values.
+    pub hidden: bool,
+    /// Byte offset in an explicit layout (see [`TypeConfig::size`]).
+    pub offset: Option<u32>,
+    /// The bit of a BOOL member in the byte at `offset`, in an explicit layout.
+    pub bit: Option<u8>,
 }
 
 impl MemberConfig {
@@ -314,7 +345,28 @@ impl MemberConfig {
             local: false,
             external_access: "Read/Write".into(),
             description: None,
+            hidden: false,
+            offset: None,
+            bit: None,
         }
+    }
+
+    /// Places the member at a byte offset of an explicit layout.
+    pub fn at(mut self, offset: u32) -> Self {
+        self.offset = Some(offset);
+        self
+    }
+
+    /// Makes a BOOL member this bit of the byte at its offset.
+    pub fn bit(mut self, bit: u8) -> Self {
+        self.bit = Some(bit);
+        self
+    }
+
+    /// Hides the member.
+    pub fn hidden(mut self) -> Self {
+        self.hidden = true;
+        self
     }
 
     /// An array member.
@@ -375,6 +427,11 @@ pub struct TagConfig {
     /// Descriptions (language 0x007F) by path below the tag: `""` the tag, `"[1]"` an element, `"[1].Member"`
     /// a member, `"[1].3"` a bit (any case).
     pub descriptions: BTreeMap<String, String>,
+    /// Byte offset in controller memory, else the tag is appended. Placed tags may overlap, so an alias
+    /// placed at its target's offset shares its bytes; its `value` and `raw`, if any, are written over them.
+    pub at: Option<u32>,
+    /// A BOOL tag that is this bit (0 to 7) of the byte at its offset: it reads and writes only that bit.
+    pub bit: Option<u8>,
 }
 
 impl TagConfig {
@@ -416,6 +473,18 @@ impl TagConfig {
         self.descriptions.insert(path.into(), text.into());
         self
     }
+
+    /// Places the tag at a byte offset of controller memory.
+    pub fn at(mut self, offset: u32) -> Self {
+        self.at = Some(offset);
+        self
+    }
+
+    /// Makes a BOOL tag one bit of the byte at its offset.
+    pub fn bit(mut self, bit: u8) -> Self {
+        self.bit = Some(bit);
+        self
+    }
 }
 
 impl Default for TagConfig {
@@ -430,6 +499,8 @@ impl Default for TagConfig {
             alias: false,
             instance_id: None,
             descriptions: BTreeMap::new(),
+            at: None,
+            bit: None,
         }
     }
 }

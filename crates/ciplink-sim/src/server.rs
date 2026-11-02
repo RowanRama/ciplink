@@ -1,5 +1,6 @@
 //! The TCP server (a thread per connection) and the UDP ListIdentity responder.
 
+use crate::Deferred;
 use crate::encap::{Inner, Outcome, Session};
 use std::io::{self, Read, Write};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener, TcpStream, UdpSocket};
@@ -17,7 +18,11 @@ pub struct Server {
 }
 
 impl Server {
-    pub(crate) fn start(inner: Arc<Mutex<Inner>>, addr: &str) -> io::Result<Self> {
+    pub(crate) fn start(
+        inner: Arc<Mutex<Inner>>,
+        deferred: Arc<Deferred>,
+        addr: &str,
+    ) -> io::Result<Self> {
         let listener = TcpListener::bind(addr)?;
         let addr = listener.local_addr()?;
         let stop = Arc::new(AtomicBool::new(false));
@@ -29,7 +34,10 @@ impl Server {
                 }
                 let Ok(stream) = stream else { continue };
                 let inner = Arc::clone(&inner);
-                std::thread::spawn(move || serve_connection(stream, &inner, addr.port()));
+                let deferred = Arc::clone(&deferred);
+                std::thread::spawn(move || {
+                    serve_connection(stream, &inner, &deferred, addr.port())
+                });
             }
         });
         Ok(Server {
@@ -73,7 +81,7 @@ fn wake_addr(addr: SocketAddr) -> SocketAddr {
     addr
 }
 
-fn serve_connection(mut stream: TcpStream, inner: &Mutex<Inner>, port: u16) {
+fn serve_connection(mut stream: TcpStream, inner: &Mutex<Inner>, deferred: &Deferred, port: u16) {
     let lock = || inner.lock().unwrap_or_else(PoisonError::into_inner);
     if lock().faults.refuse_connections {
         return;
@@ -93,7 +101,20 @@ fn serve_connection(mut stream: TcpStream, inner: &Mutex<Inner>, port: u16) {
         if stream.read_exact(&mut frame[24..]).is_err() {
             return;
         }
-        let (outcome, delay) = lock().handle(&mut session, &frame);
+        let (outcome, delay) = match deferred.push(std::mem::take(&mut session), &frame) {
+            Err(back) => {
+                session = back;
+                lock().handle(&mut session, &frame)
+            }
+            // waits for Simulator::service (or for deferring to be switched off)
+            Ok(answer) => match answer.recv() {
+                Ok((back, outcome, delay)) => {
+                    session = back;
+                    (outcome, delay)
+                }
+                Err(_) => return,
+            },
+        };
         match outcome {
             Outcome::Reply(reply) => {
                 if !delay.is_zero() {

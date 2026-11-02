@@ -212,9 +212,13 @@ const CONTROL_ID: u16 = 0x0F81;
 const STRING_ID: u16 = 0x0FCE;
 const FIRST_UDT_ID: u16 = 0x100;
 const LAST_UDT_ID: u16 = 0xEFF;
+/// The last template ID of a type with an explicit layout.
+const LAST_EXPLICIT_ID: u16 = 0xFFF;
 /// The most bytes of one tag or structure, above any controller's memory, so a configured size cannot overflow
 /// or exhaust memory.
 pub(crate) const MAX_DATA_BYTES: usize = 1 << 26;
+/// The most bytes of a configured memory (`memory_len`) and the end of a placed tag.
+pub(crate) const MAX_MEMORY_BYTES: usize = 1 << 26;
 /// The software control bit set on base tags (not aliases).
 pub(crate) const BASE_TAG_BIT: u32 = 1 << 26;
 
@@ -377,10 +381,17 @@ impl Types {
                 config.name
             )));
         }
+        // an explicit layout may take a predefined type's ID range, as MESSAGE and module types have
+        let explicit = config.size.is_some() || config.members.iter().any(|m| m.offset.is_some());
+        let last_id = if config.size.is_some() {
+            LAST_EXPLICIT_ID
+        } else {
+            LAST_UDT_ID
+        };
         let template_id = match config.template_id {
-            Some(id) if !(FIRST_UDT_ID..=LAST_UDT_ID).contains(&id) => {
+            Some(id) if !(FIRST_UDT_ID..=last_id).contains(&id) => {
                 return Err(ConfigError::new(format!(
-                    "template_id of {} must be in 0x100..=0xEFF",
+                    "template_id of {} must be in 0x100..={last_id:#X}",
                     config.name
                 )));
             }
@@ -397,6 +408,7 @@ impl Types {
                 || length as usize > MAX_DATA_BYTES - 4
                 || !config.members.is_empty()
                 || config.aoi
+                || explicit
             {
                 return Err(ConfigError::new(format!(
                     "string type {} needs a length and no members",
@@ -429,13 +441,17 @@ impl Types {
             }
             names.push(m.name.clone());
         }
-        let (members, size) = if config.aoi {
+        let (members, size) = if explicit {
+            self.layout_explicit(config)?
+        } else if config.aoi {
             self.layout_aoi(&config.members)?
         } else {
             self.layout_udt(&config.name, &config.members)?
         };
         let kind = if config.aoi {
             StructKind::Aoi
+        } else if template_id > LAST_UDT_ID {
+            StructKind::Predefined
         } else {
             StructKind::Udt
         };
@@ -525,7 +541,7 @@ impl Types {
                     array: 0,
                     offset: host_offset,
                     bit: Some(bit),
-                    hidden: false,
+                    hidden: config.hidden,
                     local: config.local,
                     access: external_access_code(&config.external_access)?,
                 });
@@ -541,7 +557,7 @@ impl Types {
                 array,
                 offset,
                 bit: None,
-                hidden: false,
+                hidden: config.hidden,
                 local: config.local,
                 access: external_access_code(&config.external_access)?,
             });
@@ -589,7 +605,7 @@ impl Types {
                     array: 0,
                     offset: (bit_index / 32) * 4 + (bit_index % 32) / 8,
                     bit: Some((bit_index % 8) as u8),
-                    hidden: false,
+                    hidden: config.hidden,
                     local: config.local,
                     access: external_access_code(&config.external_access)?,
                 });
@@ -604,13 +620,64 @@ impl Types {
                 array,
                 offset,
                 bit: None,
-                hidden: false,
+                hidden: config.hidden,
                 local: config.local,
                 access: external_access_code(&config.external_access)?,
             });
             offset = member_end(offset, self.size(ty), array)?;
         }
         Ok((members, offset.next_multiple_of(4)))
+    }
+
+    /// An explicit layout: every member at its configured offset and bit, each inside the configured size.
+    fn layout_explicit(&self, config: &TypeConfig) -> Result<(Vec<Member>, u32), ConfigError> {
+        let fail = |message: String| ConfigError::new(format!("{}: {message}", config.name));
+        let size = config
+            .size
+            .filter(|&size| size as usize <= MAX_DATA_BYTES)
+            .ok_or_else(|| {
+                fail(format!(
+                    "an explicit layout needs a size up to {MAX_DATA_BYTES}"
+                ))
+            })?;
+        let mut members = Vec::with_capacity(config.members.len());
+        for m in &config.members {
+            let offset = m
+                .offset
+                .ok_or_else(|| fail(format!("member {} has no offset", m.name)))?;
+            let (ty, array) = self.member_type(m)?;
+            let bit = match m.bit {
+                Some(bit) if bit > 7 || ty != Ty::Atomic(Atomic::Bool) => {
+                    return Err(fail(format!(
+                        "member {}: bit {bit} of a non-BOOL or past 7",
+                        m.name
+                    )));
+                }
+                bit => bit,
+            };
+            if member_end(offset, self.size(ty), array)? > size {
+                return Err(fail(format!("member {} lies past the size {size}", m.name)));
+            }
+            members.push(Member {
+                name: m.name.clone(),
+                ty,
+                array,
+                offset,
+                bit,
+                hidden: m.hidden,
+                local: m.local,
+                access: external_access_code(&m.external_access)?,
+            });
+        }
+        Ok((members, size))
+    }
+
+    /// The name of a type: an atomic name or a structure's.
+    pub(crate) fn name(&self, ty: Ty) -> &str {
+        match ty {
+            Ty::Atomic(a) => a.name(),
+            Ty::Struct(i) => &self.defs[i].name,
+        }
     }
 
     /// The template object's data: 8 bytes of info per member (bit or array length, type, offset), the type
@@ -988,7 +1055,15 @@ pub(crate) fn external_access_code(text: &str) -> Result<u8, ConfigError> {
     }
 }
 
-/// A tag: its type, dimensions and value.
+/// Where a tag's bytes are in [`Memory`]: `len` bytes at `offset`, or one bit of the byte there.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Region {
+    pub offset: usize,
+    pub len: usize,
+    pub bit: Option<u8>,
+}
+
+/// A tag: its type, dimensions and where its value is.
 #[derive(Clone, Debug)]
 pub(crate) struct Tag {
     pub name: String,
@@ -1000,12 +1075,15 @@ pub(crate) struct Tag {
     pub elements: usize,
     pub access: u8,
     pub alias: bool,
-    pub data: Vec<u8>,
+    pub at: Region,
+    /// Placed with `at` (an emulator's memory): a BOOL written stores 0 or 1.
+    pub placed: bool,
     /// Descriptions by path below the tag (see `TagConfig::descriptions`).
     pub descriptions: Vec<(String, String)>,
 }
 
 impl Tag {
+    /// A tag of `config`; its region gets its offset and its value when [`Memory::add`] places it.
     pub(crate) fn build(
         types: &Types,
         config: &TagConfig,
@@ -1043,7 +1121,15 @@ impl Tag {
         {
             return Err(fail(format!("over {MAX_DATA_BYTES} bytes")));
         }
-        let mut tag = Tag {
+        if let Some(bit) = config.bit {
+            if bit > 7 || ty != Ty::Atomic(Atomic::Bool) || !dims.is_empty() {
+                return Err(fail(format!("bit {bit} needs a BOOL scalar and 0 to 7")));
+            }
+            if config.raw.is_some() {
+                return Err(fail("a bit tag has no raw data".into()));
+            }
+        }
+        Ok(Tag {
             name: config.name.clone(),
             instance_id,
             ty,
@@ -1051,34 +1137,41 @@ impl Tag {
             elements,
             access: external_access_code(&config.external_access)?,
             alias: config.alias,
-            data: vec![0; types.size(ty) * elements],
+            at: Region {
+                offset: 0,
+                len: types.size(ty) * elements,
+                bit: config.bit,
+            },
+            placed: config.at.is_some(),
             descriptions: config
                 .descriptions
                 .iter()
                 .map(|(path, text)| (path.clone(), text.clone()))
                 .collect(),
-        };
-        if let Some(raw) = &config.raw {
-            let bytes = parse_hex(raw).ok_or_else(|| fail("raw is not hex".into()))?;
-            if bytes.len() != tag.data.len() {
-                return Err(fail(format!(
-                    "raw has {} bytes, the tag {}",
-                    bytes.len(),
-                    tag.data.len()
-                )));
-            }
-            tag.data = bytes;
-        }
-        tag.set_value(types, &config.value).map_err(fail)?;
-        Ok(tag)
+        })
     }
 
-    /// Sets the whole value from JSON (a list for an array).
-    pub(crate) fn set_value(&mut self, types: &Types, value: &Json) -> Result<(), String> {
-        if self.dims.is_empty() {
-            types.encode(self.ty, value, &mut self.data)
-        } else {
-            types.encode_elements(self.ty, self.elements, value, &mut self.data)
+    /// Writes the configured initial value over the tag's bytes: `raw`, then `value` (null leaves them).
+    fn init(&self, types: &Types, config: &TagConfig, data: &mut [u8]) -> Result<(), String> {
+        if let Some(raw) = &config.raw {
+            let bytes = parse_hex(raw).ok_or("raw is not hex")?;
+            if bytes.len() != data.len() {
+                return Err(format!(
+                    "raw has {} bytes, the tag {}",
+                    bytes.len(),
+                    data.len()
+                ));
+            }
+            data.copy_from_slice(&bytes);
+        }
+        match self.at.bit {
+            Some(_) if config.value.is_null() => Ok(()),
+            Some(bit) => {
+                set_bit(&mut data[0], bit, json_truthy(&config.value)?);
+                Ok(())
+            }
+            None if self.dims.is_empty() => types.encode(self.ty, &config.value, data),
+            None => types.encode_elements(self.ty, self.elements, &config.value, data),
         }
     }
 
@@ -1092,6 +1185,79 @@ impl Tag {
     }
 }
 
+/// The controller memory every tag's bytes live in: placed tags at their offset (they may overlap), the
+/// others appended, aligned to 8.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Memory {
+    pub bytes: Vec<u8>,
+    /// The configured `memory_len`, which placed tags must lie in.
+    limit: Option<usize>,
+    /// Where the first tag without placement went: a placed tag must end before it.
+    appended: Option<usize>,
+}
+
+impl Memory {
+    pub(crate) fn new(len: Option<u32>) -> Result<Self, ConfigError> {
+        let limit = len.map(|len| len as usize);
+        if limit.is_some_and(|len| len > MAX_MEMORY_BYTES) {
+            return Err(ConfigError::new(format!(
+                "memory_len is over {MAX_MEMORY_BYTES} bytes"
+            )));
+        }
+        Ok(Memory {
+            bytes: vec![0; limit.unwrap_or(0)],
+            limit,
+            appended: None,
+        })
+    }
+
+    /// Places `tag` (at `config.at`, else appended) and writes its initial value; on an error nothing changes.
+    pub(crate) fn add(
+        &mut self,
+        types: &Types,
+        tag: &mut Tag,
+        config: &TagConfig,
+    ) -> Result<(), ConfigError> {
+        let fail = |message: String| ConfigError::new(format!("tag {}: {message}", config.name));
+        let len = tag.at.len;
+        let offset = match config.at {
+            None => self.bytes.len().next_multiple_of(8),
+            Some(at) => {
+                let at = at as usize;
+                let limit = self.limit.unwrap_or(MAX_MEMORY_BYTES);
+                if at + len > limit {
+                    // at is below 2^32 and len at most 2^26: no overflow
+                    return Err(fail(format!(
+                        "at {at} with {len} bytes is past the memory of {limit} bytes"
+                    )));
+                }
+                if let Some(first) = self.appended.filter(|&first| at + len > first) {
+                    return Err(fail(format!(
+                        "at {at} overlaps the tags without at from {first}; set memory_len"
+                    )));
+                }
+                at
+            }
+        };
+        let end = offset + len;
+        let mut data = vec![0; len];
+        let have = self.bytes.len().min(end).saturating_sub(offset);
+        if have > 0 {
+            data[..have].copy_from_slice(&self.bytes[offset..offset + have]);
+        }
+        tag.init(types, config, &mut data).map_err(fail)?;
+        if end > self.bytes.len() {
+            self.bytes.resize(end, 0);
+        }
+        self.bytes[offset..end].copy_from_slice(&data);
+        if config.at.is_none() && self.appended.is_none() {
+            self.appended = Some(offset);
+        }
+        tag.at.offset = offset;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1099,6 +1265,14 @@ mod tests {
 
     fn types(configs: &[TypeConfig]) -> Types {
         Types::build(configs).expect("types")
+    }
+
+    /// A tag appended to a memory of its own, and its bytes.
+    fn build(types: &Types, config: &TagConfig, id: u32) -> Result<(Tag, Vec<u8>), ConfigError> {
+        let mut memory = Memory::default();
+        let mut tag = Tag::build(types, config, id)?;
+        memory.add(types, &mut tag, config)?;
+        Ok((tag, memory.bytes))
     }
 
     #[test]
@@ -1197,7 +1371,7 @@ mod tests {
                 ],
             ),
         ]);
-        let tag = Tag::build(
+        let (tag, data) = build(
             &t,
             &TagConfig::new("x", "Inner")
                 .dims(&[2])
@@ -1206,10 +1380,10 @@ mod tests {
         )
         .expect("tag");
         assert_eq!(
-            t.decode_elements(tag.ty, 2, &tag.data),
+            t.decode_elements(tag.ty, 2, &data),
             json!([{"on": true, "r": [1.5, -2.0], "s": "hi"}, {"on": false, "r": [0.0, 0.0], "s": ""}])
         );
-        let bools = Tag::build(
+        let (bools, bools_data) = build(
             &t,
             &TagConfig::new("b", "BOOL")
                 .dims(&[40])
@@ -1221,7 +1395,7 @@ mod tests {
             (bools.dims.clone(), bools.elements, bools.symbol_type(&t)),
             (vec![64], 2, 0x20D3)
         );
-        assert_eq!(bools.data[0], 0b101);
+        assert_eq!(bools_data[0], 0b101);
     }
 
     #[test]
@@ -1235,15 +1409,81 @@ mod tests {
         );
         assert!(Types::build(&[TypeConfig::udt("A", [MemberConfig::new("x", "NOPE")])]).is_err());
         let t = types(&[]);
-        assert!(Tag::build(&t, &TagConfig::new("x", "SINT").value(json!(300)), 1).is_err());
+        assert!(build(&t, &TagConfig::new("x", "SINT").value(json!(300)), 1).is_err());
         assert!(
-            Tag::build(
+            build(
                 &t,
                 &TagConfig::new("x", "DINT").value(json!([1, 2])).dims(&[1]),
                 1
             )
             .is_err()
         );
-        assert!(Tag::build(&t, &TagConfig::new("x", "DINT").access("Write Only"), 1).is_err());
+        assert!(build(&t, &TagConfig::new("x", "DINT").access("Write Only"), 1).is_err());
+    }
+
+    #[test]
+    fn appended_tags_are_aligned_to_8_and_placed_ones_overlap() {
+        let t = types(&[]);
+        let mut memory = Memory::new(Some(8)).expect("memory");
+        let mut add = |config: TagConfig| {
+            let mut tag = Tag::build(&t, &config, 1).expect("tag");
+            memory.add(&t, &mut tag, &config).map(|()| tag.at)
+        };
+        let word = add(TagConfig::new("w", "DINT").at(4).value(json!(-1)));
+        assert_eq!(word.map(|r| (r.offset, r.len)), Ok((4, 4)));
+        // an alias with no value keeps its target's bytes, a bit alias sets only its bit
+        assert_eq!(
+            add(TagConfig::new("a", "INT").at(4)).map(|r| r.offset),
+            Ok(4)
+        );
+        assert!(add(TagConfig::new("f", "BOOL").at(5).bit(0).value(json!(false))).is_ok());
+        assert_eq!(add(TagConfig::new("x", "SINT")).map(|r| r.offset), Ok(8));
+        assert_eq!(add(TagConfig::new("y", "SINT")).map(|r| r.offset), Ok(16));
+        assert!(add(TagConfig::new("z", "DINT").at(6)).is_err());
+        // a failed value changes nothing
+        assert!(add(TagConfig::new("v", "SINT").at(0).value(json!(300))).is_err());
+        assert_eq!(memory.bytes[..8], [0, 0, 0, 0, 0xFF, 0xFE, 0xFF, 0xFF]);
+        assert_eq!(memory.bytes.len(), 17);
+    }
+
+    #[test]
+    fn explicit_layouts_keep_offsets_and_take_predefined_ids() {
+        let t = types(&[TypeConfig {
+            template_id: Some(0xF20),
+            aoi: true,
+            ..TypeConfig::explicit(
+                "X",
+                8,
+                [
+                    MemberConfig::new("Ctl", "DINT").at(0).hidden(),
+                    MemberConfig::new("Go", "BOOL").at(0).bit(1),
+                    MemberConfig::array("Bits", "BOOL", 32).at(4),
+                ],
+            )
+        }]);
+        let Some(Ty::Struct(i)) = t.lookup("X") else {
+            panic!("not found")
+        };
+        let def = t.def(i);
+        assert_eq!(
+            (def.kind, def.size, def.members.len()),
+            (StructKind::Aoi, 8, 3)
+        );
+        assert_eq!(
+            def.member("Go").map(|m| (m.offset, m.bit)),
+            Some((0, Some(1)))
+        );
+        assert_eq!(
+            def.member("Bits").map(|m| (m.ty, m.array)),
+            Some((Ty::Atomic(Atomic::DWord), 1))
+        );
+        assert!(def.member("Ctl").is_none());
+        let t = types(&[TypeConfig {
+            template_id: Some(0xF20),
+            ..TypeConfig::explicit("Y", 4, [MemberConfig::new("v", "DINT").at(0)])
+        }]);
+        let def = t.def(t.defs.len() - 1);
+        assert_eq!(def.kind, StructKind::Predefined);
+        assert_eq!(def.member_id(0), 1);
     }
 }

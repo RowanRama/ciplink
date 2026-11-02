@@ -4,7 +4,7 @@ use crate::cip::{Faults, reply};
 use crate::config::{ConfigError, LogixConfig, TagConfig, TypeConfig};
 use crate::identity::Identity;
 use crate::metadata::{self, Selector};
-use crate::model::{Atomic, BASE_TAG_BIT, StructKind, Tag, Ty, Types};
+use crate::model::{Atomic, BASE_TAG_BIT, Memory, StructKind, Tag, Ty, Types};
 use crate::path::{Seg, attribute, class_instance, parse_path, parse_request};
 use ciplink::reader::Reader;
 use serde_json::Value as Json;
@@ -204,6 +204,56 @@ pub struct Logix {
     clock_offset_us: i128,
     /// Controller-side trends (class 0xB2) by instance.
     trends: BTreeMap<u32, Trend>,
+    /// Class 0xB2 is answered (`LogixConfig::trends`).
+    trends_enabled: bool,
+    /// A fixed controller clock (see [`Logix::set_clock_us`]).
+    fixed_clock_us: Option<u64>,
+    /// Every tag's bytes.
+    pub(crate) mem: Memory,
+    /// What the requests being serviced wrote, while [`crate::Simulator::service`] runs.
+    pub(crate) serviced: Option<Serviced>,
+}
+
+/// What one [`crate::Simulator::service`] call did.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Serviced {
+    /// Request frames answered.
+    pub requests: u32,
+    /// The byte ranges `(offset, len)` of the memory that write and read-modify-write services wrote, in
+    /// order (a range can repeat).
+    pub writes: Vec<(u32, u32)>,
+    /// The value of the last controller clock set (class 0x8B Set_Attribute_List), µs since 1970 UTC.
+    pub clock_set_us: Option<i64>,
+}
+
+/// The layout of a data type as the simulator stores it (see [`Logix::type_layout`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TypeLayout {
+    /// Type name.
+    pub name: String,
+    /// Template instance ID.
+    pub template_id: u16,
+    /// Bytes of one value.
+    pub size: u32,
+    /// Every member, hidden ones (bit hosts, CTL) included, in template order.
+    pub members: Vec<MemberLayout>,
+}
+
+/// A member of a [`TypeLayout`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MemberLayout {
+    /// Member name.
+    pub name: String,
+    /// Byte offset.
+    pub offset: u32,
+    /// A BOOL's bit in the byte at `offset`.
+    pub bit: Option<u8>,
+    /// Type name as stored: a BOOL array is a DWORD array.
+    pub data_type: String,
+    /// Array length, 0 for a scalar.
+    pub dim: u32,
+    /// Not addressable by name.
+    pub hidden: bool,
 }
 
 /// A controller-side trend (class 0xB2, the object Studio 5000 trends use): one driver of pens, each a
@@ -245,6 +295,7 @@ impl Logix {
             return Err(ConfigError::new("too many programs"));
         }
         let types = Types::build(&config.types)?;
+        let mut memory = Memory::new(config.memory_len)?;
         let mut controller = Scope::default();
         // explicit instance IDs first, so the others are allocated around them
         let reserve = |scope: &mut Scope, id: Option<u32>| -> Result<(), ConfigError> {
@@ -305,7 +356,9 @@ impl Logix {
                     )));
                 }
                 let id = id_of(&mut scope, t.instance_id)?;
-                scope.tags.push(Tag::build(&types, t, id)?);
+                let mut tag = Tag::build(&types, t, id)?;
+                memory.add(&types, &mut tag, t)?;
+                scope.tags.push(tag);
             }
             programs.push(Program {
                 name: p.name.clone(),
@@ -335,7 +388,9 @@ impl Logix {
                 return Err(ConfigError::new(format!("tag {} is defined twice", t.name)));
             }
             let id = id_of(&mut controller, t.instance_id)?;
-            controller.tags.push(Tag::build(&types, t, id)?);
+            let mut tag = Tag::build(&types, t, id)?;
+            memory.add(&types, &mut tag, t)?;
+            controller.tags.push(tag);
         }
         let mut modules = Vec::new();
         for m in &config.modules {
@@ -388,6 +443,10 @@ impl Logix {
             },
             clock_offset_us: config.clock_us.map_or(0, |us| i128::from(us) - now_us()),
             trends: BTreeMap::new(),
+            trends_enabled: config.trends,
+            fixed_clock_us: None,
+            mem: memory,
+            serviced: None,
         })
     }
 
@@ -419,7 +478,9 @@ impl Logix {
         }
         let mut probe = scope.clone();
         let id = probe.alloc(tag.instance_id)?;
-        let built = Tag::build(&types, tag, id)?;
+        let mut built = Tag::build(&types, tag, id)?;
+        self.mem.add(&types, &mut built, tag)?;
+        let scope = self.scope_mut(program)?;
         scope.used.insert(id);
         scope.tags.push(built);
         self.edited();
@@ -468,6 +529,8 @@ impl Logix {
             project: self.version.project.wrapping_add(1),
         };
         new.clock_offset_us = self.clock_offset_us;
+        new.fixed_clock_us = self.fixed_clock_us;
+        new.serviced = self.serviced.take();
         *self = new;
         Ok(())
     }
@@ -504,7 +567,7 @@ impl Logix {
         let target = self
             .resolve(&text_path(path)?, false)
             .map_err(|_| ConfigError::new(format!("no tag {path}")))?;
-        let data = &self.scope(target.program).tags[target.tag].data;
+        let data = self.bytes(&self.scope(target.program).tags[target.tag]);
         Ok(match target.bit {
             Some(bit) => Json::Bool(data[target.offset] & (1 << bit) != 0),
             None if target.whole_array => {
@@ -528,12 +591,9 @@ impl Logix {
             .resolve(&text_path(path)?, false)
             .map_err(|_| ConfigError::new(format!("no tag {path}")))?;
         let size = self.types.size(target.ty);
+        let at = self.scope(target.program).tags[target.tag].at;
         let types = &self.types;
-        let scope = match target.program {
-            None => &mut self.controller,
-            Some(p) => &mut self.programs[p].scope,
-        };
-        let data = &mut scope.tags[target.tag].data;
+        let data = &mut self.mem.bytes[at.offset..at.offset + at.len];
         let result = match target.bit {
             Some(bit) => match value {
                 Json::Bool(b) => {
@@ -563,7 +623,73 @@ impl Logix {
 
     /// The controller clock, microseconds since 1970 UTC.
     pub fn clock_us(&self) -> u64 {
-        (now_us() + self.clock_offset_us).max(0) as u64
+        self.fixed_clock_us
+            .unwrap_or_else(|| (now_us() + self.clock_offset_us).max(0) as u64)
+    }
+
+    /// Fixes the controller clock (class 0x8B) at `us` since 1970 UTC, as an emulator's virtual clock does;
+    /// a clock set then moves the fixed value. None goes back to the host clock (plus any earlier offset).
+    pub fn set_clock_us(&mut self, us: Option<u64>) {
+        self.fixed_clock_us = us;
+    }
+
+    /// Bytes of controller memory: every tag's bytes, placed or appended.
+    pub fn memory_len(&self) -> usize {
+        self.mem.bytes.len()
+    }
+
+    /// Swaps the controller memory with `other`, which must be as long: an emulator lends its memory for a
+    /// while (requests then read and write it) and takes it back with a second swap.
+    pub fn swap_memory(&mut self, other: &mut Vec<u8>) -> Result<(), ConfigError> {
+        if other.len() != self.mem.bytes.len() {
+            return Err(ConfigError::new(format!(
+                "memory of {} bytes swapped with one of {}",
+                other.len(),
+                self.mem.bytes.len()
+            )));
+        }
+        std::mem::swap(&mut self.mem.bytes, other);
+        Ok(())
+    }
+
+    /// The layout of a data type (any case), None if there is none: an emulator checks it against its own.
+    pub fn type_layout(&self, name: &str) -> Option<TypeLayout> {
+        let Some(Ty::Struct(index)) = self.types.lookup(name) else {
+            return None;
+        };
+        let def = self.types.def(index);
+        Some(TypeLayout {
+            name: def.name.clone(),
+            template_id: def.template_id,
+            size: def.size,
+            members: def
+                .members
+                .iter()
+                .map(|m| MemberLayout {
+                    name: m.name.clone(),
+                    offset: m.offset,
+                    bit: m.bit,
+                    data_type: self.types.name(m.ty).to_owned(),
+                    dim: m.array,
+                    hidden: m.hidden,
+                })
+                .collect(),
+        })
+    }
+
+    /// A tag's bytes.
+    fn bytes(&self, tag: &Tag) -> &[u8] {
+        &self.mem.bytes[tag.at.offset..tag.at.offset + tag.at.len]
+    }
+
+    /// Notes `len` bytes written at `offset` of a tag while servicing.
+    fn wrote(&mut self, target: &Target, offset: usize, len: usize) {
+        let start = self.scope(target.program).tags[target.tag].at.offset + offset;
+        if let Some(serviced) = &mut self.serviced {
+            // memory offsets fit 32 bits unless tags without `at` were appended past 4 GB
+            let start = u32::try_from(start).unwrap_or(u32::MAX);
+            serviced.writes.push((start, len as u32));
+        }
     }
 
     // ---- requests ----
@@ -618,7 +744,8 @@ impl Logix {
             ty: tag.ty,
             count: tag.elements,
             whole_array: !tag.dims.is_empty(),
-            bit: None,
+            // a bit alias is a BOOL of one bit
+            bit: tag.at.bit,
             path: base.clone(),
             base,
             access: tag.access,
@@ -750,6 +877,7 @@ impl Logix {
                 _ => Err(status(0x14)),
             },
             (Some((0x8B, 1)), 0x04) => self.clock_set(request.data),
+            (Some((0xB2, _)), _) if !self.trends_enabled => Err(status(0x08)),
             (Some((0xB2, 0)), 0x08) if !self.micro800 => Ok(self.trend_create()),
             (Some((0xB2, 0)), 0x03) if !self.micro800 => {
                 let last = self.trends.keys().next_back().copied().unwrap_or(0);
@@ -1018,7 +1146,7 @@ impl Logix {
         let words: Vec<u32> = pens
             .iter()
             .map(|(target, mask)| {
-                let data = &self.scope(target.program).tags[target.tag].data;
+                let data = self.bytes(&self.scope(target.program).tags[target.tag]);
                 let mut word = [0u8; 4];
                 for (i, b) in word.iter_mut().enumerate() {
                     *b = data.get(target.offset + i).copied().unwrap_or(0);
@@ -1062,7 +1190,14 @@ impl Logix {
             let value = data.get(pos + 2..pos + 10).ok_or_else(|| status(0x13))?;
             let mut bytes = [0u8; 8];
             bytes.copy_from_slice(value);
-            self.clock_offset_us = i128::from(u64::from_le_bytes(bytes)) - now_us();
+            let us = u64::from_le_bytes(bytes);
+            match &mut self.fixed_clock_us {
+                Some(fixed) => *fixed = us,
+                None => self.clock_offset_us = i128::from(us) - now_us(),
+            }
+            if let Some(serviced) = &mut self.serviced {
+                serviced.clock_set_us = Some(i64::try_from(us).unwrap_or(i64::MAX));
+            }
             out.extend(0u16.to_le_bytes());
             pos += 10;
         }
@@ -1350,12 +1485,9 @@ impl Logix {
         }
     }
 
-    fn data_mut(&mut self, target: &Target) -> &mut Vec<u8> {
-        let scope = match target.program {
-            None => &mut self.controller,
-            Some(p) => &mut self.programs[p].scope,
-        };
-        &mut scope.tags[target.tag].data
+    fn data_mut(&mut self, target: &Target) -> &mut [u8] {
+        let at = self.scope(target.program).tags[target.tag].at;
+        &mut self.mem.bytes[at.offset..at.offset + at.len]
     }
 
     fn read(&self, service: u8, target: &Target, data: &[u8], limit: usize) -> Vec<u8> {
@@ -1372,7 +1504,7 @@ impl Logix {
         } else {
             0
         };
-        let tag_data = &self.scope(target.program).tags[target.tag].data;
+        let tag_data = self.bytes(&self.scope(target.program).tags[target.tag]);
         let (header, value) = match target.bit {
             Some(bit) => {
                 if elements != 1 {
@@ -1453,6 +1585,7 @@ impl Logix {
             } else {
                 tag_data[at] &= !(1 << bit);
             }
+            self.wrote(target, at, 1);
             return Ok(());
         }
         let matches = match target.ty {
@@ -1484,7 +1617,17 @@ impl Logix {
             });
         }
         let at = target.offset + offset;
-        self.data_mut(target)[at..at + value.len()].copy_from_slice(value);
+        // a placed (emulator's) BOOL holds 0 or 1, as a controller's does
+        let normalize = target.ty == Ty::Atomic(Atomic::Bool)
+            && self.scope(target.program).tags[target.tag].placed;
+        let written = &mut self.data_mut(target)[at..at + value.len()];
+        written.copy_from_slice(value);
+        if normalize {
+            written.iter_mut().for_each(|b| *b = u8::from(*b != 0));
+        }
+        if !value.is_empty() {
+            self.wrote(target, at, value.len());
+        }
         Ok(())
     }
 
@@ -1508,6 +1651,7 @@ impl Logix {
         for i in 0..size {
             tag_data[at + i] = (tag_data[at + i] | or_mask[i]) & and_mask[i];
         }
+        self.wrote(target, at, size);
         Ok(())
     }
 }
