@@ -561,6 +561,27 @@ impl Logix {
         scope.tag(name).map(|i| scope.tags[i].instance_id)
     }
 
+    /// Where a tag's bytes are in controller memory: `(offset, len, bit)`, the bit of a BOOL placed with
+    /// `bit`; None if there is no such tag. To check a placement against the memory a test lends.
+    pub fn tag_region(
+        &self,
+        program: Option<&str>,
+        name: &str,
+    ) -> Option<(usize, usize, Option<u8>)> {
+        let scope = match program {
+            None => &self.controller,
+            Some(p) => {
+                &self
+                    .programs
+                    .iter()
+                    .find(|x| x.name.eq_ignore_ascii_case(p))?
+                    .scope
+            }
+        };
+        let at = &scope.tags[scope.tag(name)?].at;
+        Some((at.offset, at.len, at.bit))
+    }
+
     /// The value of a tag, member or element as JSON, e.g. `Program:Main.tag[1].member`; a whole array is a
     /// list, a structure an object of its members, a BOOL array a list of bools.
     pub fn value(&self, path: &str) -> Result<Json, ConfigError> {

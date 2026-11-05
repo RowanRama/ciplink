@@ -13,7 +13,8 @@ use ciplink::packets::{
 };
 use ciplink::transport::{TcpTransport, Transport};
 use ciplink_sim::{
-    LogixConfig, MemberConfig, MemberLayout, Serviced, Simulator, TagConfig, TypeConfig, TypeLayout,
+    LogixConfig, MemberConfig, MemberLayout, ProgramConfig, Serviced, Simulator, TagConfig,
+    TypeConfig, TypeLayout,
 };
 use common::{Client, data, read, write};
 use serde_json::json;
@@ -55,6 +56,24 @@ fn placed_tags_overlap_and_an_alias_shares_its_targets_bytes() {
     assert_eq!(data(&client.unit(&read("word", 1))), [0xC4, 0, 7, 0, 0, 0]);
     assert_eq!(sim.value("low").unwrap(), json!(7));
     assert_eq!(sim.with_logix(|l| l.memory_len()), Some(16));
+}
+
+#[test]
+fn tag_region_reports_placed_appended_and_bit_tags() {
+    let sim = Simulator::new(
+        placed()
+            .with_program(ProgramConfig::new("P").with_tag(TagConfig::new("local", "INT").at(4))),
+    )
+    .unwrap();
+    sim.with_logix(|l| {
+        assert_eq!(l.tag_region(None, "WORD"), Some((0, 4, None)));
+        assert_eq!(l.tag_region(None, "flag"), Some((0, 1, Some(3))));
+        assert_eq!(l.tag_region(None, "b"), Some((8, 1, None)));
+        assert_eq!(l.tag_region(Some("p"), "local"), Some((4, 2, None)));
+        assert_eq!(l.tag_region(None, "missing"), None);
+        assert_eq!(l.tag_region(Some("nope"), "local"), None);
+    })
+    .unwrap();
 }
 
 #[test]
