@@ -536,7 +536,17 @@ fn close_fails_queued_requests_and_every_done_fires() {
     let d = open(ciplink_logix_new, &server, "{}");
     let seen = Seen::default();
     sim.inject(Fault::Delay(Duration::from_millis(100)));
+    let before = sim.requests();
     let w = write_async(&d, r#"[["dint_ary[9]", 99]]"#, Some(&seen));
+    // only a request the simulator has received is in flight; until then close fails it as queued
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while sim.requests() == before {
+        assert!(
+            Instant::now() < deadline,
+            "the write never reached the simulator"
+        );
+        std::thread::sleep(Duration::from_millis(1));
+    }
     let requests: Vec<_> = (0..10)
         .map(|_| read_async(&d, &["dint1"], Some(&seen)).1)
         .collect();

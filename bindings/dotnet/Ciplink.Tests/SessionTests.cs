@@ -255,11 +255,15 @@ public sealed class SessionTests
     public async Task Close_with_pending_work_fails_the_queued_requests()
     {
         using var plc = OpenPlc();
-        Subscription sub = plc.Subscribe(new[] { "usint1" }, TimeSpan.FromSeconds(10));
+        Subscription sub = null!;
         await WithDelay(300, async () =>
         {
+            long before = _sim.Requests();
             Task<IReadOnlyList<Tag>> inFlight = plc.ReadAsync("uint1");
-            await Task.Delay(100); // the session thread has taken it
+            // only a request the simulator has received is in flight; until then close may fail it as queued
+            WaitFor(() => _sim.Requests() > before, "the read to reach the simulator");
+            // subscribed now, so its first poll queues behind the read instead of delaying it
+            sub = plc.Subscribe(new[] { "usint1" }, TimeSpan.FromSeconds(10));
             Task<IReadOnlyList<Tag>> queuedWrite = plc.WriteAsync(("uint1", 1));
             Task<IReadOnlyList<Tag>> queuedRead = plc.ReadAsync("uint1");
             plc.Close();
