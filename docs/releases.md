@@ -1,7 +1,14 @@
 # Release History
 
-## Unreleased
+## ciplink 0.3.6
 
+- :sparkles: Logix and SLC drivers run on a session: one thread per driver does its I/O and packs the reads that
+  callers queue together into one read (a caller alone sends the same bytes as before). New in every binding:
+  `read_async` / `write_async` (a `Handle` future in Rust, asyncio in Python, `std::future` in C++, real
+  `Task`s in C#, completion callbacks in C), `subscribe` with per-tag quality and deadband, connection events,
+  background reconnect (100 ms doubling to 10 s, on by default; requests fail fast while reconnecting, a write is
+  never re-sent), and a keep-alive request after 30 s idle plus TCP keep-alive.  See
+  [Async, subscriptions and reconnect](sessions.md).
 - :sparkles: Modbus: `ModbusDriver` for Modbus TCP, RTU on a serial port and RTU over TCP, on the session core
   (merged reads, async, subscriptions, reconnect), in every binding. Tag names, types and descriptions come from a
   CSV map file; plain addresses such as `hr100:float32` work without one. `ciplink-server` serves Modbus devices
@@ -10,14 +17,8 @@
   `S7PlusDriver` browses the symbol table (types, arrays, structures, HMI flags), reads in batches of the PLC's
   item limit, writes, reads CPU information and runs on the same session (async, subscriptions, keep-alive,
   reconnect); the PLC certificate's SHA-256 fingerprint is exposed and can be pinned. `ciplink-server` serves it
-  with `protocol = "s7plus"`, and the simulator plays one.  See [Siemens S7-1500 and S7-1200](s7plus.md).
-- :sparkles: Logix and SLC drivers run on a session: one thread per driver does its I/O and packs the reads that
-  callers queue together into one read (a caller alone sends the same bytes as before). New in every binding:
-  `read_async` / `write_async` (a `Handle` future in Rust, asyncio in Python, `std::future` in C++, real
-  `Task`s in C#, completion callbacks in C), `subscribe` with per-tag quality and deadband, connection events,
-  background reconnect (100 ms doubling to 10 s, on by default; requests fail fast while reconnecting, a write is
-  never re-sent), and a keep-alive request after 30 s idle plus TCP keep-alive.  See
-  [Async, subscriptions and reconnect](sessions.md).
+  with `protocol = "s7plus"`, and the simulator plays one. Tag comments are not read yet.  See
+  [Siemens S7-1500 and S7-1200](s7plus.md).
 - :sparkles: the adapter is in every binding: `ciplink.Adapter` in Python, `ciplink_adapter_start` and the other
   `ciplink_adapter_*` functions in C, `ciplink::Adapter` in C++ and `Ciplink.Adapter` in C#, with the Rust core's
   events, connections and stats.  See [Adapter](adapter.md).
