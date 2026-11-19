@@ -22,6 +22,7 @@
 //! {"cmd": "tag_table_version"}                             [counter, attr 2, download, download 2, project]
 //! {"cmd": "fault", "fault": {...}}                        {"drop_replies": n}, {"delay_ms": n},
 //!                                                          {"refuse_connections": true},
+//!                                                          {"close_connections": true},
 //!                                                          {"tag_status": {"tag", "status", "ext"}},
 //!                                                          {"service_status": {"service", "class", "status", "ext"}}
 //! {"cmd": "clear_faults"}
@@ -192,6 +193,9 @@ fn fault(spec: &Json) -> Result<Fault, String> {
     }
     if spec.get("refuse_connections").is_some() {
         return Ok(Fault::RefuseConnections);
+    }
+    if spec.get("close_connections").is_some() {
+        return Ok(Fault::CloseConnections);
     }
     if let Some(t) = spec.get("tag_status") {
         let (status, ext) = status(t)?;

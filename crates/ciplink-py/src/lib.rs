@@ -7,6 +7,7 @@
 mod adapter;
 mod defs;
 mod server;
+mod session;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -29,6 +30,7 @@ use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::sync::{MutexExt, PyOnceLock};
 use pyo3::types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyString, PyTuple};
+use session::PySubscription;
 
 // ------------------------------------------------------------------------------------------------ errors
 
@@ -753,6 +755,21 @@ struct PySlcDriver {
     inner: SlcDriver,
 }
 
+// PyO3 drops a driver with the GIL held, and stopping its session joins threads that may be waiting for the
+// GIL (a log record or a send hook on the session thread): release it first. The field's own drop then has
+// nothing left to join.
+impl Drop for PySlcDriver {
+    fn drop(&mut self) {
+        Python::attach(|py| py.detach(|| self.inner.stop()));
+    }
+}
+
+impl Drop for PyLogixDriver {
+    fn drop(&mut self) {
+        Python::attach(|py| py.detach(|| self.inner.stop()));
+    }
+}
+
 /// The (tag, value) pairs of a write, as names, values and the value objects.
 type WriteItems<'py> = (Vec<String>, Vec<Value>, Vec<Bound<'py, PyAny>>);
 
@@ -777,11 +794,82 @@ fn pairs(names: &[String], values: Vec<Value>) -> Vec<(&str, Value)> {
 #[pymethods]
 impl PySlcDriver {
     #[new]
-    #[pyo3(signature = (path, socket_timeout=Some(5.0), connection_size=500))]
-    fn new(path: &str, socket_timeout: Option<f64>, connection_size: i64) -> PyResult<Self> {
+    #[pyo3(signature = (path, socket_timeout=Some(5.0), connection_size=500, reconnect=true, keep_alive=Some(30.0)))]
+    fn new(
+        path: &str,
+        socket_timeout: Option<f64>,
+        connection_size: i64,
+        reconnect: bool,
+        keep_alive: Option<f64>,
+    ) -> PyResult<Self> {
         Ok(PySlcDriver {
-            inner: SlcDriver::new(path, cip_options(socket_timeout, connection_size)?).py()?,
+            inner: SlcDriver::with_session(
+                path,
+                cip_options(socket_timeout, connection_size)?,
+                session::session_options(reconnect, keep_alive)?,
+                tcp_connector(),
+            )
+            .py()?,
         })
+    }
+
+    /// Queues a read; `done(results, error)` is called on the driver's callback thread.
+    fn read_async(&self, py: Python<'_>, addresses: Vec<String>, done: Py<PyAny>) {
+        sync_log_level(py);
+        let callback = session::completion(done, None);
+        py.detach(|| {
+            let refs: Vec<&str> = addresses.iter().map(String::as_str).collect();
+            self.inner.read_async(&refs).on_complete(callback);
+        });
+    }
+
+    /// Queues a write; `done(results, error)` is called on the driver's callback thread.
+    fn write_async(
+        &self,
+        py: Python<'_>,
+        items: &Bound<'_, PyAny>,
+        done: Py<PyAny>,
+    ) -> PyResult<()> {
+        let (names, values, objects) = write_items(items)?;
+        let callback =
+            session::completion(done, Some(objects.into_iter().map(Bound::unbind).collect()));
+        sync_log_level(py);
+        py.detach(|| {
+            self.inner
+                .write_async(&pairs(&names, values))
+                .on_complete(callback)
+        });
+        Ok(())
+    }
+
+    #[pyo3(signature = (addresses, interval=1.0, deadband=None))]
+    fn subscribe(
+        &self,
+        py: Python<'_>,
+        addresses: Vec<String>,
+        interval: f64,
+        deadband: Option<f64>,
+    ) -> PyResult<PySubscription> {
+        let options = session::subscribe_options(interval, deadband)?;
+        let sub = py
+            .detach(|| {
+                let refs: Vec<&str> = addresses.iter().map(String::as_str).collect();
+                self.inner.subscribe(&refs, options)
+            })
+            .py()?;
+        Ok(PySubscription::new(sub))
+    }
+
+    /// Sets (or with None removes) `callback(event, error, attempt, delay)`, called on connection changes.
+    fn set_connection_callback(&self, py: Python<'_>, callback: Option<Py<PyAny>>) {
+        let callback = callback.map(session::connection_callback);
+        py.detach(|| self.inner.set_connection_callback(callback));
+    }
+
+    /// 'closed', 'connected' or 'reconnecting'.
+    #[getter]
+    fn connection_state(&self, py: Python<'_>) -> &'static str {
+        session::state_name(py.detach(|| self.inner.connection_state()))
     }
 
     fn open(&self, py: Python<'_>) -> PyResult<bool> {
@@ -801,29 +889,28 @@ impl PySlcDriver {
 
     #[getter]
     fn target_connected(&self, py: Python<'_>) -> bool {
-        py.detach(|| self.inner.cip().lock().target_connected())
+        py.detach(|| self.inner.target_connected())
     }
 
     #[getter]
     fn get_connection_size(&self, py: Python<'_>) -> u16 {
-        py.detach(|| self.inner.cip().connection_size())
+        py.detach(|| self.inner.connection_size())
     }
 
     fn set_connection_size(&self, py: Python<'_>, size: i64) -> PyResult<()> {
         let size = connection_size(size)?;
-        py.detach(|| self.inner.cip().set_connection_size(size))
-            .py()
+        py.detach(|| self.inner.set_connection_size(size)).py()
     }
 
     #[getter]
     fn get_socket_timeout(&self, py: Python<'_>) -> Option<f64> {
-        py.detach(|| self.inner.cip().socket_timeout())
+        py.detach(|| self.inner.socket_timeout())
             .map(|d| d.as_secs_f64())
     }
 
     fn set_socket_timeout(&self, py: Python<'_>, seconds: Option<f64>) -> PyResult<()> {
         let t = timeout(seconds)?;
-        py.detach(|| self.inner.cip().set_socket_timeout(t)).py()
+        py.detach(|| self.inner.set_socket_timeout(t)).py()
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -852,44 +939,44 @@ impl PySlcDriver {
             route_path,
         )?;
         sync_log_level(py);
-        let reply = py.detach(|| self.inner.cip().generic_message(&msg)).py()?;
+        let reply = py.detach(|| self.inner.generic_message(&msg)).py()?;
         generic_reply(py, reply)
     }
 
     fn send_connected(&self, py: Python<'_>, message: Vec<u8>) -> PyResult<Py<PyBytes>> {
-        let raw = py.detach(|| self.inner.cip().send_connected_raw(&message));
+        let raw = py.detach(|| self.inner.send_connected_raw(&message));
         bytes_result(py, raw)
     }
 
     fn send_unconnected(&self, py: Python<'_>, message: Vec<u8>) -> PyResult<Py<PyBytes>> {
-        let raw = py.detach(|| self.inner.cip().send_unconnected_raw(&message));
+        let raw = py.detach(|| self.inner.send_unconnected_raw(&message));
         bytes_result(py, raw)
     }
 
     fn get_module_info<'py>(&self, py: Python<'py>, slot: i64) -> PyResult<Bound<'py, PyAny>> {
         sync_log_level(py);
-        let id = py.detach(|| self.inner.cip().get_module_info(slot)).py()?;
+        let id = py.detach(|| self.inner.get_module_info(slot)).py()?;
         value_to_py(py, &id.to_value())
     }
 
     #[pyo3(signature = (route=""))]
     fn get_identity<'py>(&self, py: Python<'py>, route: &str) -> PyResult<Bound<'py, PyAny>> {
         sync_log_level(py);
-        let id = py.detach(|| self.inner.cip().identity_at(route)).py()?;
+        let id = py.detach(|| self.inner.identity_at(route)).py()?;
         value_to_py(py, &id.to_value())
     }
 
     #[pyo3(signature = (route=""))]
     fn get_app<'py>(&self, py: Python<'py>, route: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
         sync_log_level(py);
-        let app = py.detach(|| self.inner.cip().app_at(route)).py()?;
+        let app = py.detach(|| self.inner.app_at(route)).py()?;
         app.map(|app| value_to_py(py, &app.to_value())).transpose()
     }
 
     #[pyo3(signature = (route=""))]
     fn get_ports(&self, py: Python<'_>, route: &str) -> PyResult<Py<PyList>> {
         sync_log_level(py);
-        let ports = py.detach(|| self.inner.cip().ports_at(route)).py()?;
+        let ports = py.detach(|| self.inner.ports_at(route)).py()?;
         ports_py(py, ports)
     }
 
@@ -906,7 +993,6 @@ impl PySlcDriver {
         let nodes = py
             .detach(|| {
                 self.inner
-                    .cip()
                     .browse_port(route, port, nodes.as_deref(), workers)
             })
             .py()?;
@@ -927,7 +1013,6 @@ impl PySlcDriver {
         let mut callback = node_callback(found);
         py.detach(|| {
             self.inner
-                .cip()
                 .scan_port(route, port, nodes.as_deref(), workers, &mut callback.call)
         })
         .py()?;
@@ -1122,7 +1207,8 @@ fn text_encoding(name: &str) -> PyResult<TextEncoding> {
 impl PyLogixDriver {
     #[new]
     #[pyo3(signature = (path, init_tags=true, init_program_tags=true, tag_namespace_filter=String::new(),
-                        lazy_tags=false, tag_cache_file=None, socket_timeout=Some(5.0), connection_size=4000))]
+                        lazy_tags=false, tag_cache_file=None, socket_timeout=Some(5.0), connection_size=4000,
+                        reconnect=true, keep_alive=Some(30.0)))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         path: &str,
@@ -1133,6 +1219,8 @@ impl PyLogixDriver {
         tag_cache_file: Option<std::path::PathBuf>,
         socket_timeout: Option<f64>,
         connection_size: i64,
+        reconnect: bool,
+        keep_alive: Option<f64>,
     ) -> PyResult<Self> {
         let options = LogixOptions {
             init_tags,
@@ -1144,11 +1232,75 @@ impl PyLogixDriver {
         };
         let hook = Arc::new(SendHook::default());
         Ok(PyLogixDriver {
-            inner: LogixDriver::with_connector(path, options, hook_connector(Arc::clone(&hook)))
-                .py()?,
+            inner: LogixDriver::with_session(
+                path,
+                options,
+                session::session_options(reconnect, keep_alive)?,
+                hook_connector(Arc::clone(&hook)),
+            )
+            .py()?,
             hook,
             defs: Mutex::default(),
         })
+    }
+
+    /// Queues a read; `done(results, error)` is called on the driver's callback thread.
+    fn read_async(&self, py: Python<'_>, tags: Vec<String>, done: Py<PyAny>) {
+        sync_log_level(py);
+        let callback = session::completion(done, None);
+        py.detach(|| {
+            let refs: Vec<&str> = tags.iter().map(String::as_str).collect();
+            self.inner.read_async(&refs).on_complete(callback);
+        });
+    }
+
+    /// Queues a write; `done(results, error)` is called on the driver's callback thread.
+    fn write_async(
+        &self,
+        py: Python<'_>,
+        items: &Bound<'_, PyAny>,
+        done: Py<PyAny>,
+    ) -> PyResult<()> {
+        let (names, values, objects) = write_items(items)?;
+        let callback =
+            session::completion(done, Some(objects.into_iter().map(Bound::unbind).collect()));
+        sync_log_level(py);
+        py.detach(|| {
+            self.inner
+                .write_async(&pairs(&names, values))
+                .on_complete(callback)
+        });
+        Ok(())
+    }
+
+    #[pyo3(signature = (tags, interval=1.0, deadband=None))]
+    fn subscribe(
+        &self,
+        py: Python<'_>,
+        tags: Vec<String>,
+        interval: f64,
+        deadband: Option<f64>,
+    ) -> PyResult<PySubscription> {
+        let options = session::subscribe_options(interval, deadband)?;
+        let sub = py
+            .detach(|| {
+                let refs: Vec<&str> = tags.iter().map(String::as_str).collect();
+                self.inner.subscribe(&refs, options)
+            })
+            .py()?;
+        Ok(PySubscription::new(sub))
+    }
+
+    /// Sets (or with None removes) `callback(event, error, attempt, delay)`, called on connection changes.
+    fn set_connection_callback(&self, py: Python<'_>, callback: Option<Py<PyAny>>) {
+        let callback = callback.map(session::connection_callback);
+        py.detach(|| self.inner.set_connection_callback(callback));
+    }
+
+    /// 'closed', 'connected' or 'reconnecting'.
+    #[getter]
+    fn connection_state(&self, py: Python<'_>) -> &'static str {
+        session::state_name(py.detach(|| self.inner.connection_state()))
     }
 
     /// Installs (or with None removes) the callable that replaces the driver's sends.
@@ -1699,6 +1851,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PySlcDriver>()?;
     m.add_class::<PyLogixDriver>()?;
     m.add_class::<PyTrend>()?;
+    m.add_class::<PySubscription>()?;
     m.add_class::<server::PyTagServer>()?;
     m.add_class::<adapter::PyAdapter>()?;
     m.add_function(wrap_pyfunction!(server::server_main, m)?)?;

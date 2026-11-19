@@ -47,6 +47,7 @@ from .const import SEC_TO_US
 from .exceptions import RequestError
 from .tag import Tag, ErrorKind, TagError
 from .logix_auth import LogixMetadataCredentials
+from .subscription import _Session
 from .trend import Trend
 
 AtomicValueType = Union[int, float, bool, str]
@@ -88,7 +89,7 @@ def _definitions_may_change(func):
     return wrapped
 
 
-class LogixDriver(CIPDriver):
+class LogixDriver(CIPDriver, _Session):
     """
     An Ethernet/IP Client driver for reading and writing tags in ControlLogix and CompactLogix PLCs.
 
@@ -96,6 +97,12 @@ class LogixDriver(CIPDriver):
     ``init_program_tags``, ``tag_namespace_filter``, ``lazy_tags``, ``tag_cache_file``, ``socket_timeout`` and
     ``connection_size``.  To share the tag definitions between connections to the same controller, open the second
     one with ``init_tags=False`` and set ``plc2._tags = plc1.tags``.
+
+    ``reconnect`` (default True): after an open connection is lost, reconnect in the background (keeping the tag
+    definitions when the controller's tag table did not change).  ``keep_alive`` (seconds, default 30, None for
+    never): after this long without a request, send a small one so the connection is not dropped as idle.
+    The driver can be shared by threads and asyncio tasks: see :meth:`read_async`, :meth:`write_async`,
+    :meth:`subscribe` and :meth:`on_connection`.
 
     ``tags`` (all the tag definitions uploaded from the controller) and ``data_types`` (all the data type definitions;
     the entry of an AOI type has an ``'aoi'`` entry once probed: ``{'whole_read': bool, 'readable': [...],
@@ -114,8 +121,12 @@ class LogixDriver(CIPDriver):
         tag_namespace_filter: str = '',
         lazy_tags: bool = False,
         tag_cache_file: Optional[str] = None,
+        reconnect: bool = True,
+        keep_alive: Optional[float] = 30.0,
         **kwargs,
     ):
+        self._init_session()
+        self._session_options = (bool(reconnect), keep_alive)
         self._init_args = {
             "init_tags": init_tags and not lazy_tags,
             "init_program_tags": init_program_tags,
@@ -130,7 +141,7 @@ class LogixDriver(CIPDriver):
     def _make_core(self, path, socket_timeout, connection_size):
         init_tags, init_program_tags, namespace, lazy, cache_file = self._options
         return _core.LogixDriver(path, init_tags, init_program_tags, namespace, lazy, cache_file, socket_timeout,
-                                 connection_size)
+                                 connection_size, *self._session_options)
 
     @classmethod
     def _core_class(cls):
@@ -148,6 +159,8 @@ class LogixDriver(CIPDriver):
         return self._core.open()
 
     def close(self):
+        """closes the connection: queued requests fail with a CommError, subscriptions end, reconnecting stops"""
+        self._close_subscriptions()
         self._core.close()
 
     # ---- tag definitions
@@ -378,6 +391,38 @@ class LogixDriver(CIPDriver):
         if len(tags_values) == 2 and isinstance(tags_values[0], str):
             tags_values = ((*tags_values,),)
         results = self._core.write(tags_values)
+        return results if len(results) > 1 else results[0]
+
+    async def read_async(self, *tags: str) -> ReadWriteReturnType:
+        """
+        :meth:`read` for asyncio: the arguments and results are those of :meth:`read`, and awaiting does not block
+        the event loop.  Reads queued while the driver is busy, from any task or thread, go out as one read.
+        Cancelling the awaiting task does not cancel the read.
+        """
+        if not tags:
+            return []
+        try:
+            results = await self._await_core(self._core.read_async, list(tags))
+        finally:
+            _refresh_definitions(self)
+        return results if len(tags) > 1 else results[0]
+
+    async def write_async(
+        self, *tags_values: Union[str, TagValueType, Tuple[str, TagValueType]]
+    ) -> ReadWriteReturnType:
+        """
+        :meth:`write` for asyncio: the arguments and results are those of :meth:`write`.  Writes run in the order
+        they were made, after everything queued before them, and are never sent twice.  Cancelling the awaiting
+        task does not cancel the write.
+        """
+        if not tags_values:
+            return []
+        if len(tags_values) == 2 and isinstance(tags_values[0], str):
+            tags_values = ((*tags_values,),)
+        try:
+            results = await self._await_core(self._core.write_async, tags_values)
+        finally:
+            _refresh_definitions(self)
         return results if len(results) > 1 else results[0]
 
     @_definitions_may_change

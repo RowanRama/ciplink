@@ -7,7 +7,12 @@
 //   if (t) std::cout << t.value.as_int() << "\n";
 //   plc.write_tag("Setpoint", 12.5);
 //
+//   auto pending = plc.read_async({"Counter"});        // std::future, waitable on any thread
+//   auto sub = plc.subscribe({"Counter"}, [](const std::vector<ciplink::Tag>& changed) { /* ... */ }, 0.5);
+//
 // Connection and argument failures throw ciplink::Error; per-tag failures are returned in Tag::error.
+// Callbacks (subscriptions, on_connection) run on the driver's callback thread, one at a time: keep them short.
+// They may call the driver, but an exception thrown from one is swallowed (it must not cross the C ABI).
 // Values follow the C ABI's JSON forms (see ciplink.h): integers are int64_t (uint64_t above INT64_MAX),
 // REAL/LREAL are double, raw bytes are ciplink::Bytes, arrays and structures nest.
 #ifndef CIPLINK_HPP
@@ -22,6 +27,7 @@
 #include <cstring>
 #include <exception>
 #include <functional>
+#include <future>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -408,18 +414,122 @@ struct Message {
     std::string name = "generic";
 };
 
+// ---------------------------------------------------------------------------------------------- sessions
+
+/// Where a driver's link is.
+enum class ConnectionState { Closed, Connected, Reconnecting };
+
+/// A change of a driver's link, passed to Driver::on_connection.
+struct ConnectionEvent {
+    /// "connected", "disconnected" or "reconnecting".
+    std::string event;
+    /// What failed ("disconnected").
+    std::string error;
+    /// The attempt number, from 1 ("reconnecting").
+    uint32_t attempt = 0;
+    /// The wait before the attempt in seconds ("reconnecting").
+    double delay = 0;
+};
+
+/// A running subscription from Logix::subscribe or Slc::subscribe (movable, not copyable). Destroying it or close()
+/// unsubscribes; once that returns its function is not running and will not run again (unless it is done from the
+/// subscription's own callback).
+class Subscription {
+public:
+    using Fn = std::function<void(const std::vector<Tag>&)>;
+
+    Subscription(Subscription&&) noexcept = default;
+    Subscription& operator=(Subscription&& o) noexcept {
+        if (this != &o) {
+            close();
+            handle_ = std::move(o.handle_);
+            fn_ = std::move(o.fn_);
+        }
+        return *this;
+    }
+    ~Subscription() { close(); }
+
+    /// Unsubscribes (idempotent).
+    void close() noexcept {
+        handle_.reset();  // first: after it the callback no longer runs
+        fn_.reset();
+    }
+
+    /// The raw handle (null once closed).
+    CiplinkSubscription* handle() const { return handle_.get(); }
+
+private:
+    friend class Driver;
+    Subscription(std::unique_ptr<Fn> fn, CiplinkSubscription* raw) : fn_(std::move(fn)), handle_(raw) {}
+
+    struct Free {
+        void operator()(CiplinkSubscription* p) const noexcept { ciplink_subscription_free(p); }
+    };
+    std::unique_ptr<Fn> fn_;
+    std::unique_ptr<CiplinkSubscription, Free> handle_;
+};
+
 // ---------------------------------------------------------------------------------------------- drivers
 
 /// Common driver operations; owns the handle (movable, not copyable). Thread-safe.
+///
+/// A Logix or Slc driver does its I/O on a session thread of its own: calls from several threads queue up, reads
+/// queued together go out as one read, and after a lost link the driver reconnects in the background (options
+/// "reconnect", "reconnect_min", "reconnect_max", "keep_alive"; see ciplink_logix_new). While it reconnects, reads
+/// and writes fail at once with a Comm error.
 class Driver {
 public:
     Driver(Driver&&) noexcept = default;
-    Driver& operator=(Driver&&) noexcept = default;
+    Driver& operator=(Driver&& o) noexcept {
+        if (this != &o) {
+            handle_ = std::move(o.handle_);  // first: frees the old driver, so the old callback no longer runs
+            on_connection_ = std::move(o.on_connection_);
+        }
+        return *this;
+    }
     virtual ~Driver() = default;
 
     void open() { detail::check(ciplink_open(h())); }
+    /// Closes the connection: queued requests fail with "driver closed", subscriptions end, reconnecting stops.
     void close() { detail::check(ciplink_close(h())); }
     bool connected() const { return ciplink_connected(h()); }
+
+    /// Where the link is: closed, connected, or reconnecting in the background. Never blocks.
+    ConnectionState connection_state() const {
+        switch (ciplink_connection_state(h())) {
+            case CIPLINK_CONNECTION_STATE_CONNECTED: return ConnectionState::Connected;
+            case CIPLINK_CONNECTION_STATE_RECONNECTING: return ConnectionState::Reconnecting;
+            default: return ConnectionState::Closed;
+        }
+    }
+
+    /// Calls `f` with each change of the link (connected, disconnected, reconnecting) on the driver's callback
+    /// thread; an empty `f` removes it. Once this returns the old function is not running and is destroyed.
+    /// Throws (Unsupported) for a plain Cip driver.
+    void on_connection(std::function<void(const ConnectionEvent&)> f) {
+        if (!f) {
+            detail::check(ciplink_set_connection_callback(h(), nullptr, nullptr));
+            on_connection_.reset();
+            return;
+        }
+        auto fn = std::make_unique<std::function<void(const ConnectionEvent&)>>(std::move(f));
+        auto trampoline = [](void* user, const char* json) {
+            try {
+                ConnectionEvent e;
+                Value parsed = parse_json(json);
+                for (auto& kv : parsed.as_struct()) {
+                    if (kv.first == "event") e.event = kv.second.as_string();
+                    else if (kv.first == "error") e.error = kv.second.as_string();
+                    else if (kv.first == "attempt") e.attempt = uint32_t(kv.second.as_int());
+                    else if (kv.first == "delay") e.delay = kv.second.as_double();
+                }
+                (*static_cast<std::function<void(const ConnectionEvent&)>*>(user))(e);
+            } catch (...) {
+            }
+        };
+        detail::check(ciplink_set_connection_callback(h(), trampoline, fn.get()));
+        on_connection_ = std::move(fn);  // the old one is no longer called, so destroying it is safe
+    }
 
     /// Sends a generic message; the reply data is the value as Bytes (null if none).
     Tag generic_message(const Message& m) {
@@ -547,7 +657,7 @@ protected:
         return results(detail::take(out));
     }
 
-    std::vector<Tag> write_(const std::vector<std::pair<std::string, Value>>& items) {
+    static std::string items_json(const std::vector<std::pair<std::string, Value>>& items) {
         std::string json = "[";
         for (size_t i = 0; i < items.size(); ++i) {
             if (i) json += ',';
@@ -557,10 +667,74 @@ protected:
             detail::write_json(items[i].second, json);
             json += ']';
         }
-        json += ']';
+        return json + "]";
+    }
+
+    std::vector<Tag> write_(const std::vector<std::pair<std::string, Value>>& items) {
         char* out = nullptr;
-        detail::check(ciplink_write(h(), json.c_str(), &out));
+        detail::check(ciplink_write(h(), items_json(items).c_str(), &out));
         return results(detail::take(out));
+    }
+
+    using Promise = std::promise<std::vector<Tag>>;
+
+    /// The CiplinkDone of read_async_ / write_async_: settles and deletes the promise passed as `user`.
+    static void settle_(void* user, CiplinkStatus status, const char* json) {
+        std::unique_ptr<Promise> p(static_cast<Promise*>(user));
+        try {
+            if (status == CIPLINK_STATUS_OK) p->set_value(results(json));
+            else p->set_exception(std::make_exception_ptr(Error(status, json)));
+        } catch (...) {
+            try {
+                p->set_exception(std::current_exception());
+            } catch (...) {
+            }
+        }
+    }
+
+    /// Queues a request through `submit(done, user)`; the future gets its results or its ciplink::Error.
+    template <class F>
+    static std::future<std::vector<Tag>> async_(F submit) {
+        auto p = std::make_unique<Promise>();
+        auto future = p->get_future();
+        detail::check(submit(&Driver::settle_, p.get()));  // on failure settle_ is never called
+        p.release();  // owned by settle_ now (it may even have run already)
+        return future;
+    }
+
+    std::future<std::vector<Tag>> read_async_(const std::vector<std::string>& tags) {
+        std::vector<const char*> ptrs;
+        ptrs.reserve(tags.size());
+        for (auto& t : tags) ptrs.push_back(t.c_str());
+        return async_([&](CiplinkDone done, void* user) {
+            return ciplink_read_async(h(), ptrs.data(), ptrs.size(), done, user, nullptr);
+        });
+    }
+
+    std::future<std::vector<Tag>> write_async_(const std::vector<std::pair<std::string, Value>>& items) {
+        std::string json = items_json(items);
+        return async_([&](CiplinkDone done, void* user) {
+            return ciplink_write_async(h(), json.c_str(), done, user, nullptr);
+        });
+    }
+
+    Subscription subscribe_(const std::vector<std::string>& tags, Subscription::Fn f, double interval_s,
+                            std::optional<double> deadband) {
+        std::vector<const char*> ptrs;
+        ptrs.reserve(tags.size());
+        for (auto& t : tags) ptrs.push_back(t.c_str());
+        std::string options = to_json(Value(Struct{{"interval", Value(interval_s)},
+                                                   {"deadband", deadband ? Value(*deadband) : Value()}}));
+        auto fn = std::make_unique<Subscription::Fn>(std::move(f));
+        auto trampoline = [](void* user, const char* json) {
+            try {
+                (*static_cast<Subscription::Fn*>(user))(results(json));
+            } catch (...) {
+            }
+        };
+        CiplinkSubscription* raw = nullptr;
+        detail::check(ciplink_subscribe(h(), ptrs.data(), ptrs.size(), options.c_str(), trampoline, fn.get(), &raw));
+        return Subscription(std::move(fn), raw);
     }
 
     using RawSend = CiplinkStatus (*)(const CiplinkDriver*, const uint8_t*, size_t, uint8_t**, size_t*);
@@ -602,6 +776,8 @@ private:
     struct Free {
         void operator()(CiplinkDriver* p) const noexcept { ciplink_driver_free(p); }
     };
+    // declared before handle_, so it is destroyed after the driver (which stops calling it)
+    std::unique_ptr<std::function<void(const ConnectionEvent&)>> on_connection_;
     std::unique_ptr<CiplinkDriver, Free> handle_;
 };
 
@@ -698,6 +874,21 @@ public:
     Tag read_tag(const std::string& tag) { return read_({tag}).at(0); }
     std::vector<Tag> write(const std::vector<std::pair<std::string, Value>>& items) { return write_(items); }
     Tag write_tag(const std::string& tag, const Value& value) { return write_({{tag, value}}).at(0); }
+
+    /// read() without waiting: the future gets the results, or the ciplink::Error (e.g. Comm while reconnecting or
+    /// "driver closed"). Reads queued together, from any thread, go out as one read.
+    std::future<std::vector<Tag>> read_async(const std::vector<std::string>& tags) { return read_async_(tags); }
+    /// write() without waiting. Writes run in the order queued and are never sent twice.
+    std::future<std::vector<Tag>> write_async(const std::vector<std::pair<std::string, Value>>& items) {
+        return write_async_(items);
+    }
+    /// Reads `tags` every `interval_s` seconds (packed with the other reads) and calls `on_changes` on the driver's
+    /// callback thread with the tags whose value or error changed (all of them the first time). With `deadband`,
+    /// a numeric change smaller than it is not passed. A failed read is a change to Tag::error (kind "comm").
+    Subscription subscribe(const std::vector<std::string>& tags, Subscription::Fn on_changes, double interval_s = 1.0,
+                           std::optional<double> deadband = std::nullopt) {
+        return subscribe_(tags, std::move(on_changes), interval_s, deadband);
+    }
 
     /// Starts a controller-side trend: the controller samples `tags` (atomic tags, members or elements of up to
     /// 32 bits, or bits such as "Tag.3") every `period_ms` and the trend uploads them on a connection of its own.
@@ -801,6 +992,18 @@ public:
     Tag read_tag(const std::string& address) { return read_({address}).at(0); }
     std::vector<Tag> write(const std::vector<std::pair<std::string, Value>>& items) { return write_(items); }
     Tag write_tag(const std::string& address, const Value& value) { return write_({{address, value}}).at(0); }
+
+    /// As Logix::read_async, write_async and subscribe.
+    std::future<std::vector<Tag>> read_async(const std::vector<std::string>& addresses) {
+        return read_async_(addresses);
+    }
+    std::future<std::vector<Tag>> write_async(const std::vector<std::pair<std::string, Value>>& items) {
+        return write_async_(items);
+    }
+    Subscription subscribe(const std::vector<std::string>& addresses, Subscription::Fn on_changes,
+                           double interval_s = 1.0, std::optional<double> deadband = std::nullopt) {
+        return subscribe_(addresses, std::move(on_changes), interval_s, deadband);
+    }
 
     /// The processor type, e.g. "1747-L552", or null if unknown.
     Value get_processor_type() {

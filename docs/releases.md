@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- :sparkles: Logix and SLC drivers run on a session: one thread per driver does its I/O and packs the reads that
+  callers queue together into one read (a caller alone sends the same bytes as before). New in every binding:
+  `read_async` / `write_async` (a `Handle` future in Rust, asyncio in Python, `std::future` in C++, real
+  `Task`s in C#, completion callbacks in C), `subscribe` with per-tag quality and deadband, connection events,
+  background reconnect (100 ms doubling to 10 s, on by default; requests fail fast while reconnecting, a write is
+  never re-sent), and a keep-alive request after 30 s idle plus TCP keep-alive.  See
+  [Async, subscriptions and reconnect](sessions.md).
 - :sparkles: the adapter is in every binding: `ciplink.Adapter` in Python, `ciplink_adapter_start` and the other
   `ciplink_adapter_*` functions in C, `ciplink::Adapter` in C++ and `Ciplink.Adapter` in C#, with the Rust core's
   events, connections and stats.  See [Adapter](adapter.md).

@@ -5,6 +5,7 @@
 //! connection, holding its lock across multi-step operations.
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
@@ -24,6 +25,9 @@ const NO_SESSION: &str = "A session must be registered before a Forward Open (ca
 /// Python's `with_forward_open` reports the decorated function, a lambda for generic messages.
 const GENERIC_CALLER: &str = "<lambda>";
 /// The longest one discovery broadcast collects replies (Python has no limit).
+/// Get Attribute Single (0x0E), Identity (class 0x01) instance 1, attribute 1 (Vendor ID): a 2-byte reply
+/// every CIP device has.
+const KEEP_ALIVE_REQUEST: [u8; 8] = [0x0E, 0x03, 0x20, 0x01, 0x24, 0x01, 0x30, 0x01];
 const DISCOVER_LIMIT: Duration = Duration::from_secs(10);
 
 /// Connection options.
@@ -145,6 +149,35 @@ impl GenericReply {
     }
 }
 
+/// Whether a connection has a registered session and an open CIP connection, readable without the
+/// connection's lock: `connected()` of a driver must not wait for the request in flight or a background
+/// reconnect.
+#[derive(Debug, Default)]
+pub(crate) struct LinkFlags {
+    opened: AtomicBool,
+    target: AtomicBool,
+}
+
+impl LinkFlags {
+    /// True while a session is registered.
+    pub(crate) fn opened(&self) -> bool {
+        self.opened.load(Ordering::Acquire)
+    }
+
+    /// True while the CIP connection (Forward Open) is open.
+    pub(crate) fn target(&self) -> bool {
+        self.target.load(Ordering::Acquire)
+    }
+
+    fn set_opened(&self, value: bool) {
+        self.opened.store(value, Ordering::Release);
+    }
+
+    fn set_target(&self, value: bool) {
+        self.target.store(value, Ordering::Release);
+    }
+}
+
 /// The connection state of a CIP driver and the operations on it.
 ///
 /// Matches the Python `CIPDriver`: the same requests in the same order, the same sequence counter, the same
@@ -157,9 +190,9 @@ pub struct CipConnection {
     port: u16,
     cip_path: Vec<Segment>,
     session: u32,
-    connection_opened: bool,
+    /// Session registered and CIP connection open, shared with the driver's lock-free `connected()`.
+    link: Arc<LinkFlags>,
     target_cid: Option<Vec<u8>>,
-    target_is_connected: bool,
     next_sequence: u16,
     connection_size: u16,
     extended_forward_open: bool,
@@ -212,9 +245,8 @@ impl CipConnection {
             port: port.unwrap_or(DEFAULT_PORT),
             cip_path,
             session: 0,
-            connection_opened: false,
+            link: Arc::default(),
             target_cid: None,
-            target_is_connected: false,
             next_sequence: 1,
             connection_size: options.connection_size,
             extended_forward_open: options.connection_size > 511,
@@ -257,12 +289,17 @@ impl CipConnection {
 
     /// True while a session is registered.
     pub fn connected(&self) -> bool {
-        self.connection_opened
+        self.link.opened()
+    }
+
+    /// The link flags, to read without this connection's lock.
+    pub(crate) fn link(&self) -> Arc<LinkFlags> {
+        Arc::clone(&self.link)
     }
 
     /// True while the CIP connection (Forward Open) is open.
     pub fn target_connected(&self) -> bool {
-        self.target_is_connected
+        self.link.target()
     }
 
     /// Session handle, 0 without a session.
@@ -288,7 +325,7 @@ impl CipConnection {
     /// Sets the connection size (1 to 65535) used by the next Forward Open; a RequestError while connected.
     pub fn set_connection_size(&mut self, size: u16) -> Result<()> {
         check_connection_size(size)?;
-        if self.target_is_connected {
+        if self.link.target() {
             return Err(Error::request(
                 "Close the connection before changing connection_size",
             ));
@@ -337,7 +374,7 @@ impl CipConnection {
     /// Opens the transport and registers a session; Ok(false) if the target refused the session. A
     /// CommError if the connection could not be made. Does nothing if a session is registered.
     pub fn open(&mut self) -> Result<bool> {
-        if self.connection_opened {
+        if self.link.opened() {
             return Ok(true);
         }
         match self.try_open() {
@@ -364,7 +401,7 @@ impl CipConnection {
                 self.socket_timeout,
             )?);
         }
-        self.connection_opened = true;
+        self.link.set_opened(true);
         Ok(self.register_session()? != 0)
     }
 
@@ -395,7 +432,7 @@ impl CipConnection {
     /// errors are joined into one CommError.
     pub fn close(&mut self) -> Result<()> {
         let mut errors = Vec::new();
-        if self.target_is_connected {
+        if self.link.target() {
             if let Err(err) = self.forward_close() {
                 log::error!("Error closing connection with device: {err}");
                 errors.push(err.to_string());
@@ -428,15 +465,15 @@ impl CipConnection {
     pub fn drop_connection(&mut self) {
         self.transport = None;
         self.target_cid = None;
-        self.target_is_connected = false;
+        self.link.set_target(false);
         self.session = 0;
-        self.connection_opened = false;
+        self.link.set_opened(false);
     }
 
     /// Opens the CIP connection unless it is open (Python's `with_forward_open`): a Large Forward Open,
     /// then a standard one of 500 bytes if that is rejected. A ResponseError naming `caller` if both are.
     pub fn ensure_forward_open(&mut self, caller: &str) -> Result<()> {
-        if self.target_is_connected {
+        if self.link.target() {
             return Ok(());
         }
         let mut opened = false;
@@ -469,7 +506,7 @@ impl CipConnection {
 
     /// One (Large) Forward Open with a fresh connection triad; Ok(false) if the target rejected it.
     pub fn forward_open(&mut self) -> Result<bool> {
-        if self.target_is_connected {
+        if self.link.target() {
             return Ok(true);
         }
         if self.session == 0 {
@@ -497,7 +534,7 @@ impl CipConnection {
         if reply.is_ok() {
             let data = reply.data().unwrap_or_default();
             self.target_cid = Some(data[..data.len().min(4)].to_vec());
-            self.target_is_connected = true;
+            self.link.set_target(true);
             log::info!(
                 "{}Forward Open succeeded. Target CID={:02x?}",
                 if self.extended_forward_open {
@@ -525,7 +562,7 @@ impl CipConnection {
             "forward_close",
         ))?;
         if reply.is_ok() {
-            self.target_is_connected = false;
+            self.link.set_target(false);
             log::info!("Forward Close succeeded.");
             return Ok(true);
         }
@@ -652,6 +689,23 @@ impl CipConnection {
         }
     }
 
+    /// The idle request: connected (next sequence count) while the CIP connection is open, which also resets the
+    /// connection's inactivity watchdog; unconnected (SendRRData, straight to the message router) with only a
+    /// session; nothing without one. The reply's status is ignored: any reply proves the link. A transport
+    /// failure drops the connection as every request does.
+    pub(crate) fn keep_alive(&mut self) -> Result<()> {
+        if self.session == 0 {
+            return Ok(());
+        }
+        if self.link.target() {
+            let sequence = self.next_sequence();
+            self.send_connected(sequence, &KEEP_ALIVE_REQUEST)?;
+        } else {
+            self.send_unconnected(&KEEP_ALIVE_REQUEST)?;
+        }
+        Ok(())
+    }
+
     /// The target's identity by ListIdentity over the session, None if the reply was not usable.
     pub fn list_identity(&mut self) -> Result<Option<ListIdentity>> {
         let frame = packets::list_identity_request(&self.encap());
@@ -716,6 +770,7 @@ fn error_text(tag: &TagResult) -> String {
 /// A CIP driver handle that can be shared between threads.
 pub struct CipDriver {
     conn: Mutex<CipConnection>,
+    link: Arc<LinkFlags>,
 }
 
 impl CipDriver {
@@ -734,6 +789,7 @@ impl CipDriver {
     /// A driver around a connection.
     pub fn from_connection(conn: CipConnection) -> Self {
         CipDriver {
+            link: conn.link(),
             conn: Mutex::new(conn),
         }
     }
@@ -764,9 +820,22 @@ impl CipDriver {
         self.lock().close()
     }
 
-    /// True while a session is registered.
+    /// True while a session is registered. Never waits for the connection's lock (unless a thread panicked
+    /// holding it: then the connection is dropped first, as by [`lock`](Self::lock)).
     pub fn connected(&self) -> bool {
-        self.lock().connected()
+        if self.conn.is_poisoned() {
+            return self.lock().connected();
+        }
+        self.link.opened()
+    }
+
+    /// True while the CIP connection (Forward Open) is open. Never waits for the connection's lock, as
+    /// [`connected`](Self::connected).
+    pub fn target_connected(&self) -> bool {
+        if self.conn.is_poisoned() {
+            return self.lock().target_connected();
+        }
+        self.link.target()
     }
 
     /// Maximum connected message size.
@@ -1116,6 +1185,50 @@ mod tests {
             c.transact(b"x", true),
             Err(Error::comm("failed to send message"))
         );
+    }
+
+    /// Records the frames sent and answers each with an empty frame.
+    struct Recorder(Arc<Mutex<Vec<Vec<u8>>>>);
+
+    impl Transport for Recorder {
+        fn send(&mut self, frame: &[u8]) -> Result<()> {
+            self.0.lock().expect("frames").push(frame.to_vec());
+            Ok(())
+        }
+        fn receive(&mut self) -> Result<Vec<u8>> {
+            Ok(vec![0; crate::transport::HEADER_SIZE])
+        }
+        fn set_timeout(&mut self, _: Option<Duration>) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn keep_alive_is_connected_with_a_cip_connection_and_unconnected_without() {
+        let frames = Arc::new(Mutex::new(Vec::new()));
+        let mut c = conn();
+        c.keep_alive().expect("no session: nothing sent");
+        c.transport = Some(Box::new(Recorder(Arc::clone(&frames))));
+        c.keep_alive().expect("no session: nothing sent");
+        assert!(frames.lock().expect("frames").is_empty());
+
+        c.session = 7;
+        c.link.set_opened(true);
+        c.keep_alive().expect("unconnected");
+        c.link.set_target(true);
+        c.target_cid = Some(vec![1, 2, 3, 4]);
+        assert_eq!(c.next_sequence(), 1);
+        c.keep_alive().expect("connected");
+
+        let frames = frames.lock().expect("frames");
+        assert_eq!(frames.len(), 2);
+        assert_eq!(frames[0][..2], [0x6F, 0x00]); // SendRRData
+        assert!(frames[0].ends_with(&KEEP_ALIVE_REQUEST));
+        assert_eq!(frames[1][..2], [0x70, 0x00]); // SendUnitData, the next sequence count
+        let mut tail = 2u16.to_le_bytes().to_vec();
+        tail.extend(KEEP_ALIVE_REQUEST);
+        assert!(frames[1].ends_with(&tail));
+        assert_eq!(c.next_sequence(), 3);
     }
 
     #[test]

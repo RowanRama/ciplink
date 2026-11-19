@@ -1609,7 +1609,7 @@ impl LogixDriver {
     /// If the version is not read, or the reload fails, every result is refused for the next 2 seconds.
     /// Err only for a connection failure (CommError) or a CIP connection that could not be opened.
     pub fn read(&self, tags: &[&str]) -> Result<Vec<TagResult>> {
-        self.lock().read_tags(tags)
+        self.read_async(tags).wait()
     }
 
     /// Writes tags: (tag, value) pairs, in order, one result each (its value is the value given). Bits of
@@ -1620,7 +1620,7 @@ impl LogixDriver {
     /// definitions again first) and right after them (a change gives every result an error). Writes are never
     /// retried. Err only for a connection failure or a CIP connection that could not be opened.
     pub fn write(&self, items: &[(&str, Value)]) -> Result<Vec<TagResult>> {
-        self.lock().write_tags(items)
+        self.write_async(items).wait()
     }
 }
 

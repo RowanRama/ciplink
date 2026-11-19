@@ -66,6 +66,9 @@ pub enum Fault {
     Delay(Duration),
     /// New connections are refused (closed at once over TCP, an error from the connector).
     RefuseConnections,
+    /// Every connection open now is closed at its next request (no reply; over TCP the socket closes). New
+    /// connections are served as usual. [`Simulator::clear_faults`] does not undo it.
+    CloseConnections,
     /// Requests of a tag (its path as `Program:Main.tag[1].member`, or its base tag) are answered with this
     /// general status and extended status.
     TagStatus {
@@ -204,11 +207,14 @@ impl Simulator {
 
     /// Injects a fault; several can be active at once.
     pub fn inject(&self, fault: Fault) {
-        let faults = &mut self.lock().faults;
+        let mut inner = self.lock();
+        let inner = &mut *inner;
+        let faults = &mut inner.faults;
         match fault {
             Fault::DropReplies(n) => faults.drop_replies = faults.drop_replies.saturating_add(n),
             Fault::Delay(delay) => faults.delay = delay,
             Fault::RefuseConnections => faults.refuse_connections = true,
+            Fault::CloseConnections => inner.epoch += 1,
             Fault::TagStatus { tag, status, ext } => {
                 faults.tags.push((tag, status, ext.into_iter().collect()))
             }

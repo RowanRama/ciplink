@@ -7,6 +7,10 @@ use std::time::Duration;
 
 /// Encapsulation header size; its bytes 2..4 hold the length of the data that follows.
 pub const HEADER_SIZE: usize = 24;
+/// Idle time before the first TCP keep-alive probe.
+const KEEP_ALIVE_TIME: Duration = Duration::from_secs(10);
+/// Time between TCP keep-alive probes.
+const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(5);
 
 /// Sends request frames and receives reply frames, one encapsulation frame at a time.
 ///
@@ -52,6 +56,13 @@ impl TcpTransport {
         }
         .map_err(|_| fail())?;
         stream.set_nodelay(true).map_err(|_| fail())?;
+        // finds a dead peer while idle (about a minute with the OS's probe count); not a reason to fail
+        let keepalive = socket2::TcpKeepalive::new()
+            .with_time(KEEP_ALIVE_TIME)
+            .with_interval(KEEP_ALIVE_INTERVAL);
+        if let Err(err) = socket2::SockRef::from(&stream).set_tcp_keepalive(&keepalive) {
+            log::debug!("TCP keep-alive not set: {err}");
+        }
         let mut transport = TcpTransport {
             stream,
             buffer: Vec::with_capacity(4096),
@@ -131,5 +142,15 @@ mod tests {
         assert_eq!(t.receive().expect("3"), frame(5000, 7));
         server.join().expect("join");
         assert!(matches!(t.receive(), Err(Error::Comm(_))));
+    }
+
+    #[test]
+    fn tcp_connections_have_keep_alive() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().expect("addr").port();
+        let t = TcpTransport::connect("127.0.0.1", port, Some(Duration::from_secs(5)))
+            .expect("connect");
+        let socket = socket2::SockRef::from(&t.stream);
+        assert!(socket.keepalive().expect("keepalive"));
     }
 }

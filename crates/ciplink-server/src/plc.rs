@@ -8,6 +8,8 @@ use ciplink::cip::TagResult;
 use ciplink::logix::driver::{LogixDriver, LogixOptions};
 use ciplink::logix::metadata::TextEncoding;
 use ciplink::logix::types::TypeRef;
+use ciplink::session::SessionOptions;
+use ciplink::transport::tcp_connector;
 use indexmap::IndexMap;
 use serde_json::{Map, Value as Json, json};
 
@@ -338,7 +340,14 @@ impl LogixPlc {
             }
             options.tag_cache_file = Some(cache.clone());
         }
-        let driver = LogixDriver::new(&cfg.path, options).map_err(|e| e.to_string())?;
+        // the worker reconnects (and Plc::read returns Err on a lost link); keep-alive stays on, so a link lost
+        // while idle fails the worker's next read
+        let session = SessionOptions {
+            reconnect: false,
+            ..SessionOptions::default()
+        };
+        let driver = LogixDriver::with_session(&cfg.path, options, session, tcp_connector())
+            .map_err(|e| e.to_string())?;
         Ok(LogixPlc { driver })
     }
 

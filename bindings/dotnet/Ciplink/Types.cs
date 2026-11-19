@@ -22,6 +22,8 @@ public enum CiplinkStatus
     Unsupported = 6,
     /// <summary>An internal error inside the native library.</summary>
     Panic = 7,
+    /// <summary>A wait for a request timed out; the request carries on.</summary>
+    Timeout = 8,
 }
 
 /// <summary>A whole call failed. Per-tag failures are reported in <see cref="Tag.Error"/> instead.</summary>
@@ -72,6 +74,21 @@ public class DriverOptions
     /// <summary>Connection size in bytes; null uses the driver default (4000, or 500 for SLC).</summary>
     public int? ConnectionSize { get; init; }
 
+    /// <summary>
+    /// Reconnect in the background after an open link is lost (Logix and SLC). Requests made while it reconnects
+    /// fail at once with a <see cref="CiplinkStatus.Comm"/> error "not connected, reconnecting: ...". Default true.
+    /// </summary>
+    public bool Reconnect { get; init; } = true;
+
+    /// <summary>Wait before the first reconnect attempt, doubled after each failed one. Default 100 ms.</summary>
+    public TimeSpan ReconnectMin { get; init; } = TimeSpan.FromMilliseconds(100);
+
+    /// <summary>Longest wait between reconnect attempts. Default 10 s.</summary>
+    public TimeSpan ReconnectMax { get; init; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>Send a small keep-alive request after this long without traffic; null never sends one. Default 30 s.</summary>
+    public TimeSpan? KeepAlive { get; init; } = TimeSpan.FromSeconds(30);
+
     internal virtual void AddTo(IDictionary<string, object?> json)
     {
         json["socket_timeout"] = SocketTimeout == System.Threading.Timeout.InfiniteTimeSpan ? null : SocketTimeout.TotalSeconds;
@@ -79,6 +96,10 @@ public class DriverOptions
         {
             json["connection_size"] = size;
         }
+        json["reconnect"] = Reconnect;
+        json["reconnect_min"] = ReconnectMin.TotalSeconds;
+        json["reconnect_max"] = ReconnectMax.TotalSeconds;
+        json["keep_alive"] = KeepAlive?.TotalSeconds;
     }
 
     internal string ToJson()

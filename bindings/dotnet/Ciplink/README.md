@@ -45,7 +45,19 @@ Every read and write returns one `Tag` per request. A failure is reported on tha
 batch.
 
 Values map to .NET types as `long` / `ulong` / `double` / `bool` / `string` for atomic types, `object?[]` for
-arrays, and `Dictionary<string, object?>` for UDTs. `ReadAsync` and `WriteAsync` are also available.
+arrays, and `Dictionary<string, object?>` for UDTs.
+
+`ReadAsync` and `WriteAsync` are truly asynchronous: they queue the request and complete their task from the
+driver, and reads queued together go out as one read. `Subscribe` polls tags and delivers the ones that changed
+through an event or `await foreach`. A driver reconnects by itself after a lost link, and the `ConnectionChanged`
+event tells you when it does.
+
+```csharp
+await plc.WriteAsync(("Setpoint", 75.5));
+using Subscription sub = plc.Subscribe(new[] { "Counter" }, TimeSpan.FromMilliseconds(500));
+await foreach (IReadOnlyList<Tag> changed in sub)
+    Console.WriteLine(string.Join(", ", changed.Select(t => $"{t.Name} = {t.Value}")));
+```
 
 ## More
 

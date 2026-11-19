@@ -6,9 +6,14 @@ use std::time::Duration;
 
 use indexmap::IndexMap;
 
-use crate::cip::{CipConnection, CipDriver, CipOptions, TagResult};
-use crate::identity::ListIdentity;
+use crate::browse::{AppInfo, Node, PortInfo, Scan};
+use crate::cip::{CipConnection, CipDriver, CipOptions, GenericMessage, GenericReply, TagResult};
+use crate::identity::{ListIdentity, ModuleIdentity};
 use crate::packets::{Reply, ReplyKind};
+use crate::session::{
+    ConnectionCallback, ConnectionState, Handle, Protocol, Session, SessionOptions,
+    SubscribeOptions, Subscription,
+};
 use crate::slc::pccc::{
     self, Address, DataFile, FILE_DIRECTORY_CHUNK, Requestor, SLC_REPLY_START, Sys0Info,
 };
@@ -24,11 +29,13 @@ const DEFAULT_VSN: [u8; 4] = [0x09, 0x10, 0x19, 0x71];
 ///
 /// Like the Python `SLCDriver`: a bare IP address routes to `bp/0` and `ip/n` to slot n of the backplane,
 /// the default connection size is 500 (a standard Forward Open), and every call opens the CIP connection
-/// first if it is not open. One call runs at a time; the connection is locked for its whole duration.
+/// first if it is not open. Every call runs on the driver's [session](crate::session) thread, in queue order;
+/// concurrent reads are not merged (each caller's addresses are read as its own call). A driver from
+/// [`new`](Self::new) reconnects in the background and keeps the link alive; one from
+/// [`with_connector`](Self::with_connector) does neither.
 pub struct SlcDriver {
-    cip: CipDriver,
-    /// The vendor serial number of the latest Forward Open, which Python also sends as the requestor ID.
-    vsn: Arc<Mutex<[u8; 4]>>,
+    cip: Arc<CipDriver>,
+    session: Session<Slc>,
 }
 
 impl SlcDriver {
@@ -41,42 +48,111 @@ impl SlcDriver {
     }
 
     /// A driver for `path` (`ip[:port][/slot]` or `ip/port/link/...`) over TCP; not connected until
-    /// [`open`](Self::open).
+    /// [`open`](Self::open). It reconnects and keeps the link alive ([`SessionOptions::default`]).
     pub fn new(path: &str, options: CipOptions) -> Result<Self> {
-        Self::with_connector(path, options, tcp_connector())
+        Self::with_session(path, options, SessionOptions::default(), tcp_connector())
     }
 
-    /// A driver opening its transports with `connector`.
+    /// A driver opening its transports with `connector`, without reconnect or keep-alive
+    /// ([`SessionOptions::off`]).
     pub fn with_connector(path: &str, options: CipOptions, connector: Connector) -> Result<Self> {
+        Self::with_session(path, options, SessionOptions::off(), connector)
+    }
+
+    /// A driver with explicit session options, opening its transports with `connector`.
+    pub fn with_session(
+        path: &str,
+        options: CipOptions,
+        session: SessionOptions,
+        connector: Connector,
+    ) -> Result<Self> {
         let vsn = Arc::new(Mutex::new(DEFAULT_VSN));
         let conn = CipConnection::new(path, options, watch_vsn(connector, vsn.clone()), true)?;
+        let cip = Arc::new(CipDriver::from_connection(conn));
         Ok(SlcDriver {
-            cip: CipDriver::from_connection(conn),
-            vsn,
+            session: Session::new(
+                Slc {
+                    cip: Arc::clone(&cip),
+                    vsn,
+                },
+                session,
+            ),
+            cip,
         })
     }
 
-    /// The CIP driver underneath (generic messages, connection settings, module info).
+    /// The CIP driver underneath (connection settings, generic messages).
     ///
-    /// Its [`lock`](CipDriver::lock) is the lock every `SlcDriver` call takes: do not call `SlcDriver`
-    /// methods on the same thread while holding that guard, or the call deadlocks.
+    /// Calls through it bypass the session queue: they serialize on the connection's lock against the
+    /// session thread, are not packed and do not reconnect; prefer this driver's own methods. Do not call
+    /// `SlcDriver` methods while holding its [`lock`](CipDriver::lock) guard, or the call deadlocks.
     pub fn cip(&self) -> &CipDriver {
         &self.cip
     }
 
+    fn run<R: Send + 'static>(
+        &self,
+        f: impl FnOnce(&mut Slc) -> Result<R> + Send + 'static,
+    ) -> Result<R> {
+        self.session.call(f).wait()
+    }
+
     /// Opens the transport and registers a session; Ok(false) if the target refused the session.
     pub fn open(&self) -> Result<bool> {
-        self.cip.open()
+        self.session.open().wait()
     }
 
-    /// Closes the CIP connection and the session.
+    /// Closes the CIP connection and the session. Queued requests fail with `CommError("driver closed")`,
+    /// subscriptions end and reconnecting stops.
     pub fn close(&self) -> Result<()> {
-        self.cip.close()
+        self.session.close()
     }
 
-    /// True while a session is registered.
+    /// Stops the session and callback threads and fails pending requests without closing the connection (what
+    /// drop does). The next request starts the session thread again.
+    pub fn stop(&self) {
+        self.session.stop();
+    }
+
+    /// True while a session is registered. Never waits for a request or a reconnect.
     pub fn connected(&self) -> bool {
         self.cip.connected()
+    }
+
+    /// True while the CIP connection (Forward Open) is open. Never waits for a request or a reconnect.
+    pub fn target_connected(&self) -> bool {
+        self.cip.target_connected()
+    }
+
+    /// Where the link is: closed, connected, or reconnecting in the background. Never blocks on I/O.
+    pub fn connection_state(&self) -> ConnectionState {
+        self.session.state()
+    }
+
+    /// Sets (or with None removes) the connection callback; see
+    /// [`LogixDriver::set_connection_callback`](crate::logix::driver::LogixDriver::set_connection_callback).
+    pub fn set_connection_callback(&self, callback: Option<ConnectionCallback>) {
+        self.session.set_connection_callback(callback);
+    }
+
+    /// Maximum connected message size.
+    pub fn connection_size(&self) -> u16 {
+        self.cip.connection_size()
+    }
+
+    /// Sets the connection size used by the next Forward Open.
+    pub fn set_connection_size(&self, size: u16) -> Result<()> {
+        self.cip.set_connection_size(size)
+    }
+
+    /// The socket timeout.
+    pub fn socket_timeout(&self) -> Option<Duration> {
+        self.cip.socket_timeout()
+    }
+
+    /// Sets the socket timeout.
+    pub fn set_socket_timeout(&self, timeout: Option<Duration>) -> Result<()> {
+        self.cip.set_socket_timeout(timeout)
     }
 
     /// Identifies the target at `path` (SLC path rules) with ListIdentity over a session of its own.
@@ -84,6 +160,176 @@ impl SlcDriver {
         CipDriver::list_identity_with(path, Self::default_options(), tcp_connector(), true)
     }
 
+    /// Reads data file addresses, one request each; add a word count in braces to read several elements
+    /// (`N7:0{10}`). A PCCC or CIP error is the result's error; an invalid address is a RequestError (the
+    /// addresses before it have been read), and a connection failure is a CommError.
+    pub fn read(&self, addresses: &[&str]) -> Result<Vec<TagResult>> {
+        self.read_async(addresses).wait()
+    }
+
+    /// [`read`](Self::read) without waiting.
+    pub fn read_async(&self, addresses: &[&str]) -> Handle<Vec<TagResult>> {
+        self.session.read(addresses)
+    }
+
+    /// Writes values to data file addresses, one request each; a multi-element address (`N7:0{3}`) takes a
+    /// list of at least that many values. Errors as [`read`](Self::read); a value that does not fit is a
+    /// RequestError.
+    pub fn write(&self, items: &[(&str, Value)]) -> Result<Vec<TagResult>> {
+        self.write_async(items).wait()
+    }
+
+    /// [`write`](Self::write) without waiting.
+    pub fn write_async(&self, items: &[(&str, Value)]) -> Handle<Vec<TagResult>> {
+        self.session.write(items)
+    }
+
+    /// Reads `addresses` every `options.interval` and delivers those that changed (see [`Subscription`]).
+    pub fn subscribe(&self, addresses: &[&str], options: SubscribeOptions) -> Result<Subscription> {
+        self.session.subscribe(addresses, options)
+    }
+
+    /// The processor type (catalog number such as `1766-LEC`), None if the processor reported an error.
+    pub fn get_processor_type(&self) -> Result<Option<String>> {
+        self.run(|slc| slc.get_processor_type())
+    }
+
+    /// Reads `num_data_logs` entries of data log queue `queue_num`, then one more to clear the queue. Each
+    /// entry is text, bytes if it is not UTF-8, or None if the processor reported an error.
+    pub fn get_datalog_queue(
+        &self,
+        num_data_logs: usize,
+        queue_num: u8,
+    ) -> Result<Vec<Option<Value>>> {
+        self.run(move |slc| slc.get_datalog_queue(num_data_logs, queue_num))
+    }
+
+    /// The data files of the processor from its file directory (SYS0), named like `N7`, in directory order.
+    /// A ResponseError if the processor type, directory size or directory cannot be read.
+    pub fn get_file_directory(&self) -> Result<IndexMap<String, DataFile>> {
+        self.run(|slc| slc.get_file_directory())
+    }
+
+    /// Sends a generic CIP message.
+    pub fn generic_message(&self, msg: &GenericMessage) -> Result<GenericReply> {
+        let msg = msg.clone();
+        self.run(move |slc| slc.cip.generic_message(&msg))
+    }
+
+    /// Sends a connected CIP message (without sequence count) with the next sequence count and returns the
+    /// raw reply frame. Does not open the CIP connection.
+    pub fn send_connected_raw(&self, message: &[u8]) -> Result<Vec<u8>> {
+        let message = message.to_vec();
+        self.run(move |slc| slc.cip.send_connected_raw(&message))
+    }
+
+    /// Sends an unconnected CIP message and returns the raw reply frame.
+    pub fn send_unconnected_raw(&self, message: &[u8]) -> Result<Vec<u8>> {
+        let message = message.to_vec();
+        self.run(move |slc| slc.cip.send_unconnected_raw(&message))
+    }
+
+    /// The identity of the module in `slot` of the rack at the end of the connection path.
+    pub fn get_module_info(&self, slot: i64) -> Result<ModuleIdentity> {
+        self.run(move |slc| slc.cip.get_module_info(slot))
+    }
+
+    /// The identity of the device at `route` (see [`crate::browse`]).
+    pub fn identity_at(&self, route: &str) -> Result<ModuleIdentity> {
+        let route = route.to_owned();
+        self.run(move |slc| slc.cip.identity_at(&route))
+    }
+
+    /// What the ciplink device at `route` runs, None for any other device (see [`crate::browse::AppInfo`]).
+    pub fn app_at(&self, route: &str) -> Result<Option<AppInfo>> {
+        let route = route.to_owned();
+        self.run(move |slc| slc.cip.app_at(&route))
+    }
+
+    /// The ports of the device at `route` (see [`crate::browse`]).
+    pub fn ports_at(&self, route: &str) -> Result<Vec<PortInfo>> {
+        let route = route.to_owned();
+        self.run(move |slc| slc.cip.ports_at(&route))
+    }
+
+    fn scan(&self, route: &str, port: u16, nodes: Option<&[String]>) -> Result<Scan> {
+        let route = route.to_owned();
+        let nodes = nodes.map(<[String]>::to_vec);
+        self.run(move |slc| slc.cip.lock().scan(&route, port, nodes.as_deref()))
+    }
+
+    /// Probes the slots, nodes or IP addresses on `port` of the device at `route` from `workers` connections
+    /// at once; the nodes in address order (see [`crate::browse`]).
+    pub fn browse_port(
+        &self,
+        route: &str,
+        port: u16,
+        nodes: Option<&[String]>,
+        workers: usize,
+    ) -> Result<Vec<Node>> {
+        Ok(self.scan(route, port, nodes)?.collect(workers))
+    }
+
+    /// [`browse_port`](Self::browse_port), calling `found` with each node as it answers until it returns
+    /// false.
+    pub fn scan_port(
+        &self,
+        route: &str,
+        port: u16,
+        nodes: Option<&[String]>,
+        workers: usize,
+        found: &mut dyn FnMut(Node) -> bool,
+    ) -> Result<()> {
+        self.scan(route, port, nodes)?.run(workers, found);
+        Ok(())
+    }
+}
+
+/// The SLC driver's state on its session: the connection (behind a [`CipDriver`], so
+/// [`SlcDriver::cip`] keeps working) and the vendor serial number of the latest Forward Open, which Python
+/// also sends as the requestor ID.
+pub(crate) struct Slc {
+    cip: Arc<CipDriver>,
+    vsn: Arc<Mutex<[u8; 4]>>,
+}
+
+impl Protocol for Slc {
+    fn open(&mut self) -> Result<bool> {
+        self.cip.open() // a session only, as before sessions
+    }
+
+    fn close(&mut self) -> Result<()> {
+        self.cip.close()
+    }
+
+    fn drop_link(&mut self) {
+        self.cip.lock().drop_connection();
+    }
+
+    fn connected(&self) -> bool {
+        self.cip.connected()
+    }
+
+    fn read(&mut self, addresses: &[&str]) -> Result<Vec<TagResult>> {
+        Slc::read(self, addresses)
+    }
+
+    /// One bad address fails a whole SLC read (a RequestError after the addresses before it), so merging
+    /// would let one caller's typo fail another's read; and PCCC sends one request per address anyway.
+    fn merges_reads(&self) -> bool {
+        false
+    }
+
+    fn write(&mut self, items: &[(&str, Value)]) -> Result<Vec<TagResult>> {
+        Slc::write(self, items)
+    }
+
+    fn keep_alive(&mut self) -> Result<()> {
+        self.cip.lock().keep_alive()
+    }
+}
+
+impl Slc {
     fn requestor(&self) -> Requestor {
         Requestor {
             vid: VENDOR_ID,
@@ -91,10 +337,7 @@ impl SlcDriver {
         }
     }
 
-    /// Reads data file addresses, one request each; add a word count in braces to read several elements
-    /// (`N7:0{10}`). A PCCC or CIP error is the result's error; an invalid address is a RequestError (the
-    /// addresses before it have been read), and a connection failure is a CommError.
-    pub fn read(&self, addresses: &[&str]) -> Result<Vec<TagResult>> {
+    fn read(&self, addresses: &[&str]) -> Result<Vec<TagResult>> {
         let mut conn = self.cip.lock();
         conn.ensure_forward_open("read")?;
         let mut results = Vec::with_capacity(addresses.len());
@@ -128,10 +371,7 @@ impl SlcDriver {
         )
     }
 
-    /// Writes values to data file addresses, one request each; a multi-element address (`N7:0{3}`) takes a
-    /// list of at least that many values. Errors as [`read`](Self::read); a value that does not fit is a
-    /// RequestError.
-    pub fn write(&self, items: &[(&str, Value)]) -> Result<Vec<TagResult>> {
+    fn write(&self, items: &[(&str, Value)]) -> Result<Vec<TagResult>> {
         let mut conn = self.cip.lock();
         conn.ensure_forward_open("write")?;
         let mut results = Vec::with_capacity(items.len());
@@ -156,8 +396,7 @@ impl SlcDriver {
         })
     }
 
-    /// The processor type (catalog number such as `1766-LEC`), None if the processor reported an error.
-    pub fn get_processor_type(&self) -> Result<Option<String>> {
+    fn get_processor_type(&self) -> Result<Option<String>> {
         let mut conn = self.cip.lock();
         conn.ensure_forward_open("get_processor_type")?;
         self.processor_type(&mut conn)
@@ -174,13 +413,7 @@ impl SlcDriver {
         Ok(pccc::parse_processor_type(&raw))
     }
 
-    /// Reads `num_data_logs` entries of data log queue `queue_num`, then one more to clear the queue. Each
-    /// entry is text, bytes if it is not UTF-8, or None if the processor reported an error.
-    pub fn get_datalog_queue(
-        &self,
-        num_data_logs: usize,
-        queue_num: u8,
-    ) -> Result<Vec<Option<Value>>> {
+    fn get_datalog_queue(&self, num_data_logs: usize, queue_num: u8) -> Result<Vec<Option<Value>>> {
         let mut conn = self.cip.lock();
         conn.ensure_forward_open("get_datalog_queue")?;
         // the count comes from the caller: do not let a huge one abort on allocation before any request
@@ -192,9 +425,7 @@ impl SlcDriver {
         Ok(data)
     }
 
-    /// The data files of the processor from its file directory (SYS0), named like `N7`, in directory order.
-    /// A ResponseError if the processor type, directory size or directory cannot be read.
-    pub fn get_file_directory(&self) -> Result<IndexMap<String, DataFile>> {
+    fn get_file_directory(&self) -> Result<IndexMap<String, DataFile>> {
         let mut conn = self.cip.lock();
         conn.ensure_forward_open("get_file_directory")?;
         let Some(plc_type) = self.processor_type(&mut conn)? else {

@@ -10,9 +10,19 @@ internal sealed class DriverHandle : SafeHandleZeroOrMinusOneIsInvalid
 {
     public DriverHandle() : base(ownsHandle: true) { }
 
+    /// <summary>
+    /// The weak <see cref="GCHandle"/> to the <see cref="Driver"/> that the connection callback gets as user data,
+    /// or zero. Freed after the driver: once <c>ciplink_driver_free</c> returns no callback can use it.
+    /// </summary>
+    internal IntPtr Owner;
+
     protected override bool ReleaseHandle()
     {
         Native.ciplink_driver_free(handle);
+        if (Owner != IntPtr.Zero)
+        {
+            GCHandle.FromIntPtr(Owner).Free();
+        }
         return true;
     }
 }
@@ -103,6 +113,24 @@ internal static partial class Native
 
     [LibraryImport(Lib, StringMarshalling = StringMarshalling.Utf8)]
     internal static partial int ciplink_write(DriverHandle handle, string itemsJson, out IntPtr json);
+
+    [LibraryImport(Lib)]
+    internal static unsafe partial int ciplink_read_async(DriverHandle handle, IntPtr[] tags, nuint count, delegate* unmanaged<IntPtr, int, IntPtr, void> done, IntPtr user, IntPtr outRequest);
+
+    [LibraryImport(Lib, StringMarshalling = StringMarshalling.Utf8)]
+    internal static unsafe partial int ciplink_write_async(DriverHandle handle, string itemsJson, delegate* unmanaged<IntPtr, int, IntPtr, void> done, IntPtr user, IntPtr outRequest);
+
+    [LibraryImport(Lib, StringMarshalling = StringMarshalling.Utf8)]
+    internal static unsafe partial int ciplink_subscribe(DriverHandle handle, IntPtr[] tags, nuint count, string? optionsJson, delegate* unmanaged<IntPtr, IntPtr, void> onChanges, IntPtr user, out IntPtr subscription);
+
+    [LibraryImport(Lib)]
+    internal static partial void ciplink_subscription_free(IntPtr subscription);
+
+    [LibraryImport(Lib)]
+    internal static unsafe partial int ciplink_set_connection_callback(DriverHandle handle, delegate* unmanaged<IntPtr, IntPtr, void> callback, IntPtr user);
+
+    [LibraryImport(Lib)]
+    internal static partial int ciplink_connection_state(DriverHandle handle);
 
     [LibraryImport(Lib)]
     internal static partial int ciplink_tags(DriverHandle handle, out IntPtr json);

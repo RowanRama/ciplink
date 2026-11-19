@@ -185,6 +185,8 @@ pub(crate) struct Inner {
     pub log: Vec<Vec<u8>>,
     pub recording: bool,
     pub requests: u64,
+    /// Incremented by `Fault::CloseConnections`: a connection that saw an older epoch is closed.
+    pub epoch: u64,
     next_session: u32,
     next_connection: u32,
 }
@@ -212,6 +214,8 @@ pub(crate) struct Session {
     pub handle: u32,
     pub port: u16,
     connections: Vec<Connection>,
+    /// The simulator's epoch at this connection's first request.
+    epoch: Option<u64>,
 }
 
 impl Session {
@@ -220,6 +224,7 @@ impl Session {
             handle: 0,
             port,
             connections: Vec::new(),
+            epoch: None,
         }
     }
 }
@@ -289,6 +294,7 @@ impl Inner {
             log: Vec::new(),
             recording: false,
             requests: 0,
+            epoch: 0,
             next_session: 0x0001_0001,
             next_connection: 0x4F00_0001,
         }
@@ -301,6 +307,9 @@ impl Inner {
         }
         let index = self.requests;
         self.requests += 1;
+        if *session.epoch.get_or_insert(self.epoch) < self.epoch {
+            return (Outcome::Close, Duration::ZERO);
+        }
         if let (Some(hook), Device::Logix(logix)) = (&mut self.hook, &mut self.device) {
             hook(logix, index);
         }

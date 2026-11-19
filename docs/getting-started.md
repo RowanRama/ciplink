@@ -83,10 +83,12 @@ done; every binding also closes it when the driver is released.
     ciplink_driver_free(plc);   /* closes the connection; NULL is ignored */
     ```
 
-Requests on one driver are sent one at a time, so one driver can be shared between threads. For requests in
-parallel, use one driver per thread. The drivers don't send keep-alives: a controller may close a connection that
-is idle for about a minute, so a long-lived connection should make a request at least that often. If a request
-fails with a connection error (timeout, reset), the driver drops the connection; open it again to reconnect.
+Requests on one driver are sent one at a time, so one driver can be shared between threads; a Logix or SLC driver
+packs the reads that threads queue together into one read. For requests in parallel, use one driver per thread. A
+Logix or SLC driver sends a keep-alive after 30 s idle and, after an open connection is lost, reconnects in the
+background; the request that found the link lost fails with its connection error, and requests made while it
+reconnects fail at once. The plain CIP driver does neither: open it again to reconnect. See
+[Async, subscriptions and reconnect](sessions.md).
 
 ## Paths
 

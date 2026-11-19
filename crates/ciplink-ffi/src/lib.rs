@@ -4,8 +4,14 @@
 //!
 //! - One opaque handle type, [`CiplinkDriver`], made by [`ciplink_logix_new`], [`ciplink_slc_new`] or
 //!   [`ciplink_cip_new`] and freed with [`ciplink_driver_free`]. Calls a driver kind does not support return
-//!   [`CiplinkStatus::Unsupported`]. A handle can be used from several threads at once (calls are serialized
-//!   inside the driver).
+//!   [`CiplinkStatus::Unsupported`]. A handle can be used from several threads at once: a Logix or SLC driver
+//!   queues every call for its session thread, which does all of the driver's I/O, sends the reads queued together
+//!   as one read, and reconnects in the background after a lost link (option `reconnect`).
+//! - Async reads and writes ([`ciplink_read_async`], [`ciplink_write_async`]) take a completion callback and give
+//!   a [`CiplinkRequest`] handle (poll, wait, free); [`ciplink_subscribe`] gives a [`CiplinkSubscription`];
+//!   [`ciplink_set_connection_callback`] reports connection changes. Every callback runs on the driver's callback
+//!   thread, one at a time, never on the caller's stack; a callback may call the library (the same driver
+//!   included) but must not block for long or unwind.
 //! - A controller-side trend is a second handle type, [`CiplinkTrend`], made by [`ciplink_trend_start`] and freed
 //!   with [`ciplink_trend_free`].
 //! - A tag server is a third handle type, [`CiplinkServer`], made by [`ciplink_server_start`] and stopped and
@@ -44,6 +50,7 @@ use ciplink_core::logix::metadata::TextEncoding;
 use ciplink_core::logix::trend::{Trend, TrendOptions};
 use ciplink_core::logix::types::PyObj;
 use ciplink_core::slc::driver::SlcDriver;
+use ciplink_core::transport::tcp_connector;
 use ciplink_core::{Error, Value};
 use indexmap::IndexMap;
 use serde_json::{Map, Value as Json};
@@ -78,6 +85,8 @@ pub enum CiplinkStatus {
     Unsupported = 6,
     /// The library panicked (a bug); the handle stays usable.
     Panic = 7,
+    /// [`ciplink_request_wait`] timed out; the request carries on.
+    Timeout = 8,
 }
 
 /// A driver handle: a Logix, SLC or plain CIP driver.
@@ -122,6 +131,8 @@ enum FfiError {
     Core(Error),
     Invalid(String),
     Unsupported(&'static str),
+    /// A status and message as they are, e.g. a finished request's.
+    Status(CiplinkStatus, String),
 }
 
 impl From<Error> for FfiError {
@@ -156,6 +167,7 @@ fn status_of(err: &FfiError) -> (CiplinkStatus, String) {
             CiplinkStatus::Unsupported,
             format!("{what} is not supported by this driver"),
         ),
+        FfiError::Status(status, m) => (*status, m.clone()),
     }
 }
 
@@ -562,7 +574,10 @@ fn create(
 ///
 /// `options_json` may be NULL or `{}`; keys (all optional): `socket_timeout` (seconds, null to block forever,
 /// default 5), `connection_size` (default 4000), `init_tags` (true), `init_program_tags` (true),
-/// `tag_namespace_filter` (""), `lazy_tags` (false), `tag_cache_file` (null).
+/// `tag_namespace_filter` (""), `lazy_tags` (false), `tag_cache_file` (null), `reconnect` (reconnect in the
+/// background after an open link is lost, true), `reconnect_min` (seconds before the first attempt, doubled after
+/// each failed one, 0.1), `reconnect_max` (longest wait between attempts, 10), `keep_alive` (seconds without
+/// traffic before a keep-alive request, null for never, 30).
 ///
 /// # Safety
 /// `path` and `options_json` are NULL or NUL-terminated strings; `out` is NULL or writable.
@@ -573,14 +588,17 @@ pub unsafe extern "C" fn ciplink_logix_new(
     out: *mut *mut CiplinkDriver,
 ) -> CiplinkStatus {
     create(path, options_json, out, |path, o| {
-        Ok(Driver::Logix(Box::new(LogixDriver::new(
+        Ok(Driver::Logix(Box::new(LogixDriver::with_session(
             path,
             logix_options(o)?,
+            session::session_options(o)?,
+            tcp_connector(),
         )?)))
     })
 }
 
-/// Creates an SLC 500 / MicroLogix driver. Options: `socket_timeout` (default 5), `connection_size` (500).
+/// Creates an SLC 500 / MicroLogix driver. Options: `socket_timeout` (default 5), `connection_size` (500), and
+/// `reconnect`, `reconnect_min`, `reconnect_max`, `keep_alive` as [`ciplink_logix_new`].
 ///
 /// # Safety
 /// As [`ciplink_logix_new`].
@@ -592,7 +610,13 @@ pub unsafe extern "C" fn ciplink_slc_new(
 ) -> CiplinkStatus {
     create(path, options_json, out, |path, o| {
         let opts = cip_options(o, SlcDriver::default_options())?;
-        Ok(Driver::Slc(SlcDriver::new(path, opts)?))
+        let session = session::session_options(o)?;
+        Ok(Driver::Slc(SlcDriver::with_session(
+            path,
+            opts,
+            session,
+            tcp_connector(),
+        )?))
     })
 }
 
@@ -613,7 +637,9 @@ pub unsafe extern "C" fn ciplink_cip_new(
     })
 }
 
-/// Closes (errors ignored) and frees a driver. NULL is ignored.
+/// Closes (errors ignored) and frees a driver. NULL is ignored. Pending requests fail (their `done` is called)
+/// and subscriptions end; once it returns no callback of this driver runs again (unless it is called from one of
+/// its callbacks: then the running callback finishes after it).
 ///
 /// # Safety
 /// `handle` is NULL or a handle from a `ciplink_*_new` not yet freed, and no other thread is using it.
@@ -654,7 +680,9 @@ pub unsafe extern "C" fn ciplink_open(handle: *const CiplinkDriver) -> CiplinkSt
     })
 }
 
-/// Closes the connection; the handle can be opened again.
+/// Closes the connection; the handle can be opened again. Requests still queued fail with a
+/// [`CiplinkStatus::Comm`] error "driver closed" (their `done` is called), subscriptions end and reconnecting
+/// stops; the request in flight finishes first.
 ///
 /// # Safety
 /// `handle` is NULL or a live handle.
@@ -705,7 +733,7 @@ pub unsafe extern "C" fn ciplink_connection_size(
         }
         let size = match &h.driver {
             Driver::Logix(d) => d.connection_size(),
-            Driver::Slc(d) => d.cip().connection_size(),
+            Driver::Slc(d) => d.connection_size(),
             Driver::Cip(d) => d.connection_size(),
         };
         // SAFETY: not NULL and the caller passes a writable u16.
@@ -733,7 +761,7 @@ pub unsafe extern "C" fn ciplink_set_connection_size(
         }
         match &h.driver {
             Driver::Logix(d) => d.set_connection_size(size)?,
-            Driver::Slc(d) => d.cip().set_connection_size(size)?,
+            Driver::Slc(d) => d.set_connection_size(size)?,
             Driver::Cip(d) => d.set_connection_size(size)?,
         }
         Ok(())
@@ -755,7 +783,7 @@ pub unsafe extern "C" fn ciplink_socket_timeout(
         }
         let t = match &h.driver {
             Driver::Logix(d) => d.socket_timeout(),
-            Driver::Slc(d) => d.cip().socket_timeout(),
+            Driver::Slc(d) => d.socket_timeout(),
             Driver::Cip(d) => d.socket_timeout(),
         };
         // SAFETY: not NULL and the caller passes a writable double.
@@ -787,7 +815,7 @@ pub unsafe extern "C" fn ciplink_set_socket_timeout(
         };
         match &h.driver {
             Driver::Logix(d) => d.set_socket_timeout(timeout)?,
-            Driver::Slc(d) => d.cip().set_socket_timeout(timeout)?,
+            Driver::Slc(d) => d.set_socket_timeout(timeout)?,
             Driver::Cip(d) => d.set_socket_timeout(timeout)?,
         }
         Ok(())
@@ -833,21 +861,8 @@ pub unsafe extern "C" fn ciplink_write(
 ) -> CiplinkStatus {
     with_handle(handle, |h| {
         check_out(out_json)?;
-        let items = match parse_json(arg_str(items_json, "items")?, "items")? {
-            Json::Array(items) => items,
-            _ => {
-                return Err(FfiError::Invalid(
-                    "items must be a JSON array of [tag, value]".into(),
-                ));
-            }
-        };
-        let mut pairs = Vec::with_capacity(items.len());
-        for item in &items {
-            match item.as_array().map(Vec::as_slice) {
-                Some([Json::String(tag), value]) => pairs.push((tag.as_str(), json_value(value)?)),
-                _ => return Err(FfiError::Invalid("each item must be [tag, value]".into())),
-            }
-        }
+        let (names, values) = write_items(items_json)?;
+        let pairs: Vec<(&str, Value)> = names.iter().map(String::as_str).zip(values).collect();
         let results = match &h.driver {
             Driver::Logix(d) => d.write(&pairs)?,
             Driver::Slc(d) => d.write(&pairs)?,
@@ -855,6 +870,30 @@ pub unsafe extern "C" fn ciplink_write(
         };
         put_string(out_json, results_json(&results))
     })
+}
+
+/// The tags and values of an `items_json` argument: a JSON array of `[tag, value]` pairs.
+fn write_items(items_json: *const c_char) -> FfiResult<(Vec<String>, Vec<Value>)> {
+    let items = match parse_json(arg_str(items_json, "items")?, "items")? {
+        Json::Array(items) => items,
+        _ => {
+            return Err(FfiError::Invalid(
+                "items must be a JSON array of [tag, value]".into(),
+            ));
+        }
+    };
+    let mut names = Vec::with_capacity(items.len());
+    let mut values = Vec::with_capacity(items.len());
+    for item in &items {
+        match item.as_array().map(Vec::as_slice) {
+            Some([Json::String(tag), value]) => {
+                values.push(json_value(value)?);
+                names.push(tag.clone());
+            }
+            _ => return Err(FfiError::Invalid("each item must be [tag, value]".into())),
+        }
+    }
+    Ok((names, values))
 }
 
 // ------------------------------------------------------------------------------------------------ tags and info
@@ -1040,7 +1079,7 @@ pub unsafe extern "C" fn ciplink_generic_message(
         };
         let reply = match &h.driver {
             Driver::Logix(d) => d.generic_message(&msg)?,
-            Driver::Slc(d) => d.cip().generic_message(&msg)?,
+            Driver::Slc(d) => d.generic_message(&msg)?,
             Driver::Cip(d) => d.generic_message(&msg)?,
         };
         let mut out = String::new();
@@ -1078,7 +1117,13 @@ fn raw_send(
                 };
                 return put_bytes(out_reply, out_reply_len, reply);
             }
-            Driver::Slc(d) => d.cip(),
+            Driver::Slc(d) => {
+                let reply = match kind {
+                    Raw::Connected => d.send_connected_raw(message)?,
+                    Raw::Unconnected => d.send_unconnected_raw(message)?,
+                };
+                return put_bytes(out_reply, out_reply_len, reply);
+            }
             Driver::Cip(d) => d,
         };
         let reply = match kind {
@@ -1206,7 +1251,7 @@ pub unsafe extern "C" fn ciplink_get_module_info(
         check_out(out_json)?;
         let id = match &h.driver {
             Driver::Logix(d) => d.get_module_info(slot)?,
-            Driver::Slc(d) => d.cip().get_module_info(slot)?,
+            Driver::Slc(d) => d.get_module_info(slot)?,
             Driver::Cip(d) => d.get_module_info(slot)?,
         };
         put_string(out_json, value_string(&id.to_value()))
@@ -1500,7 +1545,7 @@ pub unsafe extern "C" fn ciplink_get_identity(
         let route = opt_str(route, "route")?.unwrap_or("");
         let id = match &h.driver {
             Driver::Logix(d) => d.identity_at(route)?,
-            Driver::Slc(d) => d.cip().identity_at(route)?,
+            Driver::Slc(d) => d.identity_at(route)?,
             Driver::Cip(d) => d.identity_at(route)?,
         };
         put_string(out_json, value_string(&id.to_value()))
@@ -1526,7 +1571,7 @@ pub unsafe extern "C" fn ciplink_get_app(
         let route = opt_str(route, "route")?.unwrap_or("");
         let app = match &h.driver {
             Driver::Logix(d) => d.app_at(route)?,
-            Driver::Slc(d) => d.cip().app_at(route)?,
+            Driver::Slc(d) => d.app_at(route)?,
             Driver::Cip(d) => d.app_at(route)?,
         };
         let json = match app {
@@ -1555,7 +1600,7 @@ pub unsafe extern "C" fn ciplink_get_ports(
         let route = opt_str(route, "route")?.unwrap_or("");
         let ports = match &h.driver {
             Driver::Logix(d) => d.ports_at(route)?,
-            Driver::Slc(d) => d.cip().ports_at(route)?,
+            Driver::Slc(d) => d.ports_at(route)?,
             Driver::Cip(d) => d.ports_at(route)?,
         };
         put_string(
@@ -1590,7 +1635,7 @@ pub unsafe extern "C" fn ciplink_browse_port(
         let nodes = nodes.as_deref();
         let found = match &h.driver {
             Driver::Logix(d) => d.browse_port(route, port, nodes, workers)?,
-            Driver::Slc(d) => d.cip().browse_port(route, port, nodes, workers)?,
+            Driver::Slc(d) => d.browse_port(route, port, nodes, workers)?,
             Driver::Cip(d) => d.browse_port(route, port, nodes, workers)?,
         };
         let found = found.iter().map(node_json).collect::<FfiResult<Vec<_>>>()?;
@@ -1633,7 +1678,7 @@ pub unsafe extern "C" fn ciplink_scan_port(
         };
         match &h.driver {
             Driver::Logix(d) => d.scan_port(route, port, nodes, workers, &mut found)?,
-            Driver::Slc(d) => d.cip().scan_port(route, port, nodes, workers, &mut found)?,
+            Driver::Slc(d) => d.scan_port(route, port, nodes, workers, &mut found)?,
             Driver::Cip(d) => d.scan_port(route, port, nodes, workers, &mut found)?,
         }
         failed.map_or(Ok(()), Err)
@@ -1981,6 +2026,12 @@ pub unsafe extern "C" fn ciplink_server_stop(server: *mut CiplinkServer) -> Cipl
 
 mod adapter;
 pub use adapter::CiplinkAdapter;
+
+mod session;
+pub use session::{
+    CiplinkChanges, CiplinkConnectionCallback, CiplinkConnectionState, CiplinkDone, CiplinkRequest,
+    CiplinkSubscription,
+};
 
 // ------------------------------------------------------------------------------------------------ errors, memory
 

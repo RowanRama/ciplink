@@ -12,6 +12,7 @@ pub mod identity;
 pub mod logix;
 pub mod packets;
 pub mod reader;
+pub mod session;
 pub mod slc;
 pub mod status;
 #[allow(missing_docs, unreachable_patterns)]

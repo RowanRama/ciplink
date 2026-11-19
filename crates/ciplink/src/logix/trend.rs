@@ -559,15 +559,16 @@ impl LogixDriver {
             .ok()
             .filter(|&us| us > 0)
             .ok_or_else(|| Error::request("Trend period must be between 1 µs and 71 minutes"))?;
-        let (conn, pens, infos) = {
-            let mut state = self.lock();
+        let tags: Vec<String> = tags.iter().map(|t| (*t).to_owned()).collect();
+        // the pens resolve with this driver's definitions (maybe loading them) on its session thread
+        let (conn, pens, infos) = self.run(move |state| {
             let mut pens = Vec::with_capacity(tags.len());
             let mut infos = Vec::with_capacity(tags.len());
             for tag in tags {
-                let target = state.pen_target(tag)?;
-                let pen = pen(tag, &target.plc_tag, &target.data_type, target.bit)?;
+                let target = state.pen_target(&tag)?;
+                let pen = pen(&tag, &target.plc_tag, &target.data_type, target.bit)?;
                 infos.push(TrendPen {
-                    tag: (*tag).to_owned(),
+                    tag,
                     data_type: pen.kind.name(),
                 });
                 pens.push(pen);
@@ -582,8 +583,8 @@ impl LogixDriver {
                 state.conn.share_connector(),
                 true,
             )?;
-            (conn, pens, infos)
-        };
+            Ok((conn, pens, infos))
+        })?;
         let poll = poll_interval(options.period, pens.len());
         let mut session = Session {
             conn,

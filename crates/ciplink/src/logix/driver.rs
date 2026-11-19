@@ -14,12 +14,12 @@ use std::collections::{BTreeSet, HashMap};
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use indexmap::IndexMap;
 
-use crate::cip::{CipConnection, CipOptions, GenericMessage, GenericReply, TagResult};
+use crate::cip::{CipConnection, CipOptions, GenericMessage, GenericReply, LinkFlags, TagResult};
 use crate::epath::{DataValue, LogicalType, LogicalValue, Segment, encode_epath, tag_request_path};
 use crate::identity::{ListIdentity, ModuleIdentity};
 use crate::logix::tag_cache::{TagCacheError, TagCacheFile, write_atomic};
@@ -34,6 +34,10 @@ use crate::packets::{
     TAG_TABLE_VERSION_SERVICE, TagTableVersion, parse_multi_service_reply, parse_tag_table_version,
 };
 use crate::reader::Reader;
+use crate::session::{
+    ConnectionCallback, ConnectionState, Handle, Protocol, Session, SessionOptions,
+    SubscribeOptions, Subscription,
+};
 use crate::status;
 use crate::transport::{Connector, tcp_connector};
 use crate::types::Elementary;
@@ -500,7 +504,7 @@ impl Logix {
             if self.args.lazy_tags {
                 self.reset_lazy_tags();
             }
-            if let Err(err) = self.initialize_driver() {
+            if let Err(err) = self.initialize_driver(false) {
                 if let Err(close) = self.conn.close() {
                     log::debug!("close after a failed initialization: {close}");
                 }
@@ -510,7 +514,9 @@ impl Logix {
         Ok(opened)
     }
 
-    fn initialize_driver(&mut self) -> Result<()> {
+    /// Identity, program name, tag table version and tag list. On a background `reconnect` the tag
+    /// definitions are kept when the controller (serial) and its tag table version are unchanged.
+    fn initialize_driver(&mut self, reconnect: bool) -> Result<()> {
         log::info!("Initializing driver...");
         let identity = self.conn.list_identity()?;
         log::debug!("Identified target: {identity:?}");
@@ -519,11 +525,15 @@ impl Logix {
             .is_some_and(|i| i.identity.product_name.starts_with(MICRO800_PREFIX));
         let serial = self.info.serial().map(str::to_owned);
         let items = self.plc_info()?.1;
-        self.info = Info {
-            items,
-            scope: ScopeInfo::default(),
-        };
-        if self.info.serial() != serial.as_deref() {
+        let old = std::mem::replace(
+            &mut self.info,
+            Info {
+                items,
+                scope: ScopeInfo::default(),
+            },
+        );
+        let same_serial = self.info.serial() == serial.as_deref();
+        if !same_serial {
             // template instance ids are the controller's
             self.cache.templates.clear();
             self.cache.aois.clear();
@@ -555,7 +565,22 @@ impl Logix {
                 self.use_instance_ids = false;
             }
         }
-        if self.args.init_tags {
+        let unchanged =
+            reconnect && same_serial && version.is_some() && version == self.tag_table_version;
+        if unchanged {
+            // the programs, tasks and modules came with the kept tag list (program-scoped tags need them)
+            self.info.scope = old.scope;
+            for key in SCOPE_KEYS {
+                if let Some(value) = old.items.get(key) {
+                    self.info.items.insert(key.to_owned(), value.clone());
+                }
+            }
+        }
+        if reconnect && self.args.lazy_tags && !unchanged {
+            self.reset_lazy_tags();
+            self.tag_table_version = version;
+        }
+        if self.args.init_tags && !unchanged {
             let scope = self.startup_scope();
             let filter = self.args.tag_namespace_filter.clone();
             self.load_tag_list(scope.as_deref(), true, &filter, version)?;
@@ -2202,55 +2227,166 @@ pub fn format_plc_time_utc(microseconds: u64) -> String {
 /// `LogixDriver`): its tag definitions are uploaded on connect (or resolved lazily) and checked against the
 /// controller's tag table version.
 ///
-/// Thread-safe: every call holds the driver's one lock for its requests and replies.
+/// Thread-safe, on a [session](crate::session): one session thread does every request, in queue order.
+/// Reads queued together from several threads (or with [`read_async`](Self::read_async) and subscriptions)
+/// go out as one read; a caller alone sends exactly what it sent before sessions. A driver from
+/// [`new`](Self::new) reconnects in the background after a lost link and sends a keep-alive when idle (see
+/// [`SessionOptions`]); one from [`with_connector`](Self::with_connector) does neither.
+///
+/// [`connected`](Self::connected) and [`connection_state`](Self::connection_state) never wait. The accessors of
+/// the driver's state ([`tags`](Self::tags), [`info_py`](Self::info_py), [`connection_size`](Self::connection_size),
+/// ...) wait for the request in flight, a background reconnect included.
 pub struct LogixDriver {
-    state: Mutex<Logix>,
+    pub(crate) session: Session<Logix>,
     definitions: Arc<AtomicU64>,
+    link: Arc<LinkFlags>,
+}
+
+impl Protocol for Logix {
+    fn open(&mut self) -> Result<bool> {
+        Logix::open(self)
+    }
+
+    /// Reconnects keeping the tag definitions when the controller and its tag table version are unchanged.
+    fn reopen(&mut self) -> Result<bool> {
+        if self.conn.connected() {
+            return Ok(true);
+        }
+        if !self.conn.open()? {
+            return Ok(false);
+        }
+        if let Err(err) = self.initialize_driver(true) {
+            if let Err(close) = self.conn.close() {
+                log::debug!("close after a failed initialization: {close}");
+            }
+            return Err(err);
+        }
+        Ok(true)
+    }
+
+    fn close(&mut self) -> Result<()> {
+        self.conn.close()
+    }
+
+    fn drop_link(&mut self) {
+        self.conn.drop_connection();
+    }
+
+    fn connected(&self) -> bool {
+        self.conn.connected()
+    }
+
+    fn read(&mut self, tags: &[&str]) -> Result<Vec<TagResult>> {
+        self.read_tags(tags)
+    }
+
+    fn write(&mut self, items: &[(&str, Value)]) -> Result<Vec<TagResult>> {
+        self.write_tags(items)
+    }
+
+    fn keep_alive(&mut self) -> Result<()> {
+        self.conn.keep_alive()
+    }
 }
 
 impl LogixDriver {
     /// A driver for `path` (`ip`, `ip/slot` or a CIP route) over TCP; not connected until [`open`](Self::open).
+    /// It reconnects and keeps the link alive ([`SessionOptions::default`]).
     pub fn new(path: &str, options: LogixOptions) -> Result<Self> {
-        Self::with_connector(path, options, tcp_connector())
+        Self::with_session(path, options, SessionOptions::default(), tcp_connector())
     }
 
-    /// A driver opening its transports with `connector`.
+    /// A driver opening its transports with `connector`, without reconnect or keep-alive
+    /// ([`SessionOptions::off`]): the behaviour of a driver before sessions.
     pub fn with_connector(path: &str, options: LogixOptions, connector: Connector) -> Result<Self> {
+        Self::with_session(path, options, SessionOptions::off(), connector)
+    }
+
+    /// A driver with explicit session options, opening its transports with `connector`.
+    pub fn with_session(
+        path: &str,
+        options: LogixOptions,
+        session: SessionOptions,
+        connector: Connector,
+    ) -> Result<Self> {
         let state = Logix::new(path, options, connector)?;
         Ok(LogixDriver {
             definitions: Arc::clone(&state.definitions),
-            state: Mutex::new(state),
+            link: state.conn.link(),
+            session: Session::new(state, session),
         })
     }
 
-    /// Locks the state. If a thread panicked holding the lock, the connection is dropped first (a reply may be
-    /// left unread) and the driver stays usable.
+    /// Locks the state for an accessor that does no I/O. If a thread panicked holding the lock, the connection
+    /// is dropped first (a reply may be left unread) and the driver stays usable.
     pub(crate) fn lock(&self) -> MutexGuard<'_, Logix> {
-        match self.state.lock() {
-            Ok(state) => state,
-            Err(poisoned) => {
-                let mut state = poisoned.into_inner();
-                state.conn.drop_connection();
-                self.state.clear_poison();
-                state
-            }
-        }
+        self.session.lock()
+    }
+
+    /// Runs `f` with the state on the session thread, in queue order, and waits for it.
+    pub(crate) fn run<R: Send + 'static>(
+        &self,
+        f: impl FnOnce(&mut Logix) -> Result<R> + Send + 'static,
+    ) -> Result<R> {
+        self.session.call(f).wait()
     }
 
     /// Opens the connection and initializes the driver (identity, program name, tag table version, tag list).
     /// Ok(false) if the session was refused; a failed initialization closes the connection and is returned.
+    /// During a reconnect it tries at once; success ends the outage.
     pub fn open(&self) -> Result<bool> {
-        self.lock().open()
+        self.session.open().wait()
     }
 
-    /// Closes the CIP connection and the session.
+    /// Closes the CIP connection and the session. Requests still queued fail with `CommError("driver
+    /// closed")`, subscriptions end and reconnecting stops; the request in flight finishes first. The driver
+    /// can be opened again. Do not call it while holding a lock one of this driver's callbacks waits for.
     pub fn close(&self) -> Result<()> {
-        self.lock().conn.close()
+        self.session.close()
     }
 
-    /// True while a session is registered.
+    /// Stops the session and callback threads and fails pending requests without closing the connection (what
+    /// drop does); reconnecting stops and subscriptions end. Every callback already queued runs before it
+    /// returns (unless called from a callback). The next request starts the session thread again.
+    pub fn stop(&self) {
+        self.session.stop();
+    }
+
+    /// True while a session is registered. Never waits for a request or a reconnect.
     pub fn connected(&self) -> bool {
-        self.lock().conn.connected()
+        if self.session.poisoned() {
+            return self.lock().conn.connected(); // drops the link a panic may have left half-read
+        }
+        self.link.opened()
+    }
+
+    /// Where the link is: closed, connected, or reconnecting in the background. Never blocks on I/O.
+    pub fn connection_state(&self) -> ConnectionState {
+        self.session.state()
+    }
+
+    /// Sets (or with None removes) the callback told of connection changes (connected, disconnected,
+    /// reconnecting), on the driver's callback thread. Once this returns, the old callback is not running
+    /// and will not be called again, unless this is called from the callback thread.
+    pub fn set_connection_callback(&self, callback: Option<ConnectionCallback>) {
+        self.session.set_connection_callback(callback);
+    }
+
+    /// [`read`](Self::read) without waiting: the handle completes on the session thread. Reads queued
+    /// together, from any thread, are sent as one read.
+    pub fn read_async(&self, tags: &[&str]) -> Handle<Vec<TagResult>> {
+        self.session.read(tags)
+    }
+
+    /// [`write`](Self::write) without waiting. Writes run in queue order and are never merged or sent again.
+    pub fn write_async(&self, items: &[(&str, Value)]) -> Handle<Vec<TagResult>> {
+        self.session.write(items)
+    }
+
+    /// Reads `tags` every `options.interval` (packed with the other reads) and delivers those that changed
+    /// (see [`Subscription`]). Errors for no tags or a zero interval; no I/O here.
+    pub fn subscribe(&self, tags: &[&str], options: SubscribeOptions) -> Result<Subscription> {
+        self.session.subscribe(tags, options)
     }
 
     /// Maximum connected message size.
@@ -2275,40 +2411,59 @@ impl LogixDriver {
 
     /// Sends a generic CIP message.
     pub fn generic_message(&self, msg: &GenericMessage) -> Result<GenericReply> {
-        self.lock().conn.generic_message(msg)
+        let msg = msg.clone();
+        self.run(move |state| state.conn.generic_message(&msg))
     }
 
     /// Sends a connected CIP message (without sequence count) with the next sequence count and returns the
     /// raw reply frame. Does not open the CIP connection.
     pub fn send_connected_raw(&self, message: &[u8]) -> Result<Vec<u8>> {
-        let mut state = self.lock();
-        let sequence = state.conn.next_sequence();
-        state.conn.send_connected(sequence, message)
+        let message = message.to_vec();
+        self.run(move |state| {
+            let sequence = state.conn.next_sequence();
+            state.conn.send_connected(sequence, &message)
+        })
     }
 
     /// Sends an unconnected CIP message and returns the raw reply frame.
     pub fn send_unconnected_raw(&self, message: &[u8]) -> Result<Vec<u8>> {
-        self.lock().conn.send_unconnected(message)
+        let message = message.to_vec();
+        self.run(move |state| state.conn.send_unconnected(&message))
     }
 
     /// The identity of the module in `slot` of the rack at the end of the connection path.
     pub fn get_module_info(&self, slot: i64) -> Result<ModuleIdentity> {
-        self.lock().conn.get_module_info(slot)
+        self.run(move |state| state.conn.get_module_info(slot))
     }
 
     /// The identity of the device at `route` (see [`crate::browse`]).
     pub fn identity_at(&self, route: &str) -> Result<ModuleIdentity> {
-        self.lock().conn.identity_at(route)
+        let route = route.to_owned();
+        self.run(move |state| state.conn.identity_at(&route))
     }
 
     /// What the ciplink device at `route` runs, None for any other device (see [`crate::browse::AppInfo`]).
     pub fn app_at(&self, route: &str) -> Result<Option<crate::browse::AppInfo>> {
-        self.lock().conn.app_at(route)
+        let route = route.to_owned();
+        self.run(move |state| state.conn.app_at(&route))
     }
 
     /// The ports of the device at `route` (see [`crate::browse`]).
     pub fn ports_at(&self, route: &str) -> Result<Vec<crate::browse::PortInfo>> {
-        self.lock().conn.ports_at(route)
+        let route = route.to_owned();
+        self.run(move |state| state.conn.ports_at(&route))
+    }
+
+    /// The probes of `port`, built on the session thread; they run on connections of their own.
+    fn scan(
+        &self,
+        route: &str,
+        port: u16,
+        nodes: Option<&[String]>,
+    ) -> Result<crate::browse::Scan> {
+        let route = route.to_owned();
+        let nodes = nodes.map(<[String]>::to_vec);
+        self.run(move |state| state.conn.scan(&route, port, nodes.as_deref()))
     }
 
     /// Probes the slots, nodes or IP addresses on `port` of the device at `route` (`nodes`, by default the
@@ -2320,8 +2475,7 @@ impl LogixDriver {
         nodes: Option<&[String]>,
         workers: usize,
     ) -> Result<Vec<crate::browse::Node>> {
-        let scan = self.lock().conn.scan(route, port, nodes)?;
-        Ok(scan.collect(workers))
+        Ok(self.scan(route, port, nodes)?.collect(workers))
     }
 
     /// [`browse_port`](Self::browse_port), calling `found` with each node as it answers (in any order) until it
@@ -2334,8 +2488,7 @@ impl LogixDriver {
         workers: usize,
         found: &mut dyn FnMut(crate::browse::Node) -> bool,
     ) -> Result<()> {
-        let scan = self.lock().conn.scan(route, port, nodes)?;
-        scan.run(workers, found);
+        self.scan(route, port, nodes)?.run(workers, found);
         Ok(())
     }
 
@@ -2356,12 +2509,12 @@ impl LogixDriver {
 
     /// Reads the controller's identity and keyswitch position and stores them in [`info`](Self::info_py).
     pub fn get_plc_info(&self) -> Result<PlcInfo> {
-        Ok(self.lock().plc_info()?.0)
+        self.run(|state| Ok(state.plc_info()?.0))
     }
 
     /// Reads the name of the program running in the controller and stores it in the info.
     pub fn get_plc_name(&self) -> Result<String> {
-        self.lock().get_plc_name()
+        self.run(Logix::get_plc_name)
     }
 
     /// The program name read on connect, None before.
@@ -2398,12 +2551,14 @@ impl LogixDriver {
     /// Reads the PLC clock: the value is `{"microseconds": us since 1970 UTC}` (see
     /// [`format_plc_time_utc`]); a failed reply is the result's error.
     pub fn get_plc_time(&self) -> Result<TagResult> {
-        let reply = self.lock().conn.generic_message(&GenericMessage {
-            service: GET_ATTRIBUTE_LIST,
-            class_code: LogicalValue::Int(WALL_CLOCK_CLASS),
-            instance: LogicalValue::Raw(vec![0x01]),
-            request_data: vec![0x01, 0x00, 0x06, 0x00],
-            ..GenericMessage::default()
+        let reply = self.run(|state| {
+            state.conn.generic_message(&GenericMessage {
+                service: GET_ATTRIBUTE_LIST,
+                class_code: LogicalValue::Int(WALL_CLOCK_CLASS),
+                instance: LogicalValue::Raw(vec![0x01]),
+                request_data: vec![0x01, 0x00, 0x06, 0x00],
+                ..GenericMessage::default()
+            })
         })?;
         let mut error = reply.tag.error.clone();
         let mut value = None;
@@ -2453,13 +2608,15 @@ impl LogixDriver {
         data.extend(1u16.to_le_bytes()); // one attribute
         data.extend(6u16.to_le_bytes()); // attribute 6, the time
         data.extend(us.to_le_bytes());
-        let reply = self.lock().conn.generic_message(&GenericMessage {
-            service: SET_ATTRIBUTE_LIST,
-            class_code: LogicalValue::Int(WALL_CLOCK_CLASS),
-            instance: LogicalValue::Raw(vec![0x01]),
-            request_data: data,
-            name: "set_plc_time".into(),
-            ..GenericMessage::default()
+        let reply = self.run(move |state| {
+            state.conn.generic_message(&GenericMessage {
+                service: SET_ATTRIBUTE_LIST,
+                class_code: LogicalValue::Int(WALL_CLOCK_CLASS),
+                instance: LogicalValue::Raw(vec![0x01]),
+                request_data: data,
+                name: "set_plc_time".into(),
+                ..GenericMessage::default()
+            })
         })?;
         Ok(reply.tag)
     }
@@ -2473,39 +2630,44 @@ impl LogixDriver {
         cache: bool,
         tag_namespace_filter: &str,
     ) -> Result<Vec<TagDef>> {
-        let mut state = self.lock();
-        state.conn.ensure_forward_open("get_tag_list")?;
-        state.load_tag_list(program, cache, tag_namespace_filter, None)
+        let program = program.map(str::to_owned);
+        let filter = tag_namespace_filter.to_owned();
+        self.run(move |state| {
+            state.conn.ensure_forward_open("get_tag_list")?;
+            state.load_tag_list(program.as_deref(), cache, &filter, None)
+        })
     }
 
     /// Loads the tag definitions again if the controller's tag table changed since they were loaded; true if
     /// they were. Without instance IDs, or while reloads are backed off, nothing is read and false returned.
     pub fn check_tag_table(&self) -> Result<bool> {
-        self.lock().check_tag_table()
+        self.run(Logix::check_tag_table)
     }
 
     /// The definition of a tag or member, e.g. `"MyUdt.Member"`; with lazy tags an unknown tag is resolved
     /// from the controller.
     pub fn get_tag_info(&self, tag_name: &str) -> Result<TagDefinition> {
         let (_, base, attrs) = split_tag_name(tag_name)?;
-        let mut state = self.lock();
-        Ok(match state.resolve_tag_info(&base, &attrs)? {
-            TagInfo::Tag(t) => TagDefinition::Tag(t.clone()),
-            TagInfo::Member(m) => TagDefinition::Member(m.clone()),
+        self.run(move |state| {
+            Ok(match state.resolve_tag_info(&base, &attrs)? {
+                TagInfo::Tag(t) => TagDefinition::Tag(t.clone()),
+                TagInfo::Member(m) => TagDefinition::Member(m.clone()),
+            })
         })
     }
 
     /// [`get_tag_info`](Self::get_tag_info) as the Python driver's dict.
     pub fn get_tag_info_py(&self, tag_name: &str) -> Result<PyObj> {
         let (_, base, attrs) = split_tag_name(tag_name)?;
-        let mut state = self.lock();
-        let info = match state.resolve_tag_info(&base, &attrs)? {
-            TagInfo::Tag(t) => TagDefinition::Tag(t.clone()),
-            TagInfo::Member(m) => TagDefinition::Member(m.clone()),
-        };
-        Ok(match &info {
-            TagDefinition::Tag(t) => state.tag_py(t),
-            TagDefinition::Member(m) => state.member_py(m),
+        self.run(move |state| {
+            let info = match state.resolve_tag_info(&base, &attrs)? {
+                TagInfo::Tag(t) => TagDefinition::Tag(t.clone()),
+                TagInfo::Member(m) => TagDefinition::Member(m.clone()),
+            };
+            Ok(match &info {
+                TagDefinition::Tag(t) => state.tag_py(t),
+                TagDefinition::Member(m) => state.member_py(m),
+            })
         })
     }
 

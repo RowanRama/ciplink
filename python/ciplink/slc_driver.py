@@ -52,6 +52,7 @@ from .const import (
 from .exceptions import ResponseError, RequestError
 from .tag import Tag
 from .packets import SendUnitDataRequestPacket
+from .subscription import _Session
 
 AtomicValueType = Union[int, float, bool]
 TagValueType = Union[AtomicValueType, List[Union[AtomicValueType, str]]]
@@ -111,19 +112,31 @@ ST_RE = re.compile(
 )
 
 
-class SLCDriver(CIPDriver):
+class SLCDriver(CIPDriver, _Session):
     """
     An Ethernet/IP Client driver for reading and writing of data files in SLC or MicroLogix PLCs.
+
+    ``reconnect`` and ``keep_alive`` are those of :class:`~ciplink.LogixDriver`, and so are :meth:`read_async`,
+    :meth:`write_async`, :meth:`subscribe` and :meth:`on_connection`.  Reads of several callers are not merged
+    (one bad address fails a whole SLC read), but they share the driver's one session.
     """
 
     __log = logging.getLogger(f"{__module__}.{__qualname__}")
     _auto_slot_cip_path = True
 
-    def __init__(self, path, *args, connection_size=500, **kwargs):
+    def __init__(self, path, *args, connection_size=500, reconnect: bool = True,
+                 keep_alive: Optional[float] = 30.0, **kwargs):
+        self._init_session()
+        self._session_options = (bool(reconnect), keep_alive)
         super().__init__(path, *args, connection_size=connection_size, **kwargs)  # SLC/MicroLogix: standard Forward Open
 
     def _make_core(self, path, socket_timeout, connection_size):
-        return _core.SLCDriver(path, socket_timeout, connection_size)
+        return _core.SLCDriver(path, socket_timeout, connection_size, *self._session_options)
+
+    def close(self):
+        """closes the connection: queued requests fail with a CommError, subscriptions end, reconnecting stops"""
+        self._close_subscriptions()
+        self._core.close()
 
     @classmethod
     def _core_class(cls):
@@ -163,6 +176,16 @@ class SLCDriver(CIPDriver):
             return results[0]
 
         return results
+
+    async def read_async(self, *addresses: str) -> ReadWriteReturnType:
+        """:meth:`read` for asyncio: same arguments and results, without blocking the event loop"""
+        results = await self._await_core(self._core.read_async, list(addresses))
+        return results[0] if len(results) == 1 else results
+
+    async def write_async(self, *address_values: Tuple[str, TagValueType]) -> ReadWriteReturnType:
+        """:meth:`write` for asyncio: same arguments and results; writes run in the order they were made"""
+        results = await self._await_core(self._core.write_async, address_values)
+        return results[0] if len(results) == 1 else results
 
     def get_processor_type(self):
         """the processor's catalog number, e.g. ``'1747-L552'``, None if the processor reported an error"""

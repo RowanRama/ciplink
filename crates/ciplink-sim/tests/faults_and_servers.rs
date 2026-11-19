@@ -139,6 +139,42 @@ fn refused_connections_fail_to_open() {
 }
 
 #[test]
+fn close_connections_closes_open_connections_at_their_next_request() {
+    let sim = sim();
+    let mut open = Client::connected(&sim, 4000);
+    let server = sim.serve("127.0.0.1:0").unwrap();
+    let mut tcp =
+        TcpTransport::connect("127.0.0.1", server.port(), Some(Duration::from_secs(2))).unwrap();
+    let mut encap = Encap {
+        session: 0,
+        context: [0; 8],
+        option: 0,
+    };
+    tcp.send(&register_session_request(&encap, 1, 0)).unwrap();
+    encap.session = Reply::parse(ReplyKind::RegisterSession, &tcp.receive().unwrap())
+        .session
+        .unwrap();
+
+    sim.inject(Fault::CloseConnections);
+    sim.clear_faults(); // does not undo it
+    let frame =
+        ciplink::packets::send_unit_data_request(&open.encap, &open.cid, 9, &read("dint", 1))
+            .unwrap();
+    open.transport.send(&frame).unwrap();
+    assert!(matches!(open.transport.receive(), Err(Error::Comm(_))));
+    tcp.send(&list_identity_request(&encap)).unwrap();
+    assert!(tcp.receive().is_err());
+
+    // new connections are served
+    let mut fresh = Client::connected(&sim, 4000);
+    assert!(fresh.unit(&read("dint", 1)).is_valid());
+    let mut tcp =
+        TcpTransport::connect("127.0.0.1", server.port(), Some(Duration::from_secs(2))).unwrap();
+    tcp.send(&register_session_request(&encap, 1, 0)).unwrap();
+    assert!(Reply::parse(ReplyKind::RegisterSession, &tcp.receive().unwrap()).is_valid());
+}
+
+#[test]
 fn a_hook_can_edit_the_tag_table_between_two_requests() {
     let sim = sim();
     let mut client = Client::connected(&sim, 4000);

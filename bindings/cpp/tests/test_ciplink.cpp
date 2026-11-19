@@ -5,7 +5,11 @@
 #include "ciplink.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <condition_variable>
+#include <future>
+#include <mutex>
 #include <cstdlib>
 #include <filesystem>
 #include <cmath>
@@ -498,6 +502,138 @@ int main(int argc, char** argv) {
         CHECK(server.address().rfind("127.0.0.1:", 0) == 0);
         server.stop();
         expect_error(CIPLINK_STATUS_INVALID_ARGUMENT, [] { ciplink::Server("no/such/tagserver.toml"); });
+    });
+
+    run("async_read_and_write_return_futures", [] {
+        ciplink::Logix plc(logix_path);
+        plc.open();
+        auto w = plc.write_async({{"dint_ary[7]", 707}});
+        auto r = plc.read_async({"dint_ary[7]", "dint_ary[3]"});
+        auto results = r.get();  // queued after the write, so it reads the written value
+        CHECK(results.size() == 2 && results[0].value.as_int() == 707 && results[1].value.as_int() == 300);
+        CHECK(w.get().at(0));
+
+        ciplink::Logix never_opened(logix_path);
+        auto failed = never_opened.read_async({"dint1"});
+        expect_error(CIPLINK_STATUS_COMM, [&] { failed.get(); });
+
+        ciplink::Slc slc(slc_path);
+        slc.open();
+        CHECK(slc.write_async({{"N7:3", 33}}).get().at(0));
+        CHECK(slc.read_async({"N7:3"}).get().at(0).value.as_int() == 33);
+    });
+
+    run("concurrent_async_callers_get_their_own_results", [] {
+        ciplink::Logix plc(logix_path);
+        plc.open();
+        std::atomic<int> bad{0};
+        std::vector<std::thread> threads;
+        for (int i : {2, 3, 4, 6}) {
+            threads.emplace_back([&plc, &bad, i] {
+                std::vector<std::future<std::vector<ciplink::Tag>>> pending;
+                for (int k = 0; k < 25; ++k) pending.push_back(plc.read_async({"dint_ary[" + std::to_string(i) + "]"}));
+                for (auto& f : pending)
+                    if (f.get().at(0).value.as_int() != 100 * i) ++bad;
+            });
+        }
+        for (auto& t : threads) t.join();
+        CHECK(bad == 0);
+    });
+
+    run("subscription_delivers_changes_until_closed", [] {
+        ciplink::Logix plc(logix_path);
+        plc.open();
+        std::mutex m;
+        std::condition_variable cv;
+        std::vector<int64_t> seen;
+        int calls = 0;
+        bool nested_read_ok = true;
+        ciplink::Subscription sub = plc.subscribe(
+            {"dint_ary[8]"},
+            [&](const std::vector<ciplink::Tag>& changed) {
+                bool ok = bool(plc.read_tag("dint_ary[2]"));  // a callback may call the driver
+                std::lock_guard<std::mutex> lock(m);
+                ++calls;
+                nested_read_ok = nested_read_ok && ok;
+                for (auto& t : changed)
+                    if (t) seen.push_back(t.value.as_int());
+                cv.notify_all();
+            },
+            0.02);
+        auto saw = [&](int64_t v) {
+            std::unique_lock<std::mutex> lock(m);
+            return cv.wait_for(lock, std::chrono::seconds(5),
+                               [&] { return std::find(seen.begin(), seen.end(), v) != seen.end(); });
+        };
+        CHECK(saw(800));
+        plc.write_tag("dint_ary[8]", 888);
+        CHECK(saw(888));
+        sub.close();
+        int before = 0;
+        {
+            std::lock_guard<std::mutex> lock(m);
+            before = calls;
+            CHECK(nested_read_ok);
+        }
+        plc.write_tag("dint_ary[8]", 889);
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::lock_guard<std::mutex> lock(m);
+        CHECK(calls == before);
+        expect_error(CIPLINK_STATUS_INVALID_ARGUMENT, [&] { plc.subscribe({"dint1"}, [](auto&) {}, 0); });
+    });
+
+    run("connection_events_and_state", [] {
+        ciplink::Logix plc(logix_path);
+        std::mutex m;
+        std::condition_variable cv;
+        std::vector<std::string> events;
+        plc.on_connection([&](const ciplink::ConnectionEvent& e) {
+            std::lock_guard<std::mutex> lock(m);
+            events.push_back(e.event);
+            cv.notify_all();
+        });
+        CHECK(plc.connection_state() == ciplink::ConnectionState::Closed);
+        plc.open();
+        {
+            std::unique_lock<std::mutex> lock(m);
+            CHECK(cv.wait_for(lock, std::chrono::seconds(5), [&] { return !events.empty(); }));
+            CHECK(events.size() == 1 && events[0] == "connected");
+        }
+        CHECK(plc.connection_state() == ciplink::ConnectionState::Connected);
+        plc.close();
+        CHECK(plc.connection_state() == ciplink::ConnectionState::Closed);
+        plc.on_connection(nullptr);
+        plc.open();
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        {
+            std::lock_guard<std::mutex> lock(m);
+            CHECK(events.size() == 1);
+        }
+        ciplink::Cip cip(logix_path);
+        expect_error(CIPLINK_STATUS_UNSUPPORTED, [&] { cip.on_connection([](const ciplink::ConnectionEvent&) {}); });
+    });
+
+    run("close_and_destroy_settle_pending_futures", [] {
+        std::vector<std::future<std::vector<ciplink::Tag>>> pending;
+        {
+            ciplink::Logix plc(logix_path);
+            plc.open();
+            for (int k = 0; k < 20; ++k) pending.push_back(plc.read_async({"dint1"}));
+            plc.close();
+            plc.open();
+            for (int k = 0; k < 20; ++k) pending.push_back(plc.read_async({"dint1"}));
+        }  // destroyed with requests queued: they fail with "driver closed"
+        int ok = 0, closed = 0;
+        for (auto& f : pending) {
+            CHECK(f.wait_for(std::chrono::seconds(0)) == std::future_status::ready);
+            try {
+                f.get();
+                ++ok;
+            } catch (const ciplink::Error& e) {
+                if (e.status() == CIPLINK_STATUS_COMM) ++closed;
+            }
+        }
+        CHECK(ok + closed == 40);
     });
 
     std::cout << checks << " checks, " << failures << " failures\n";

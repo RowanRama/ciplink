@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Ciplink;
@@ -12,11 +15,22 @@ namespace Ciplink;
 /// The calls every driver kind shares. Drivers are thread-safe: one instance can serve several threads, and
 /// <see cref="Dispose"/> waits for calls in progress before it frees the native driver.
 /// </summary>
+/// <remarks>
+/// A Logix or SLC driver queues every call for its own session thread, which does all of its I/O: reads queued
+/// together (by any thread, <see cref="ReadAsync(string[])"/> call or <see cref="Subscription"/>) go out as one
+/// read, and writes run in the order queued. After an open link is lost it reconnects in the background (see
+/// <see cref="DriverOptions.Reconnect"/> and <see cref="ConnectionChanged"/>). Callbacks
+/// (<see cref="ConnectionChanged"/>, <see cref="Subscription.Changed"/>) run on the driver's callback thread, one
+/// at a time; async results complete their tasks there and continue on the thread pool.
+/// </remarks>
 public abstract class Driver : IDisposable
 {
     private protected delegate int Create(string path, string? optionsJson, out DriverHandle handle);
 
     private readonly DriverHandle _handle;
+    private readonly object _sessionLock = new();
+    private readonly List<Subscription> _subscriptions = new();
+    private EventHandler<ConnectionEventArgs>? _connectionChanged;
 
     private protected Driver(string path, DriverOptions options, Create create)
     {
@@ -48,8 +62,160 @@ public abstract class Driver : IDisposable
     /// <exception cref="ObjectDisposedException">The driver was disposed.</exception>
     public void Open() => Native.Check(Native.ciplink_open(_handle));
 
-    /// <summary>Closes the session. The driver can be opened again.</summary>
-    public void Close() => Native.Check(Native.ciplink_close(_handle));
+    /// <summary>
+    /// Closes the session and stops reconnecting. The request in flight finishes; requests still queued fail with
+    /// a <see cref="CiplinkStatus.Comm"/> error "driver closed", and every <see cref="Subscription"/> ends. The
+    /// driver can be opened again.
+    /// </summary>
+    public void Close()
+    {
+        try
+        {
+            Native.Check(Native.ciplink_close(_handle));
+        }
+        finally
+        {
+            EndSubscriptions();
+        }
+    }
+
+    /// <summary>Where the link is: closed, connected or reconnecting. Never waits for I/O.</summary>
+    public ConnectionState ConnectionState =>
+        _handle.IsClosed ? ConnectionState.Closed : (ConnectionState)Native.ciplink_connection_state(_handle);
+
+    /// <summary>
+    /// Raised when the link changes: "connected" (<see cref="Open"/> or a reconnect succeeded), "disconnected"
+    /// (an open link was lost, with the error) and "reconnecting" (before each attempt, with its number and
+    /// wait). <see cref="Close"/> and a failed <see cref="Open"/> raise nothing. Raised on the driver's callback
+    /// thread; an exception thrown by a handler is written to <see cref="Trace"/> and dropped.
+    /// </summary>
+    /// <exception cref="CiplinkException">Adding a handler to a <see cref="CipDriver"/> (<see cref="CiplinkStatus.Unsupported"/>).</exception>
+    public event EventHandler<ConnectionEventArgs>? ConnectionChanged
+    {
+        add
+        {
+            lock (_sessionLock)
+            {
+                if (_handle.Owner == IntPtr.Zero)
+                {
+                    RegisterConnectionCallback();
+                }
+                _connectionChanged += value;
+            }
+        }
+        remove
+        {
+            lock (_sessionLock)
+            {
+                _connectionChanged -= value;
+            }
+        }
+    }
+
+    private unsafe void RegisterConnectionCallback()
+    {
+        // weak: an undisposed driver can still be collected (its handle's finalizer frees the native driver)
+        GCHandle owner = GCHandle.Alloc(this, GCHandleType.Weak);
+        int status = Native.ciplink_set_connection_callback(_handle, &OnConnection, GCHandle.ToIntPtr(owner));
+        if (status != 0)
+        {
+            owner.Free();
+            Native.Check(status);
+        }
+        _handle.Owner = GCHandle.ToIntPtr(owner);
+    }
+
+    [UnmanagedCallersOnly]
+    private static void OnConnection(IntPtr user, IntPtr eventJson)
+    {
+        try
+        {
+            if (GCHandle.FromIntPtr(user).Target is Driver driver)
+            {
+                EventHandler<ConnectionEventArgs>? handler;
+                lock (driver._sessionLock)
+                {
+                    handler = driver._connectionChanged;
+                }
+                handler?.Invoke(driver, ConnectionEventArgs.Parse(Marshal.PtrToStringUTF8(eventJson) ?? "{}"));
+            }
+        }
+        catch (Exception e)
+        {
+            Trace.TraceError($"ciplink: a ConnectionChanged handler threw: {e}");
+        }
+    }
+
+    /// <summary>
+    /// Subscribes to <paramref name="tags"/>: they are read every <paramref name="interval"/> (packed with the
+    /// driver's other reads) and the ones whose value or error changed are delivered by the returned
+    /// <see cref="Subscription"/>, as an event and as an async enumerable. With <paramref name="deadband"/>, a
+    /// numeric tag that moved less than it since the last value delivered is not delivered. Dispose it to
+    /// unsubscribe.
+    /// </summary>
+    /// <param name="tags">The tags to read.</param>
+    /// <param name="interval">The poll period (more than zero).</param>
+    /// <param name="deadband">Numeric tags: the smallest change delivered, or null for every change.</param>
+    /// <param name="changed">
+    /// A <see cref="Subscription.Changed"/> handler attached before the first poll, so it gets the first values
+    /// too (a handler attached later may miss them).
+    /// </param>
+    /// <exception cref="CiplinkException">No tags or a zero interval (<see cref="CiplinkStatus.InvalidArgument"/>
+    /// or <see cref="CiplinkStatus.Request"/>), or a <see cref="CipDriver"/> (<see cref="CiplinkStatus.Unsupported"/>).</exception>
+    public unsafe Subscription Subscribe(IEnumerable<string> tags, TimeSpan interval, double? deadband = null,
+        Action<IReadOnlyList<Tag>>? changed = null)
+    {
+        ArgumentNullException.ThrowIfNull(tags);
+        string[] names = tags.ToArray();
+        string options = Values.ToJson(new Dictionary<string, object?>
+        {
+            ["interval"] = interval.TotalSeconds,
+            ["deadband"] = deadband,
+        });
+        var subscription = new Subscription(this, names);
+        subscription.Changed += changed;
+        try
+        {
+            IntPtr native = WithNames(names, ptrs =>
+            {
+                Native.Check(Native.ciplink_subscribe(_handle, ptrs, (nuint)ptrs.Length, options, &Subscription.OnChanges,
+                    subscription.Self, out IntPtr raw));
+                return raw;
+            });
+            subscription.Attach(native);
+        }
+        catch
+        {
+            subscription.Dispose();
+            throw;
+        }
+        lock (_sessionLock)
+        {
+            _subscriptions.Add(subscription);
+        }
+        return subscription;
+    }
+
+    internal void Forget(Subscription subscription)
+    {
+        lock (_sessionLock)
+        {
+            _subscriptions.Remove(subscription);
+        }
+    }
+
+    private void EndSubscriptions()
+    {
+        Subscription[] all;
+        lock (_sessionLock)
+        {
+            all = _subscriptions.ToArray();
+        }
+        foreach (Subscription s in all)
+        {
+            s.Dispose();
+        }
+    }
 
     /// <summary>Reads one tag, e.g. "dint1", "ary[2]{3}" or "N7:0".</summary>
     public Tag Read(string tag) => Read(new[] { tag })[0];
@@ -242,11 +408,56 @@ public abstract class Driver : IDisposable
         return Values.ParseTags(Native.CallJson((out IntPtr j) => Native.ciplink_write(_handle, json, out j)));
     }
 
-    /// <summary><see cref="Read(string[])"/> on the thread pool.</summary>
-    public Task<IReadOnlyList<Tag>> ReadAsync(params string[] tags) => Task.Run(() => Read(tags));
+    /// <summary>
+    /// Queues a read of <paramref name="tags"/> (as <see cref="Read(string[])"/>) and returns at once, without
+    /// using a thread while it waits. Reads queued together go out as one read.
+    /// </summary>
+    public Task<IReadOnlyList<Tag>> ReadAsync(params string[] tags) => ReadAsync(tags, CancellationToken.None);
 
-    /// <summary><see cref="Write(ValueTuple{string, object}[])"/> on the thread pool.</summary>
-    public Task<IReadOnlyList<Tag>> WriteAsync(params (string Tag, object? Value)[] items) => Task.Run(() => Write(items));
+    /// <summary>
+    /// <see cref="ReadAsync(string[])"/>. Cancelling <paramref name="cancellationToken"/> cancels the task only:
+    /// the queued read still runs and its result is dropped.
+    /// </summary>
+    public unsafe Task<IReadOnlyList<Tag>> ReadAsync(string[] tags, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return WithNames(tags, ptrs => PendingRequest.Start(
+                user => Native.ciplink_read_async(_handle, ptrs, (nuint)ptrs.Length, &PendingRequest.OnDone, user, IntPtr.Zero),
+                cancellationToken));
+        }
+        catch (Exception e)
+        {
+            return Task.FromException<IReadOnlyList<Tag>>(e);
+        }
+    }
+
+    /// <summary>
+    /// Queues a write (as <see cref="Write(ValueTuple{string, object}[])"/>) and returns at once. Writes run in
+    /// the order queued, after everything queued before them, and are never sent twice: a write whose link is lost
+    /// fails with that error.
+    /// </summary>
+    public Task<IReadOnlyList<Tag>> WriteAsync(params (string Tag, object? Value)[] items) => WriteAsync(items, CancellationToken.None);
+
+    /// <summary>
+    /// <see cref="WriteAsync(ValueTuple{string, object}[])"/>. Cancelling <paramref name="cancellationToken"/>
+    /// cancels the task only: the queued write still runs.
+    /// </summary>
+    public unsafe Task<IReadOnlyList<Tag>> WriteAsync((string Tag, object? Value)[] items, CancellationToken cancellationToken)
+    {
+        try
+        {
+            ArgumentNullException.ThrowIfNull(items);
+            string json = Values.WriteItems(items);
+            return PendingRequest.Start(
+                user => Native.ciplink_write_async(_handle, json, &PendingRequest.OnDone, user, IntPtr.Zero),
+                cancellationToken);
+        }
+        catch (Exception e)
+        {
+            return Task.FromException<IReadOnlyList<Tag>>(e);
+        }
+    }
 
     /// <summary>Sends a CIP generic message. The reply data is the result's value, as <see cref="byte"/>[].</summary>
     public unsafe Tag GenericMessage(Message message)
@@ -282,10 +493,15 @@ public abstract class Driver : IDisposable
         }
     }
 
-    /// <summary>Closes the connection and frees the native driver. Later calls throw <see cref="ObjectDisposedException"/>.</summary>
+    /// <summary>
+    /// Closes the connection and frees the native driver. Pending async requests fail and every
+    /// <see cref="Subscription"/> ends; once the native driver is freed no callback of it runs again. Later calls
+    /// throw <see cref="ObjectDisposedException"/>.
+    /// </summary>
     public void Dispose()
     {
         _handle.Dispose();
+        EndSubscriptions();
         GC.SuppressFinalize(this);
     }
 

@@ -7,6 +7,8 @@ namespace Ciplink.Tests;
 public sealed class Simulators : IDisposable
 {
     private readonly List<Process> _processes = new();
+    private readonly object _commandLock = new();
+    private Process _logix = null!;
 
     public Simulators()
     {
@@ -15,6 +17,7 @@ public sealed class Simulators : IDisposable
         Run(repo, "cargo", "build -p ciplink-sim");
         string exe = Path.Combine(repo, "target", "debug", OperatingSystem.IsWindows() ? "ciplink-sim.exe" : "ciplink-sim");
         LogixPath = Start(exe, Path.Combine(repo, "tools", "sim", "example_controller.json"));
+        _logix = _processes[^1];
         SlcPath = Start(exe, Path.Combine(repo, "tools", "sim", "example_slc.json"));
     }
 
@@ -26,6 +29,29 @@ public sealed class Simulators : IDisposable
 
     /// <summary>"127.0.0.1:PORT" of the SLC simulator.</summary>
     public string SlcPath { get; }
+
+    /// <summary>
+    /// Sends one command to the Logix simulator on its standard input (see crates/ciplink-sim/src/main.rs), e.g.
+    /// <c>{"cmd": "requests"}</c>, and returns its "ok" result; throws on an "error" answer.
+    /// </summary>
+    public System.Text.Json.Nodes.JsonNode? Command(string json)
+    {
+        lock (_commandLock)
+        {
+            _logix.StandardInput.WriteLine(json);
+            _logix.StandardInput.Flush();
+            string line = _logix.StandardOutput.ReadLine() ?? throw new InvalidOperationException("simulator exited");
+            var answer = System.Text.Json.Nodes.JsonNode.Parse(line)!.AsObject();
+            if (answer.TryGetPropertyValue("error", out var error))
+            {
+                throw new InvalidOperationException($"simulator {json}: {error}");
+            }
+            return answer["ok"];
+        }
+    }
+
+    /// <summary>The number of requests the Logix simulator has received.</summary>
+    public long Requests() => (long)Command("{\"cmd\": \"requests\"}")!;
 
     public void Dispose()
     {
@@ -71,6 +97,7 @@ public sealed class Simulators : IDisposable
         {
             UseShellExecute = false,
             RedirectStandardOutput = true,
+            RedirectStandardInput = true,
         })!;
         _processes.Add(p);
         string? line = p.StandardOutput.ReadLine();
@@ -79,8 +106,7 @@ public sealed class Simulators : IDisposable
         {
             throw new InvalidOperationException($"simulator did not start: '{line}'");
         }
-        // keep draining stdout so the simulator never blocks on a full pipe
-        _ = p.StandardOutput.ReadToEndAsync();
+        // after this line the simulator writes to stdout only to answer Command, which reads each answer
         return m.Groups[1].Value;
     }
 }

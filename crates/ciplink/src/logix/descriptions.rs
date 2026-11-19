@@ -1086,12 +1086,14 @@ impl LogixDriver {
         language: u16,
         encoding: TextEncoding,
     ) -> Result<TagResult> {
-        let mut state = self.lock();
-        state.conn.ensure_forward_open("get_tag_description")?;
-        let mut results = state.descriptions(&[tag_name], language, encoding);
-        results
-            .pop()
-            .ok_or_else(|| Error::data("no Description result"))
+        let tag_name = tag_name.to_owned();
+        self.run(move |state| {
+            state.conn.ensure_forward_open("get_tag_description")?;
+            let mut results = state.descriptions(&[tag_name.as_str()], language, encoding);
+            results
+                .pop()
+                .ok_or_else(|| Error::data("no Description result"))
+        })
     }
 
     /// The Descriptions of several tags, in the order of `tag_names`: the same results as
@@ -1103,9 +1105,12 @@ impl LogixDriver {
         language: u16,
         encoding: TextEncoding,
     ) -> Result<Vec<TagResult>> {
-        let mut state = self.lock();
-        state.conn.ensure_forward_open("get_tag_descriptions")?;
-        Ok(state.descriptions(tag_names, language, encoding))
+        let tag_names: Vec<String> = tag_names.iter().map(|t| (*t).to_owned()).collect();
+        self.run(move |state| {
+            state.conn.ensure_forward_open("get_tag_descriptions")?;
+            let refs: Vec<&str> = tag_names.iter().map(String::as_str).collect();
+            Ok(state.descriptions(&refs, language, encoding))
+        })
     }
 
     /// Authenticates the current CIP connection for metadata reads, with `credentials` or the bundled ones.
@@ -1115,7 +1120,10 @@ impl LogixDriver {
         &self,
         credentials: Option<&LogixMetadataCredentials>,
     ) -> TagResult {
-        let result = self.lock().authenticate(credentials);
+        let credentials = credentials.cloned();
+        let result = self
+            .run(move |state| Ok(state.authenticate(credentials.as_ref())))
+            .and_then(|r| r);
         let (value, error) = match result {
             Ok(()) => (Some(Value::Bool(true)), None),
             Err(err) => (None, Some(err.to_tag_error(err.default_kind(), None))),

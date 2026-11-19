@@ -27,7 +27,19 @@ typedef enum CiplinkStatus {
   CIPLINK_STATUS_UNSUPPORTED = 6,
   // The library panicked (a bug); the handle stays usable.
   CIPLINK_STATUS_PANIC = 7,
+  // [`ciplink_request_wait`] timed out; the request carries on.
+  CIPLINK_STATUS_TIMEOUT = 8,
 } CiplinkStatus;
+
+// Where a driver's link is ([`ciplink_connection_state`]).
+typedef enum CiplinkConnectionState {
+  // Never opened, closed, or lost with reconnect off.
+  CIPLINK_CONNECTION_STATE_CLOSED = 0,
+  // Opened and not lost since.
+  CIPLINK_CONNECTION_STATE_CONNECTED = 1,
+  // Lost; reconnecting in the background. Reads, writes and subscription polls fail at once meanwhile.
+  CIPLINK_CONNECTION_STATE_RECONNECTING = 2,
+} CiplinkConnectionState;
 
 // A running adapter, made by [`ciplink_adapter_start`], stopped by [`ciplink_adapter_stop`] (other threads' calls
 // then fail or return no event) and freed by [`ciplink_adapter_free`]. The adapter functions report failures on
@@ -37,10 +49,17 @@ typedef struct CiplinkAdapter CiplinkAdapter;
 // A driver handle: a Logix, SLC or plain CIP driver.
 typedef struct CiplinkDriver CiplinkDriver;
 
+// A read or write queued by [`ciplink_read_async`] or [`ciplink_write_async`]: poll it with
+// [`ciplink_request_done`], wait for it with [`ciplink_request_wait`], free it with [`ciplink_request_free`].
+typedef struct CiplinkRequest CiplinkRequest;
+
 // A tag server running in this process on threads of its own (see the `ciplink-server` crate), made by
 // [`ciplink_server_start`] and stopped and freed with [`ciplink_server_stop`]. The server functions report
 // failures on the calling thread: [`ciplink_last_error`] with NULL.
 typedef struct CiplinkServer CiplinkServer;
+
+// A running subscription, made by [`ciplink_subscribe`] and ended by [`ciplink_subscription_free`].
+typedef struct CiplinkSubscription CiplinkSubscription;
 
 // A running controller-side trend, made by [`ciplink_trend_start`] and freed with [`ciplink_trend_free`].
 // The trend functions report failures on the calling thread: [`ciplink_last_error`] with NULL.
@@ -74,6 +93,25 @@ typedef struct CiplinkMessage {
 // return false to stop the scan.
 typedef bool (*CiplinkNodeCallback)(void *user, const char *node_json);
 
+// Called once with the outcome of a [`ciplink_read_async`] or [`ciplink_write_async`], on the driver's callback
+// thread. With [`CiplinkStatus::Ok`] `json` is the result array (as [`ciplink_read`] returns), otherwise it is the
+// error message. `json` is valid only during the call.
+//
+// Every callback of a driver (`CiplinkDone`, `CiplinkChanges`, `CiplinkConnectionCallback`) runs on that
+// driver's one callback thread, one at a time and in order: never on the calling thread's stack and never on the
+// thread that does the I/O. A callback may call any ciplink function, blocking ones on the same driver included,
+// but it must not block for long (the driver's other callbacks wait for it) and must not unwind.
+typedef void (*CiplinkDone)(void *user, enum CiplinkStatus status, const char *json);
+
+// Called with the tags of a subscription that changed, as a result array (valid only during the call), on the
+// driver's callback thread.
+typedef void (*CiplinkChanges)(void *user, const char *results_json);
+
+// Called with each change of the link, on the driver's callback thread, as JSON (valid only during the call):
+// `{"event":"connected"}`, `{"event":"disconnected","error":"..."}` or
+// `{"event":"reconnecting","attempt":3,"delay":0.4}` (the attempt number from 1, the wait before it in seconds).
+typedef void (*CiplinkConnectionCallback)(void *user, const char *event_json);
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
@@ -83,7 +121,10 @@ extern "C" {
 //
 // `options_json` may be NULL or `{}`; keys (all optional): `socket_timeout` (seconds, null to block forever,
 // default 5), `connection_size` (default 4000), `init_tags` (true), `init_program_tags` (true),
-// `tag_namespace_filter` (""), `lazy_tags` (false), `tag_cache_file` (null).
+// `tag_namespace_filter` (""), `lazy_tags` (false), `tag_cache_file` (null), `reconnect` (reconnect in the
+// background after an open link is lost, true), `reconnect_min` (seconds before the first attempt, doubled after
+// each failed one, 0.1), `reconnect_max` (longest wait between attempts, 10), `keep_alive` (seconds without
+// traffic before a keep-alive request, null for never, 30).
 //
 // # Safety
 // `path` and `options_json` are NULL or NUL-terminated strings; `out` is NULL or writable.
@@ -91,7 +132,8 @@ enum CiplinkStatus ciplink_logix_new(const char *path,
                                      const char *options_json,
                                      struct CiplinkDriver **out);
 
-// Creates an SLC 500 / MicroLogix driver. Options: `socket_timeout` (default 5), `connection_size` (500).
+// Creates an SLC 500 / MicroLogix driver. Options: `socket_timeout` (default 5), `connection_size` (500), and
+// `reconnect`, `reconnect_min`, `reconnect_max`, `keep_alive` as [`ciplink_logix_new`].
 //
 // # Safety
 // As [`ciplink_logix_new`].
@@ -108,7 +150,9 @@ enum CiplinkStatus ciplink_cip_new(const char *path,
                                    const char *options_json,
                                    struct CiplinkDriver **out);
 
-// Closes (errors ignored) and frees a driver. NULL is ignored.
+// Closes (errors ignored) and frees a driver. NULL is ignored. Pending requests fail (their `done` is called)
+// and subscriptions end; once it returns no callback of this driver runs again (unless it is called from one of
+// its callbacks: then the running callback finishes after it).
 //
 // # Safety
 // `handle` is NULL or a handle from a `ciplink_*_new` not yet freed, and no other thread is using it.
@@ -121,7 +165,9 @@ void ciplink_driver_free(struct CiplinkDriver *handle);
 // `handle` is NULL or a live handle.
 enum CiplinkStatus ciplink_open(const struct CiplinkDriver *handle);
 
-// Closes the connection; the handle can be opened again.
+// Closes the connection; the handle can be opened again. Requests still queued fail with a
+// [`CiplinkStatus::Comm`] error "driver closed" (their `done` is called), subscriptions end and reconnecting
+// stops; the request in flight finishes first.
 //
 // # Safety
 // `handle` is NULL or a live handle.
@@ -650,6 +696,112 @@ enum CiplinkStatus ciplink_adapter_stop(const struct CiplinkAdapter *adapter);
 // # Safety
 // `adapter` is NULL or an adapter from [`ciplink_adapter_start`] not yet freed, and no other thread is using it.
 void ciplink_adapter_free(struct CiplinkAdapter *adapter);
+
+// Queues a read of `count` tags (as [`ciplink_read`]) and returns at once. Reads queued together, by any thread
+// or subscription, go out as one read.
+//
+// `done` and `out_request` may each be NULL. A non-OK return (bad arguments, or [`CiplinkStatus::Unsupported`]
+// for a plain CIP driver) means nothing was queued and `done` is never called. Otherwise `done` is called exactly
+// once on the driver's callback thread, possibly before this returns (a request that fails at once, e.g. while
+// reconnecting), so set up `user` first. `*out_request` (if not NULL) receives a request handle for
+// [`ciplink_request_wait`]; free it with [`ciplink_request_free`].
+//
+// # Safety
+// `handle` is NULL or a live handle; `tags` points to `count` NUL-terminated strings; `done` does not unwind and
+// `user` is whatever it expects, usable from another thread until `done` was called; `out_request` is NULL or
+// writable.
+enum CiplinkStatus ciplink_read_async(const struct CiplinkDriver *handle,
+                                      const char *const *tags,
+                                      size_t count,
+                                      CiplinkDone done,
+                                      void *user,
+                                      struct CiplinkRequest **out_request);
+
+// Queues a write of `items_json` (as [`ciplink_write`]) and returns at once; `done`, `user` and `out_request` as
+// [`ciplink_read_async`]. Writes run in the order queued, are never merged and never sent twice: a write whose
+// connection is lost returns its error.
+//
+// # Safety
+// As [`ciplink_read_async`]; `items_json` is a NUL-terminated string.
+enum CiplinkStatus ciplink_write_async(const struct CiplinkDriver *handle,
+                                       const char *items_json,
+                                       CiplinkDone done,
+                                       void *user,
+                                       struct CiplinkRequest **out_request);
+
+// True once the request's result is in (taken or not); false for NULL.
+//
+// # Safety
+// `request` is NULL or a live request.
+bool ciplink_request_done(const struct CiplinkRequest *request);
+
+// Waits for a request: up to `timeout_ms` milliseconds, or forever if negative. On success writes the result
+// array to `*out_json` (if not NULL; free it with [`ciplink_string_free`]). On failure returns the request's
+// status with its message from [`ciplink_last_error`] with NULL. [`CiplinkStatus::Timeout`] leaves the request
+// pending; a wait after the result was taken is [`CiplinkStatus::InvalidArgument`].
+//
+// # Safety
+// `request` is NULL or a live request; `out_json` is NULL or writable.
+enum CiplinkStatus ciplink_request_wait(const struct CiplinkRequest *request,
+                                        int64_t timeout_ms,
+                                        char **out_json);
+
+// Frees a request handle; NULL is ignored. It can be freed at any time: a pending request still runs and its
+// `done` is still called.
+//
+// # Safety
+// `request` is NULL or a request not yet freed, and no other thread is using it.
+void ciplink_request_free(struct CiplinkRequest *request);
+
+// Subscribes to `count` tags: they are read every interval (packed with the driver's other reads) and the tags
+// whose value or error changed are passed to `on_changes` on the driver's callback thread. The first call has
+// every tag. A failed read (or a lost link) is a change to a tag result with an error of kind `comm`.
+//
+// `options_json` may be NULL or `{}`; keys (all optional): `interval` (seconds, default 1), `deadband` (numeric
+// tags: a change smaller than this since the last value passed is not passed; null for none). Unsupported for a
+// plain CIP driver.
+//
+// # Safety
+// `handle` is NULL or a live handle; `tags` points to `count` NUL-terminated strings; `options_json` is NULL or
+// NUL-terminated; `on_changes` does not unwind and `user` is whatever it expects, usable from another thread
+// until [`ciplink_subscription_free`] returns; `out_subscription` is writable.
+enum CiplinkStatus ciplink_subscribe(const struct CiplinkDriver *handle,
+                                     const char *const *tags,
+                                     size_t count,
+                                     const char *options_json,
+                                     CiplinkChanges on_changes,
+                                     void *user,
+                                     struct CiplinkSubscription **out_subscription);
+
+// Unsubscribes and frees the subscription; NULL is ignored. Once it returns `on_changes` is not running and will
+// not be called again (unless it is called from the callback thread, e.g. from `on_changes` itself: then the
+// running call finishes after it), so `user` can be freed.
+//
+// # Safety
+// `subscription` is NULL or a subscription not yet freed, and no other thread is using it.
+void ciplink_subscription_free(struct CiplinkSubscription *subscription);
+
+// Sets the callback told of connection changes (see [`CiplinkConnectionCallback`]), or removes it with a NULL
+// `callback`. Once this returns the old callback is not running and will not be called again (unless this is
+// called from the callback thread), so its `user` can be freed. Unsupported for a plain CIP driver.
+//
+// A Logix or SLC driver reconnects by itself after an open link is lost (option `reconnect`, default true): the
+// events are `disconnected`, then `reconnecting` before each attempt (100 ms, then doubling up to 10 s), then
+// `connected`. [`ciplink_close`] stops it. Neither [`ciplink_close`] nor a failed [`ciplink_open`] sends an event.
+//
+// # Safety
+// `handle` is NULL or a live handle; `callback` does not unwind and `user` is whatever it expects, usable from
+// another thread until the callback is replaced or the driver freed.
+enum CiplinkStatus ciplink_set_connection_callback(const struct CiplinkDriver *handle,
+                                                   CiplinkConnectionCallback callback,
+                                                   void *user);
+
+// Where the driver's link is; never waits for I/O. [`CiplinkConnectionState::Closed`] for NULL; a plain CIP
+// driver reports connected or closed.
+//
+// # Safety
+// `handle` is NULL or a live handle.
+enum CiplinkConnectionState ciplink_connection_state(const struct CiplinkDriver *handle);
 
 #ifdef __cplusplus
 }  // extern "C"
