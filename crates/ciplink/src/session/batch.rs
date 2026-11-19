@@ -9,9 +9,10 @@ use super::subscribe::SubShared;
 use crate::cip::TagResult;
 use crate::{Error, Result, Value};
 
-/// A closure run on the session thread with the protocol state, or with the error that keeps it from running
-/// (it completes its own handle either way).
-pub(crate) type CallFn<P> = Box<dyn FnOnce(Result<&mut P>) + Send>;
+/// A closure run on the session thread with the protocol state, or with the error that keeps it from running.
+/// It returns its error and the completion of its handle, which runs once the queue's state is updated.
+pub(crate) type CallFn<P> =
+    Box<dyn FnOnce(Result<&mut P>) -> (Option<Error>, Box<dyn FnOnce()>) + Send>;
 
 /// One request in a session's queue.
 pub(crate) enum Job<P> {
@@ -54,7 +55,7 @@ impl<P> Job<P> {
             Job::Read { done, .. } | Job::Write { done, .. } => done.complete(Err(error)),
             Job::Open { done } => done.complete(Err(error)),
             Job::Poll { sub } => sub.poll_done(),
-            Job::Call(f) => f(Err(error)),
+            Job::Call(f) => f(Err(error)).1(),
         }
     }
 }

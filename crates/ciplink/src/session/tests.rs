@@ -388,6 +388,32 @@ fn reconnect_off_goes_closed() {
 }
 
 #[test]
+fn failed_call_has_lost_the_link_when_its_caller_sees_the_error() {
+    // a call completes after the session state is updated, like a read: the next request runs (reconnect off)
+    // instead of failing as if queued during the loss, and the loss names the call's error
+    let fake = Fake::new();
+    let s = session(&fake, SessionOptions::off());
+    let rx = events(&s);
+    s.open().wait().unwrap();
+    let lost = Error::comm("failed to receive reply");
+    let failed = s.call({
+        let lost = lost.clone();
+        move |p: &mut Fake| -> Result<()> {
+            p.drop_link();
+            Err(lost)
+        }
+    });
+    assert_eq!(failed.wait(), Err(lost.clone()));
+    assert_eq!(s.state(), ConnectionState::Closed);
+    assert!(s.read(&["a"]).wait().is_ok());
+    assert_eq!(rx.recv_timeout(WAIT).unwrap(), ConnectionEvent::Connected);
+    assert_eq!(
+        rx.recv_timeout(WAIT).unwrap(),
+        ConnectionEvent::Disconnected { error: lost }
+    );
+}
+
+#[test]
 fn failed_user_open_does_not_reconnect() {
     let fake = Fake::new();
     fake.script().open_ok = false;

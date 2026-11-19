@@ -403,12 +403,15 @@ impl<P: Protocol> Session<P> {
     ) -> Handle<R> {
         let (handle, done) = self.handle();
         self.submit(Job::Call(Box::new(
-            move |state: Result<&mut P>| match state {
-                Ok(p) => {
-                    let (result, panic) = guarded(p, f);
-                    done.finish(result, panic);
+            move |state: Result<&mut P>| -> (Option<Error>, Box<dyn FnOnce()>) {
+                match state {
+                    Ok(p) => {
+                        let (result, panic) = guarded(p, f);
+                        let error = result.as_ref().err().cloned();
+                        (error, Box::new(move || done.finish(result, panic)))
+                    }
+                    Err(error) => (None, Box::new(move || done.complete(Err(error)))),
                 }
-                Err(error) => done.complete(Err(error)),
             },
         )));
         handle
@@ -801,10 +804,11 @@ fn run_one<P: Protocol>(shared: &Shared<P>, job: Job<P>) -> (Outcome, Finish) {
             vec![Box::new(move || done.finish(result, panic))]
         }
         Job::Call(f) => {
-            // the closure completes its own handle, catching its own panic
-            f(Ok(&mut *p));
+            // the closure catches its own panic; its completion waits for after_work like the others
+            let (error, finish) = f(Ok(&mut *p));
+            outcome.error = error;
             outcome.connected = p.connected();
-            Vec::new()
+            vec![finish]
         }
         read @ (Job::Read { .. } | Job::Poll { .. }) => {
             drop(p);
