@@ -1,7 +1,9 @@
 # Release History
 
-## ciplink 0.3.6
+## ciplink 0.3.7
 
+- The v0.3.6 tag's release build failed (the aarch64 manylinux wheel), so 0.3.6 was not published; 0.3.7 is
+  that release.
 - :sparkles: Logix and SLC drivers run on a session: one thread per driver does its I/O and packs the reads that
   callers queue together into one read (a caller alone sends the same bytes as before). New in every binding:
   `read_async` / `write_async` (a `Handle` future in Rust, asyncio in Python, `std::future` in C++, real
