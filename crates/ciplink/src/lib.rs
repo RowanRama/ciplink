@@ -10,6 +10,7 @@ pub mod epath;
 mod error;
 pub mod identity;
 pub mod logix;
+pub mod modbus;
 pub mod packets;
 pub mod reader;
 pub mod session;

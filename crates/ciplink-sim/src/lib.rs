@@ -11,6 +11,9 @@
 //! - from the `ciplink-sim` binary: `ciplink-sim --config controller.json --port 0` prints
 //!   `listening on 127.0.0.1:PORT`.
 //!
+//! A separate [`ModbusSim`] simulates a Modbus device (or a gateway with several units) over Modbus TCP, RTU over
+//! TCP, or in memory; the binary serves it for a config whose `"kind"` is `"modbus"`.
+//!
 //! Faults ([`Fault`]) drop or delay replies, answer a tag or service with a status, or refuse connections, and
 //! [`Simulator::on_request`] edits the controller between two requests.
 //!
@@ -32,6 +35,7 @@ mod encap;
 mod identity;
 mod logix;
 mod metadata;
+mod modbus;
 mod model;
 mod path;
 mod scanner;
@@ -45,6 +49,10 @@ pub use config::{
     TypeConfig,
 };
 pub use logix::Logix;
+pub use modbus::{
+    Framing, HoleConfig, ModbusData, ModbusFault, ModbusIdentity, ModbusLink, ModbusServer,
+    ModbusSim, ModbusSimConfig, UnitConfig, crc16,
+};
 pub use scanner::{IoRequest, ScanError, Scanner};
 pub use server::{Server, UdpServer};
 pub use slc::Slc;

@@ -1,7 +1,9 @@
 // Tests of the C++ wrapper against the ciplink-sim binary over TCP:
-//   test_ciplink <logix port> <slc port> [credentials fixture]
+//   test_ciplink <logix port> <slc port> [credentials fixture] [modbus tcp port] [modbus rtu port] [modbus map]
 // with the simulator serving tools/sim/example_controller.json and tools/sim/example_slc.json; the fixture is
-// crates/ciplink/tests/fixtures/logix_descriptions.json (synthetic metadata credentials).
+// crates/ciplink/tests/fixtures/logix_descriptions.json (synthetic metadata credentials). The Modbus tests run
+// when the last three are given: tools/sim/example_modbus.json served with --framing mbap and --framing rtu, and
+// tools/sim/example_modbus_map.csv.
 #include "ciplink.hpp"
 
 #include <algorithm>
@@ -64,6 +66,12 @@ void run(const char* name, const std::function<void()>& f) {
 }
 
 std::string logix_path, slc_path;
+std::string modbus_tcp_port, modbus_rtu_port, modbus_map;
+
+/// Options naming the example map file.
+std::string modbus_options() {
+    return "{\"map_file\":" + ciplink::to_json(ciplink::Value(modbus_map)) + ",\"socket_timeout\":0.5}";
+}
 
 std::string fixture_path;
 
@@ -99,6 +107,11 @@ int main(int argc, char** argv) {
     logix_path = std::string("127.0.0.1:") + argv[1];
     slc_path = std::string("127.0.0.1:") + argv[2];
     if (argc > 3) fixture_path = argv[3];
+    if (argc > 6) {
+        modbus_tcp_port = argv[4];
+        modbus_rtu_port = argv[5];
+        modbus_map = argv[6];
+    }
 
     run("json_roundtrip", [] {
         Value v = Struct{{"a", int64_t(-5)},
@@ -635,6 +648,120 @@ int main(int argc, char** argv) {
         }
         CHECK(ok + closed == 40);
     });
+
+    if (!modbus_map.empty()) {
+        run("modbus_reads_map_tags_and_plain_addresses", [] {
+            for (const std::string& path :
+                 {"tcp://127.0.0.1:" + modbus_tcp_port, "rtu+tcp://127.0.0.1:" + modbus_rtu_port}) {
+                ciplink::Modbus mb(path, modbus_options());
+                mb.open();
+                CHECK(mb.connected());
+                auto r = mb.read({"Pump1_Speed", "Totals", "Recipe", "Tank_Level", "Pump1_Fault", "hr0", "Nope"});
+                CHECK(std::fabs(r[0].value.as_double() - 123.456) < 1e-4);
+                CHECK(r[0].type && *r[0].type == "REAL");
+                CHECK(r[1].value[3].as_int() == 140);
+                CHECK(r[2].value.as_string() == "MIX-A");
+                CHECK(std::fabs(r[3].value.as_double() - 52.3) < 1e-9);
+                CHECK(r[4].value.as_bool());
+                CHECK(r[5].value.as_int() == 59769);
+                CHECK(!r[6] && r[6].error && r[6].error->kind == "not_found");
+                mb.close();
+                CHECK(!mb.connected());
+            }
+        });
+
+        run("modbus_writes_coils_registers_and_a_register_bit", [] {
+            ciplink::Modbus mb("tcp://127.0.0.1:" + modbus_tcp_port, modbus_options());
+            mb.open();
+            auto w = mb.write({{"Totals[2]", 77}, {"Horn", true}, {"hr700:float64:dcba", 2.25}, {"co40", true}});
+            for (auto& t : w) CHECK(!t.error);
+            ciplink::Tag ro = mb.write_tag("Drive_Status", 1);
+            CHECK(ro.error && ro.error->kind == "access");
+            CHECK(mb.write_tag("Pump1_Fault", true).error.has_value());  // a discrete input
+            auto r = mb.read({"Totals[2]", "Horn", "hr700:float64:dcba", "co40", "hr301"});
+            CHECK(r[0].value.as_int() == 77);
+            CHECK(r[1].value.as_bool());
+            CHECK(r[2].value.as_double() == 2.25);
+            CHECK(r[3].value.as_bool());
+            CHECK((r[4].value.as_int() & 0x10) == 0x10);
+        });
+
+        run("modbus_tags_device_info_and_send_pdu", [] {
+            ciplink::Modbus mb("rtu+tcp://127.0.0.1:" + modbus_rtu_port, modbus_options());
+            mb.open();
+            Value tags = mb.tags();
+            CHECK(tags.as_array().size() == 10);
+            CHECK(tags[0]["name"].as_string() == "Pump1_Speed");
+            CHECK(tags[0]["description"].as_string() == "Pump 1 speed setpoint");
+            CHECK(tags[0]["order"].as_string() == "CDAB");
+            CHECK(tags[3]["cip_type"].as_string() == "LREAL");
+            Value info = mb.device_info();
+            CHECK(info["vendor_name"].as_string() == "ciplink");
+            CHECK(info["product_name"].as_string() == "ciplink-sim Modbus");
+            CHECK(info["vendor_url"].is_null());
+            expect_error(CIPLINK_STATUS_RESPONSE, [&] { mb.device_info(2); });  // unit 2 has no FC43
+            auto reply = mb.send_pdu({3, 0, 0, 0, 1});
+            CHECK((reply == std::vector<uint8_t>{3, 2, 0xE9, 0x79}));
+            expect_error(CIPLINK_STATUS_RESPONSE, [&] { mb.send_pdu({3, 0x01, 0xF4, 0, 1}); });  // a hole
+        });
+
+        run("modbus_async_subscription_and_connection_events", [] {
+            ciplink::Modbus mb("tcp://127.0.0.1:" + modbus_tcp_port, modbus_options());
+            std::mutex m;
+            std::condition_variable cv;
+            std::vector<std::string> events;
+            std::vector<bool> seen;
+            mb.on_connection([&](const ciplink::ConnectionEvent& e) {
+                std::lock_guard<std::mutex> lock(m);
+                events.push_back(e.event);
+                cv.notify_all();
+            });
+            mb.open();
+            auto w = mb.write_async({{"co50", false}});
+            auto r = mb.read_async({"co50", "Pump1_Speed"});
+            CHECK(!w.get()[0].error);
+            CHECK(r.get()[0].value.as_bool() == false);
+            ciplink::Subscription sub = mb.subscribe(
+                {"co50"},
+                [&](const std::vector<ciplink::Tag>& changed) {
+                    std::lock_guard<std::mutex> lock(m);
+                    for (auto& t : changed)
+                        if (t) seen.push_back(t.value.as_bool());
+                    cv.notify_all();
+                },
+                0.02);
+            auto saw = [&](bool v) {
+                std::unique_lock<std::mutex> lock(m);
+                return cv.wait_for(lock, std::chrono::seconds(5),
+                                   [&] { return std::find(seen.begin(), seen.end(), v) != seen.end(); });
+            };
+            CHECK(saw(false));
+            mb.write_tag("co50", true);
+            CHECK(saw(true));
+            sub.close();
+            {
+                std::unique_lock<std::mutex> lock(m);
+                CHECK(cv.wait_for(lock, std::chrono::seconds(5), [&] { return !events.empty(); }));
+                CHECK(!events.empty() && events[0] == "connected");
+            }
+            CHECK(mb.connection_state() == ciplink::ConnectionState::Connected);
+            mb.close();
+            CHECK(mb.connection_state() == ciplink::ConnectionState::Closed);
+            mb.on_connection(nullptr);
+        });
+
+        run("modbus_rejects_cip_calls_and_bad_options", [] {
+            ciplink::Modbus mb("tcp://127.0.0.1:" + modbus_tcp_port);
+            expect_error(CIPLINK_STATUS_UNSUPPORTED, [&] { mb.get_identity(); });
+            expect_error(CIPLINK_STATUS_UNSUPPORTED, [&] { mb.connection_size(); });
+            CHECK(mb.socket_timeout() && *mb.socket_timeout() == 1.0);
+            expect_error(CIPLINK_STATUS_INVALID_ARGUMENT, [&] { mb.set_socket_timeout(std::nullopt); });
+            CHECK(mb.tags().as_array().empty());
+            expect_error(CIPLINK_STATUS_INVALID_ARGUMENT,
+                         [] { ciplink::Modbus("tcp://127.0.0.1", "{\"word_order\":\"XYZW\"}"); });
+            expect_error(CIPLINK_STATUS_REQUEST, [] { ciplink::Modbus("udp://127.0.0.1"); });
+        });
+    }
 
     std::cout << checks << " checks, " << failures << " failures\n";
     return failures == 0 ? 0 : 1;

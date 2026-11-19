@@ -90,3 +90,27 @@ Standard input takes one JSON command per line and answers each with one JSON li
 | `{"cmd": "fault", "fault": {"drop_replies": 1}}` | injects a fault: `drop_replies`, `delay_ms`, `refuse_connections`, `tag_status`, `service_status` |
 | `{"cmd": "clear_faults"}` | clears them |
 | `{"cmd": "requests"}` | the requests received so far |
+
+## Modbus
+
+A config whose `"kind"` is `"modbus"` makes the simulator a Modbus device (port 502 unless `--port` is given):
+units with coils, discrete inputs, holding and input registers, optional holes (ranges that answer exception 02),
+functions 1-6, 8, 15, 16, 22 and 43/14 (device identification), and exception 01 for anything else.
+
+```sh
+cargo run -p ciplink-sim -- --config tools/sim/example_modbus.json --port 5020                  # Modbus TCP
+cargo run -p ciplink-sim -- --config tools/sim/example_modbus.json --port 5021 --framing rtu    # RTU over TCP
+```
+
+Connect with `ModbusDriver("tcp://127.0.0.1:5020", "tools/sim/example_modbus_map.csv")` or
+`rtu+tcp://127.0.0.1:5021`. See [Modbus TCP and RTU](modbus.md). Its standard input commands:
+
+| Command | Does |
+|---|---|
+| `{"cmd": "registers", "unit": 1, "area": "holding", "address": 0, "count": 2}` | returns registers (`holding` or `input`) |
+| `{"cmd": "set_registers", "unit": 1, "area": "holding", "address": 0, "values": [1, 2]}` | sets them |
+| `{"cmd": "bits", "unit": 1, "area": "coil", "address": 0, "count": 3}` | returns coils or discrete inputs (`coil`, `discrete`) |
+| `{"cmd": "set_bits", "unit": 1, "area": "coil", "address": 0, "values": [true]}` | sets them |
+| `{"cmd": "fault", "fault": {"no_reply": 2}}` | injects a fault: `drop_replies`, `delay_ms`, `refuse_connections`, `close_connections`, `no_reply` (a silent unit), `exception` (`{"unit", "function", "code"}`), `bad_crc` |
+| `{"cmd": "clear_faults"}` | clears them |
+| `{"cmd": "requests"}` | the requests received so far |

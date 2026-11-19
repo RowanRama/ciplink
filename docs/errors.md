@@ -43,6 +43,9 @@ threads). Free the message with `ciplink_string_free`.
 After a connection failure the driver has dropped its connection; open it again to reconnect. Failed requests are
 not replayed.
 
+A Modbus exception is a tag error whose status is the exception code (02 illegal data address is `not_found`);
+see [Modbus: Errors](modbus.md#errors) for the table.
+
 ## CIP status codes
 
 A controller error carries the CIP general status (`status`) and the first extended status word (`ext`). Common

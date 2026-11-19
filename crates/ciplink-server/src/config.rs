@@ -26,6 +26,12 @@ pub struct PlcConfig {
     pub udt: Map<String, Json>,
     /// `[plc.X.tags]`: tag path -> entry.
     pub tags: Map<String, Json>,
+    /// `"logix"` (the default) or `"modbus"`.
+    pub protocol: String,
+    /// The Modbus map file (required for `protocol = "modbus"`).
+    pub map_file: Option<PathBuf>,
+    /// `[plc.X.modbus]`: Modbus driver options.
+    pub modbus: Map<String, Json>,
 }
 
 /// One `[token.NAME]` table.
@@ -215,7 +221,21 @@ pub fn parse_config(data: &Json, base_dir: &Path) -> Result<Config, String> {
             groups: list("group")?,
             udt: object(plc.get("udt"), &format!("{where_}.udt"))?,
             tags: object(plc.get("tags"), &format!("{where_}.tags"))?,
+            protocol: match plc.get("protocol") {
+                None => "logix".to_owned(),
+                Some(Json::String(p)) if p == "logix" || p == "modbus" => p.clone(),
+                Some(other) => {
+                    return Err(format!(
+                        "{where_}.protocol must be \"logix\" or \"modbus\", not {other}"
+                    ));
+                }
+            },
+            map_file: resolve(plc.get("map_file")),
+            modbus: object(plc.get("modbus"), &format!("{where_}.modbus"))?,
         };
+        if cfg.protocol == "modbus" && cfg.map_file.is_none() {
+            return Err(format!("{where_} needs a map_file (protocol = \"modbus\")"));
+        }
         // unknown decorators, bad entries
         Resolver::new(
             &config.decorators,

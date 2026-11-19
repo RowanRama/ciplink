@@ -77,11 +77,20 @@ fn seconds(j: &Json, key: &str) -> FfiResult<Duration> {
         .ok_or_else(|| FfiError::Invalid(format!("option {key} must be positive seconds")))
 }
 
-/// The session keys of a Logix or SLC options object: `reconnect`, `reconnect_min`, `reconnect_max`, `keep_alive`.
+/// The session keys of a Logix, SLC or Modbus options object: `reconnect`, `reconnect_min`, `reconnect_max`,
+/// `keep_alive`.
 pub(crate) fn session_options(o: &Map<String, Json>) -> FfiResult<SessionOptions> {
+    session_options_with(o, SessionOptions::default())
+}
+
+/// [`session_options`] over `base` (a driver's own defaults, e.g. no keep-alive on a serial port).
+pub(crate) fn session_options_with(
+    o: &Map<String, Json>,
+    base: SessionOptions,
+) -> FfiResult<SessionOptions> {
     let mut s = SessionOptions {
         reconnect: get_bool(o, "reconnect", true)?,
-        ..SessionOptions::default()
+        ..base
     };
     if let Some(j) = o.get("reconnect_min") {
         s.reconnect_min = seconds(j, "reconnect_min")?;
@@ -203,6 +212,7 @@ pub unsafe extern "C" fn ciplink_read_async(
             Driver::Logix(d) => d.read_async(&names),
             Driver::Slc(d) => d.read_async(&names),
             Driver::Cip(_) => return Err(FfiError::Unsupported("read_async")),
+            Driver::Modbus(d) => d.read_async(&names),
         };
         submit(pending, done, user, out_request);
         Ok(())
@@ -231,6 +241,7 @@ pub unsafe extern "C" fn ciplink_write_async(
             Driver::Logix(d) => d.write_async(&pairs),
             Driver::Slc(d) => d.write_async(&pairs),
             Driver::Cip(_) => return Err(FfiError::Unsupported("write_async")),
+            Driver::Modbus(d) => d.write_async(&pairs),
         };
         submit(pending, done, user, out_request);
         Ok(())
@@ -361,6 +372,7 @@ pub unsafe extern "C" fn ciplink_subscribe(
             Driver::Logix(d) => d.subscribe(&names, options)?,
             Driver::Slc(d) => d.subscribe(&names, options)?,
             Driver::Cip(_) => return Err(FfiError::Unsupported("subscribe")),
+            Driver::Modbus(d) => d.subscribe(&names, options)?,
         };
         let user = User(user);
         subscription.on_changes(move |changes| {
@@ -412,9 +424,10 @@ fn event_json(event: &ConnectionEvent) -> String {
 /// `callback`. Once this returns the old callback is not running and will not be called again (unless this is
 /// called from the callback thread), so its `user` can be freed. Unsupported for a plain CIP driver.
 ///
-/// A Logix or SLC driver reconnects by itself after an open link is lost (option `reconnect`, default true): the
-/// events are `disconnected`, then `reconnecting` before each attempt (100 ms, then doubling up to 10 s), then
-/// `connected`. [`ciplink_close`] stops it. Neither [`ciplink_close`] nor a failed [`ciplink_open`] sends an event.
+/// A Logix, SLC or Modbus driver reconnects by itself after an open link is lost (option `reconnect`, default
+/// true): the events are `disconnected`, then `reconnecting` before each attempt (100 ms, then doubling up to
+/// 10 s), then `connected`. [`ciplink_close`] stops it. Neither [`ciplink_close`] nor a failed [`ciplink_open`]
+/// sends an event.
 ///
 /// # Safety
 /// `handle` is NULL or a live handle; `callback` does not unwind and `user` is whatever it expects, usable from
@@ -438,6 +451,7 @@ pub unsafe extern "C" fn ciplink_set_connection_callback(
             Driver::Logix(d) => d.set_connection_callback(callback),
             Driver::Slc(d) => d.set_connection_callback(callback),
             Driver::Cip(_) => return Err(FfiError::Unsupported("set_connection_callback")),
+            Driver::Modbus(d) => d.set_connection_callback(callback),
         }
         Ok(())
     })
@@ -461,6 +475,7 @@ pub unsafe extern "C" fn ciplink_connection_state(
         Driver::Slc(d) => d.connection_state(),
         Driver::Cip(d) if d.connected() => ConnectionState::Connected,
         Driver::Cip(_) => ConnectionState::Closed,
+        Driver::Modbus(d) => d.connection_state(),
     }))
     .unwrap_or(ConnectionState::Closed);
     match state {

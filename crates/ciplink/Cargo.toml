@@ -20,6 +20,7 @@ getrandom = "0.3"
 if-addrs = "0.15"
 indexmap = "2"
 log = "0.4"
+serialport = { version = "4", default-features = false }
 num-bigint = "0.4"
 num-traits = "0.2"
 sha1 = "0.10"

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Builds the ciplink library (crates/ciplink-ffi), regenerates ciplink.h if cbindgen is installed, compiles the C++
-# tests and example, and runs the tests against two ciplink-sim servers (Logix and SLC) over TCP.
+# tests and example, and runs the tests against four ciplink-sim servers over TCP: Logix, SLC, and Modbus served
+# as Modbus TCP and as RTU over TCP.
 #   bindings/cpp/build_and_test.sh                  debug build, compiled with $CXX (default g++)
 #   PROFILE=release bindings/cpp/build_and_test.sh
 #   BUILD=cmake bindings/cpp/build_and_test.sh      compiled through CMakeLists.txt (e.g. MSVC on Windows)
@@ -52,6 +53,10 @@ for sim in logix:example_controller.json slc:example_slc.json; do
     "$target/ciplink-sim$exe" --config "$repo/tools/sim/${sim#*:}" --port 0 >"$out/sim_${sim%%:*}.log" 2>&1 &
     pids+=($!)
 done
+for framing in mbap rtu; do
+    "$target/ciplink-sim$exe" --config "$repo/tools/sim/example_modbus.json" --port 0 --framing "$framing"         >"$out/sim_modbus_$framing.log" 2>&1 &
+    pids+=($!)
+done
 port_of() {
     local log="$out/sim_$1.log"
     for _ in $(seq 100); do
@@ -67,4 +72,6 @@ port_of() {
 }
 logix_port="$(port_of logix)"
 slc_port="$(port_of slc)"
-"$test_exe" "$logix_port" "$slc_port" "$repo/crates/ciplink/tests/fixtures/logix_descriptions.json"
+mbap_port="$(port_of modbus_mbap)"
+rtu_port="$(port_of modbus_rtu)"
+"$test_exe" "$logix_port" "$slc_port" "$repo/crates/ciplink/tests/fixtures/logix_descriptions.json"     "$mbap_port" "$rtu_port" "$repo/tools/sim/example_modbus_map.csv"

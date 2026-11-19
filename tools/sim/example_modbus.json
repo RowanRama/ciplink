@@ -1,0 +1,17 @@
+{
+  "kind": "modbus",
+  "max_registers": 125,
+  "max_bits": 2000,
+  "units": [
+    {"unit": 1, "holding": 1000, "input": 1000, "coils": 2000, "discrete": 2000,
+     "holes": [{"area": "holding", "start": 500, "count": 10}],
+     "identity": {"vendor_name": "ciplink", "product_code": "SIM-MB", "revision": "1.0",
+                  "product_name": "ciplink-sim Modbus", "model_name": "MB-1"},
+     "values": {"holding": {"0": [59769, 17142], "100": [0, 120, 0, 135, 0, 99, 0, 140],
+                            "200": [19785, 22573, 16640], "300": [5]},
+                "input": {"10": [523, 650]},
+                "coil": {"0": [true, false, true]},
+                "discrete": {"3": [true]}}},
+    {"unit": 2, "holding": 100, "coils": 100, "unsupported": [22, 43]}
+  ]
+}

@@ -11,6 +11,62 @@ Generated from the docstrings of the `ciplink` package. The other languages are 
 
 ::: ciplink.CIPDriver
 
+## Modbus
+
+`ModbusDriver` talks Modbus TCP (`tcp://host[:port][?unit=N]`), RTU on a serial port
+(`rtu://COM3?baud=19200&parity=E&data=8&stop=1&unit=N`) and RTU frames over TCP for serial gateways
+(`rtu+tcp://host[:port][?unit=N]`). It runs on the same session as `LogixDriver`: `read_async`, `write_async`,
+`subscribe`, `on_connection`, `connection_state` and `reconnect` work as described below, and reads queued
+together (from several tasks, threads or subscriptions) are merged into the fewest Modbus requests.
+
+Modbus has no tag names, so a **map file** gives them, one CSV row per tag:
+
+```csv
+# Pump skid. Addresses are 0-based: holding register 40001 is "holding,0".
+name,area,address,type,count,order,unit,scale,offset,units,description,writable
+Pump1_Speed,holding,0,float32,,CDAB,,,,rpm,Pump 1 speed setpoint,
+Pump1_Run,coil,0,bool,,,,,,,Pump 1 run command,
+Pump1_Fault,discrete,3,bool,,,,,,,"Pump 1 fault, any cause",
+Tank_Level,input,10,int16,,,,0.1,,%,Tank level (0.1 % per count),
+Totals,holding,100,uint32,4,,,,,m3,Daily totals of the last 4 days,
+Recipe,holding,200,string,16,,,,,,Active recipe name,
+Drive_Status,holding,300,uint16,,,,,,,Drive status word,false
+Horn,holding,301.4,bool,,,,,,,Horn bit in the control word,
+Valve2_Open,coil,10,bool,,,2,,,,Valve on gateway unit 2,
+```
+
+- `area`: `coil`, `discrete`, `holding`, `input`. `address`: the 0-based protocol address (`301.4` is bit 4 of
+  holding register 301). `type`: `bool`, `int16`, `uint16`, `int32`, `uint32`, `int64`, `uint64`, `float32`,
+  `float64`, `string` (`count` is its length in characters).
+- `order`: `ABCD` (Modbus standard), `CDAB`, `BADC`, `DCBA`; empty: the driver's `word_order`. `unit`: empty for the
+  path's unit. A row with `scale`/`offset` reads as `LREAL` (raw x scale + offset) and is written back unscaled.
+- `writable` defaults to true for coils and holding registers; discrete and input rows are always read-only.
+
+Anything not in the map is a **plain address**: `area offset[.bit][:type[:order]][{count}][@unit]` with area `co`,
+`di`, `hr` or `ir`, e.g. `hr0`, `hr100:float32:cdab`, `hr200:int16{10}`, `hr300:string{20}`, `hr10.4`, `co0{16}`,
+`di7@3`. Addresses are 0-based: Modicon `40001` is `hr0`, `30011` is `ir10`.
+
+```python
+from ciplink import ModbusDriver
+
+with ModbusDriver("tcp://10.0.0.9?unit=1", "skid.csv") as plc:
+    speed, level = plc.read("Pump1_Speed", "Tank_Level")        # Tag objects, as for Logix
+    plc.read("Totals[2]", "Drive_Status.5", "hr400:int32")      # elements, bits and plain addresses
+    plc.write(("Pump1_Speed", 1450.0), ("Horn", True))          # FC16, then FC22 (mask write)
+    print(plc.tags["Tank_Level"]["description"], plc.device_info())
+    with plc.subscribe("Tank_Level", "Pump1_Fault", interval=0.5) as sub:
+        for tags in sub:
+            print([(t.tag, t.value, t.error) for t in tags])
+```
+
+A Modbus exception is the tag's `error` (a `TagError` whose `status` is the exception code, e.g. `NOT_FOUND`
+for 02 illegal data address); a device that refuses one tag of a merged read gets each of its tags read again
+alone, so one bad row never fails its neighbours (for devices with holes in their register map, `max_gap=0`
+avoids the retry). `keep_alive="auto"` (the default) sends FC08 after 30 s idle over TCP and nothing on a serial
+port; `keep_alive_address="hr0"` reads that address instead, for devices that do not answer FC08.
+
+::: ciplink.ModbusDriver
+
 ## Async, subscriptions and connection events
 
 `LogixDriver` and `SLCDriver` do all their I/O on one session thread per driver. The sync methods (`read`,

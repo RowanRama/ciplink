@@ -44,25 +44,7 @@ pub struct TcpTransport {
 impl TcpTransport {
     /// Connects to `host:port` within `timeout`.
     pub fn connect(host: &str, port: u16, timeout: Option<Duration>) -> Result<Self> {
-        let fail = || Error::comm(format!("Failed to open socket to {host}:{port}"));
-        let addr = (host, port)
-            .to_socket_addrs()
-            .map_err(|_| fail())?
-            .find(|a| a.is_ipv4())
-            .ok_or_else(fail)?;
-        let stream = match timeout {
-            Some(t) => TcpStream::connect_timeout(&addr, t),
-            None => TcpStream::connect(addr),
-        }
-        .map_err(|_| fail())?;
-        stream.set_nodelay(true).map_err(|_| fail())?;
-        // finds a dead peer while idle (about a minute with the OS's probe count); not a reason to fail
-        let keepalive = socket2::TcpKeepalive::new()
-            .with_time(KEEP_ALIVE_TIME)
-            .with_interval(KEEP_ALIVE_INTERVAL);
-        if let Err(err) = socket2::SockRef::from(&stream).set_tcp_keepalive(&keepalive) {
-            log::debug!("TCP keep-alive not set: {err}");
-        }
+        let stream = tcp_stream(host, port, timeout)?;
         let mut transport = TcpTransport {
             stream,
             buffer: Vec::with_capacity(4096),
@@ -70,6 +52,30 @@ impl TcpTransport {
         transport.set_timeout(timeout)?;
         Ok(transport)
     }
+}
+
+/// A TCP connection to `host:port` (IPv4) within `timeout`, with no delay and TCP keep-alive.
+pub(crate) fn tcp_stream(host: &str, port: u16, timeout: Option<Duration>) -> Result<TcpStream> {
+    let fail = || Error::comm(format!("Failed to open socket to {host}:{port}"));
+    let addr = (host, port)
+        .to_socket_addrs()
+        .map_err(|_| fail())?
+        .find(|a| a.is_ipv4())
+        .ok_or_else(fail)?;
+    let stream = match timeout {
+        Some(t) => TcpStream::connect_timeout(&addr, t),
+        None => TcpStream::connect(addr),
+    }
+    .map_err(|_| fail())?;
+    stream.set_nodelay(true).map_err(|_| fail())?;
+    // finds a dead peer while idle (about a minute with the OS's probe count); not a reason to fail
+    let keepalive = socket2::TcpKeepalive::new()
+        .with_time(KEEP_ALIVE_TIME)
+        .with_interval(KEEP_ALIVE_INTERVAL);
+    if let Err(err) = socket2::SockRef::from(&stream).set_tcp_keepalive(&keepalive) {
+        log::debug!("TCP keep-alive not set: {err}");
+    }
+    Ok(stream)
 }
 
 impl Transport for TcpTransport {

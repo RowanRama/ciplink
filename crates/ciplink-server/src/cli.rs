@@ -189,13 +189,12 @@ fn service_paths(config: &Path, log_file: Option<&Path>) -> Result<(PathBuf, Pat
 
 /// Uploads the tag list of one PLC (reads only) and writes it in the mock_tags format.
 fn dump_tags(config_path: &Path, plc: &str, out: &Path) -> Result<(), String> {
-    use crate::plc::{LogixPlc, Plc};
     let config = config::load_config(config_path)?;
     let cfg = config
         .plcs
         .get(plc)
         .ok_or_else(|| format!("no PLC {plc} in {}", config_path.display()))?;
-    let mut driver = LogixPlc::new(cfg)?;
+    let mut driver = crate::real_plc(cfg)?;
     driver.open()?;
     let catalog = driver.catalog();
     driver.close();

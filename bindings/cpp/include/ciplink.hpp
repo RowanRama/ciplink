@@ -1027,6 +1027,53 @@ public:
         : Driver(ciplink_cip_new, path, options_json) {}
 };
 
+/// A Modbus TCP, RTU or RTU-over-TCP driver. Tag names come from a map file (option "map_file"); anything else is
+/// a plain address such as "hr100:float32" (0-based: holding register 40001 is "hr0"). The CIP calls inherited
+/// from Driver (generic_message, get_identity, connection_size, ...) throw ciplink::Error (Unsupported).
+class Modbus : public Driver {
+public:
+    /// `path` like "tcp://10.0.0.9?unit=1", "rtu://COM3?baud=19200&parity=E" or "rtu+tcp://10.0.0.20:4001";
+    /// `options_json` see ciplink_modbus_new, e.g. {"map_file": "skid.csv", "word_order": "CDAB"}.
+    explicit Modbus(const std::string& path, const std::string& options_json = "")
+        : Driver(ciplink_modbus_new, path, options_json) {}
+
+    std::vector<Tag> read(const std::vector<std::string>& tags) { return read_(tags); }
+    Tag read_tag(const std::string& tag) { return read_({tag}).at(0); }
+    std::vector<Tag> write(const std::vector<std::pair<std::string, Value>>& items) { return write_(items); }
+    Tag write_tag(const std::string& tag, const Value& value) { return write_({{tag, value}}).at(0); }
+
+    /// As Logix::read_async, write_async and subscribe; reads queued together are merged into the fewest requests.
+    std::future<std::vector<Tag>> read_async(const std::vector<std::string>& tags) { return read_async_(tags); }
+    std::future<std::vector<Tag>> write_async(const std::vector<std::pair<std::string, Value>>& items) {
+        return write_async_(items);
+    }
+    Subscription subscribe(const std::vector<std::string>& tags, Subscription::Fn on_changes, double interval_s = 1.0,
+                           std::optional<double> deadband = std::nullopt) {
+        return subscribe_(tags, std::move(on_changes), interval_s, deadband);
+    }
+
+    /// Read Device Identification (FC43 / MEI 14) of `unit` (nullopt: the path's unit): {"vendor_name",
+    /// "product_code", "revision", "vendor_url", "product_name", "model_name", "user_application_name"}.
+    Value device_info(std::optional<uint8_t> unit = std::nullopt) {
+        int32_t u = unit ? int32_t(*unit) : -1;
+        return parse_json(json_call([&](char** o) { return ciplink_modbus_device_info(h(), u, o); }));
+    }
+    /// The map file's rows in file order: {"name", "area", "address", "bit", "type", "cip_type", "count", "order",
+    /// "unit", "scale", "offset", "units", "description", "writable"}. No I/O.
+    Value tags() { return parse_json(json_call([&](char** o) { return ciplink_modbus_tags(h(), o); })); }
+    /// Sends one raw PDU (function code and data) and returns the reply PDU; an exception reply throws
+    /// ciplink::Error (Response).
+    std::vector<uint8_t> send_pdu(const std::vector<uint8_t>& pdu, std::optional<uint8_t> unit = std::nullopt) {
+        int32_t u = unit ? int32_t(*unit) : -1;
+        uint8_t* data = nullptr;
+        size_t len = 0;
+        detail::check(ciplink_modbus_send_pdu(h(), u, pdu.data(), pdu.size(), &data, &len));
+        std::vector<uint8_t> out(data, data + len);
+        ciplink_bytes_free(data, len);
+        return out;
+    }
+};
+
 /// The ListIdentity reply of the device at `path`, or null if it refused.
 inline Value list_identity(const std::string& path) {
     char* o = nullptr;

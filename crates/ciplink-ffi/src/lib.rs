@@ -2,11 +2,12 @@
 //!
 //! # Design
 //!
-//! - One opaque handle type, [`CiplinkDriver`], made by [`ciplink_logix_new`], [`ciplink_slc_new`] or
-//!   [`ciplink_cip_new`] and freed with [`ciplink_driver_free`]. Calls a driver kind does not support return
-//!   [`CiplinkStatus::Unsupported`]. A handle can be used from several threads at once: a Logix or SLC driver
-//!   queues every call for its session thread, which does all of the driver's I/O, sends the reads queued together
-//!   as one read, and reconnects in the background after a lost link (option `reconnect`).
+//! - One opaque handle type, [`CiplinkDriver`], made by [`ciplink_logix_new`], [`ciplink_slc_new`],
+//!   [`ciplink_cip_new`] or `ciplink_modbus_new` and freed with [`ciplink_driver_free`]. Calls a driver kind
+//!   does not support return [`CiplinkStatus::Unsupported`]. A handle can be used from several threads at once:
+//!   a Logix, SLC or Modbus driver queues every call for its session thread, which does all of the driver's I/O,
+//!   sends the reads queued together as one read, and reconnects in the background after a lost link (option
+//!   `reconnect`).
 //! - Async reads and writes ([`ciplink_read_async`], [`ciplink_write_async`]) take a completion callback and give
 //!   a [`CiplinkRequest`] handle (poll, wait, free); [`ciplink_subscribe`] gives a [`CiplinkSubscription`];
 //!   [`ciplink_set_connection_callback`] reports connection changes. Every callback runs on the driver's callback
@@ -49,6 +50,7 @@ use ciplink_core::logix::driver::{LogixDriver, LogixOptions};
 use ciplink_core::logix::metadata::TextEncoding;
 use ciplink_core::logix::trend::{Trend, TrendOptions};
 use ciplink_core::logix::types::PyObj;
+use ciplink_core::modbus::ModbusDriver;
 use ciplink_core::slc::driver::SlcDriver;
 use ciplink_core::transport::tcp_connector;
 use ciplink_core::{Error, Value};
@@ -89,7 +91,7 @@ pub enum CiplinkStatus {
     Timeout = 8,
 }
 
-/// A driver handle: a Logix, SLC or plain CIP driver.
+/// A driver handle: a Logix, SLC, plain CIP or Modbus driver.
 pub struct CiplinkDriver {
     driver: Driver,
     last_error: Mutex<Option<String>>,
@@ -99,6 +101,7 @@ enum Driver {
     Logix(Box<LogixDriver>),
     Slc(SlcDriver),
     Cip(CipDriver),
+    Modbus(Box<ModbusDriver>),
 }
 
 /// A generic CIP message (like a Logix MSG instruction).
@@ -655,6 +658,7 @@ pub unsafe extern "C" fn ciplink_driver_free(handle: *mut CiplinkDriver) {
             Driver::Logix(d) => d.close(),
             Driver::Slc(d) => d.close(),
             Driver::Cip(d) => d.close(),
+            Driver::Modbus(d) => d.close(),
         };
     });
 }
@@ -671,6 +675,7 @@ pub unsafe extern "C" fn ciplink_open(handle: *const CiplinkDriver) -> CiplinkSt
             Driver::Logix(d) => d.open()?,
             Driver::Slc(d) => d.open()?,
             Driver::Cip(d) => d.open()?,
+            Driver::Modbus(d) => d.open()?,
         };
         if ok {
             Ok(())
@@ -693,6 +698,7 @@ pub unsafe extern "C" fn ciplink_close(handle: *const CiplinkDriver) -> CiplinkS
             Driver::Logix(d) => d.close()?,
             Driver::Slc(d) => d.close()?,
             Driver::Cip(d) => d.close()?,
+            Driver::Modbus(d) => d.close()?,
         }
         Ok(())
     })
@@ -712,6 +718,7 @@ pub unsafe extern "C" fn ciplink_connected(handle: *const CiplinkDriver) -> bool
         Driver::Logix(d) => d.connected(),
         Driver::Slc(d) => d.connected(),
         Driver::Cip(d) => d.connected(),
+        Driver::Modbus(d) => d.connected(),
     }))
     .unwrap_or(false)
 }
@@ -735,6 +742,7 @@ pub unsafe extern "C" fn ciplink_connection_size(
             Driver::Logix(d) => d.connection_size(),
             Driver::Slc(d) => d.connection_size(),
             Driver::Cip(d) => d.connection_size(),
+            Driver::Modbus(_) => return Err(FfiError::Unsupported("connection_size")),
         };
         // SAFETY: not NULL and the caller passes a writable u16.
         unsafe { *out_size = size };
@@ -763,6 +771,7 @@ pub unsafe extern "C" fn ciplink_set_connection_size(
             Driver::Logix(d) => d.set_connection_size(size)?,
             Driver::Slc(d) => d.set_connection_size(size)?,
             Driver::Cip(d) => d.set_connection_size(size)?,
+            Driver::Modbus(_) => return Err(FfiError::Unsupported("set_connection_size")),
         }
         Ok(())
     })
@@ -785,6 +794,7 @@ pub unsafe extern "C" fn ciplink_socket_timeout(
             Driver::Logix(d) => d.socket_timeout(),
             Driver::Slc(d) => d.socket_timeout(),
             Driver::Cip(d) => d.socket_timeout(),
+            Driver::Modbus(d) => Some(d.socket_timeout()),
         };
         // SAFETY: not NULL and the caller passes a writable double.
         unsafe { *out_seconds = t.map_or(-1.0, |t| t.as_secs_f64()) };
@@ -817,6 +827,11 @@ pub unsafe extern "C" fn ciplink_set_socket_timeout(
             Driver::Logix(d) => d.set_socket_timeout(timeout)?,
             Driver::Slc(d) => d.set_socket_timeout(timeout)?,
             Driver::Cip(d) => d.set_socket_timeout(timeout)?,
+            Driver::Modbus(d) => d.set_socket_timeout(timeout.ok_or_else(|| {
+                FfiError::Invalid(
+                    "a Modbus driver cannot block forever: socket_timeout must be positive".into(),
+                )
+            })?)?,
         }
         Ok(())
     })
@@ -843,6 +858,7 @@ pub unsafe extern "C" fn ciplink_read(
             Driver::Logix(d) => d.read(&names)?,
             Driver::Slc(d) => d.read(&names)?,
             Driver::Cip(_) => return Err(FfiError::Unsupported("read")),
+            Driver::Modbus(d) => d.read(&names)?,
         };
         put_string(out_json, results_json(&results))
     })
@@ -867,6 +883,7 @@ pub unsafe extern "C" fn ciplink_write(
             Driver::Logix(d) => d.write(&pairs)?,
             Driver::Slc(d) => d.write(&pairs)?,
             Driver::Cip(_) => return Err(FfiError::Unsupported("write")),
+            Driver::Modbus(d) => d.write(&pairs)?,
         };
         put_string(out_json, results_json(&results))
     })
@@ -1081,6 +1098,7 @@ pub unsafe extern "C" fn ciplink_generic_message(
             Driver::Logix(d) => d.generic_message(&msg)?,
             Driver::Slc(d) => d.generic_message(&msg)?,
             Driver::Cip(d) => d.generic_message(&msg)?,
+            Driver::Modbus(_) => return Err(FfiError::Unsupported("generic_message")),
         };
         let mut out = String::new();
         result_json(&reply.tag, &mut out);
@@ -1125,6 +1143,7 @@ fn raw_send(
                 return put_bytes(out_reply, out_reply_len, reply);
             }
             Driver::Cip(d) => d,
+            Driver::Modbus(_) => return Err(FfiError::Unsupported("raw CIP send")),
         };
         let reply = match kind {
             Raw::Connected => cip.send_connected_raw(message)?,
@@ -1253,6 +1272,7 @@ pub unsafe extern "C" fn ciplink_get_module_info(
             Driver::Logix(d) => d.get_module_info(slot)?,
             Driver::Slc(d) => d.get_module_info(slot)?,
             Driver::Cip(d) => d.get_module_info(slot)?,
+            Driver::Modbus(_) => return Err(FfiError::Unsupported("get_module_info")),
         };
         put_string(out_json, value_string(&id.to_value()))
     })
@@ -1547,6 +1567,7 @@ pub unsafe extern "C" fn ciplink_get_identity(
             Driver::Logix(d) => d.identity_at(route)?,
             Driver::Slc(d) => d.identity_at(route)?,
             Driver::Cip(d) => d.identity_at(route)?,
+            Driver::Modbus(_) => return Err(FfiError::Unsupported("get_identity")),
         };
         put_string(out_json, value_string(&id.to_value()))
     })
@@ -1573,6 +1594,7 @@ pub unsafe extern "C" fn ciplink_get_app(
             Driver::Logix(d) => d.app_at(route)?,
             Driver::Slc(d) => d.app_at(route)?,
             Driver::Cip(d) => d.app_at(route)?,
+            Driver::Modbus(_) => return Err(FfiError::Unsupported("get_app")),
         };
         let json = match app {
             Some(app) => value_string(&app.to_value()),
@@ -1602,6 +1624,7 @@ pub unsafe extern "C" fn ciplink_get_ports(
             Driver::Logix(d) => d.ports_at(route)?,
             Driver::Slc(d) => d.ports_at(route)?,
             Driver::Cip(d) => d.ports_at(route)?,
+            Driver::Modbus(_) => return Err(FfiError::Unsupported("get_ports")),
         };
         put_string(
             out_json,
@@ -1637,6 +1660,7 @@ pub unsafe extern "C" fn ciplink_browse_port(
             Driver::Logix(d) => d.browse_port(route, port, nodes, workers)?,
             Driver::Slc(d) => d.browse_port(route, port, nodes, workers)?,
             Driver::Cip(d) => d.browse_port(route, port, nodes, workers)?,
+            Driver::Modbus(_) => return Err(FfiError::Unsupported("browse_port")),
         };
         let found = found.iter().map(node_json).collect::<FfiResult<Vec<_>>>()?;
         put_string(out_json, Json::Array(found).to_string())
@@ -1680,6 +1704,7 @@ pub unsafe extern "C" fn ciplink_scan_port(
             Driver::Logix(d) => d.scan_port(route, port, nodes, workers, &mut found)?,
             Driver::Slc(d) => d.scan_port(route, port, nodes, workers, &mut found)?,
             Driver::Cip(d) => d.scan_port(route, port, nodes, workers, &mut found)?,
+            Driver::Modbus(_) => return Err(FfiError::Unsupported("scan_port")),
         }
         failed.map_or(Ok(()), Err)
     })
@@ -2026,6 +2051,8 @@ pub unsafe extern "C" fn ciplink_server_stop(server: *mut CiplinkServer) -> Cipl
 
 mod adapter;
 pub use adapter::CiplinkAdapter;
+
+mod modbus;
 
 mod session;
 pub use session::{

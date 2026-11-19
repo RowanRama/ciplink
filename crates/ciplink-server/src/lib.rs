@@ -10,6 +10,7 @@ pub mod config;
 pub mod hub;
 pub mod logging;
 pub mod mock;
+pub mod modbus;
 pub mod planner;
 pub mod plc;
 pub mod rules;
@@ -31,7 +32,15 @@ pub fn factory(mock: bool) -> plc::Factory {
     if mock {
         mock::factory().0
     } else {
-        plc::LogixPlc::factory()
+        std::sync::Arc::new(real_plc)
+    }
+}
+
+/// The (not yet opened) driver of a real controller, by the PLC's `protocol`.
+pub fn real_plc(cfg: &config::PlcConfig) -> Result<Box<dyn plc::Plc>, String> {
+    match cfg.protocol.as_str() {
+        "modbus" => Ok(Box::new(modbus::ModbusPlc::new(cfg)?)),
+        _ => Ok(Box::new(plc::LogixPlc::new(cfg)?)),
     }
 }
 

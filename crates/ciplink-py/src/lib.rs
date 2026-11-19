@@ -6,6 +6,7 @@
 
 mod adapter;
 mod defs;
+mod modbus;
 mod server;
 mod session;
 
@@ -1854,6 +1855,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PySubscription>()?;
     m.add_class::<server::PyTagServer>()?;
     m.add_class::<adapter::PyAdapter>()?;
+    m.add_class::<modbus::PyModbusDriver>()?;
     m.add_function(wrap_pyfunction!(server::server_main, m)?)?;
     Ok(())
 }

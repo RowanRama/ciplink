@@ -42,6 +42,7 @@ nav:
       - Tag list and controller info: tag-list.md
       - Tag descriptions: descriptions.md
       - SLC 500 and MicroLogix: slc.md
+      - Modbus TCP and RTU: modbus.md
       - Generic CIP messages: generic-messaging.md
       - Discovering and browsing devices: browsing.md
       - Trends: trends.md

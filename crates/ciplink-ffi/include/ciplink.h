@@ -46,7 +46,7 @@ typedef enum CiplinkConnectionState {
 // the calling thread: [`ciplink_last_error`](super::ciplink_last_error) with NULL.
 typedef struct CiplinkAdapter CiplinkAdapter;
 
-// A driver handle: a Logix, SLC or plain CIP driver.
+// A driver handle: a Logix, SLC, plain CIP or Modbus driver.
 typedef struct CiplinkDriver CiplinkDriver;
 
 // A read or write queued by [`ciplink_read_async`] or [`ciplink_write_async`]: poll it with
@@ -697,6 +697,62 @@ enum CiplinkStatus ciplink_adapter_stop(const struct CiplinkAdapter *adapter);
 // `adapter` is NULL or an adapter from [`ciplink_adapter_start`] not yet freed, and no other thread is using it.
 void ciplink_adapter_free(struct CiplinkAdapter *adapter);
 
+// Creates a Modbus driver for `path`: `tcp://host[:port][?unit=N]` (Modbus TCP, port 502, unit 1 by default),
+// `rtu://PORT[?baud=..&parity=..&data=..&stop=..&unit=N]` (RTU on a serial port) or
+// `rtu+tcp://host[:port][?unit=N]` (RTU frames over TCP, for serial gateways). Not connected until
+// [`ciplink_open`]. Tag names come from the map file; anything else is a plain address such as `hr100:float32`
+// (0-based protocol addresses: holding register 40001 is `hr0`).
+//
+// `options_json` may be NULL or `{}`; keys (all optional): `map_file` (path of the map CSV), `map_csv` (the CSV
+// text itself; not with `map_file`), `socket_timeout` (seconds, default 1), `max_registers` (most registers per
+// read, 1 to 125, default 125), `max_bits` (most coils or discrete inputs per read, 1 to 2000, default 2000),
+// `max_gap` (most unrequested registers or bits between two tags merged into one read, default 8), `word_order`
+// (of tags without one: `"ABCD"` (default), `"CDAB"`, `"BADC"`, `"DCBA"`), `write_multiple` (always FC15/16,
+// default false), `keep_alive_address` (a plain address the keep-alive reads instead of sending FC08, default
+// null), `reconnect` (true), `reconnect_min` (0.1), `reconnect_max` (10), `keep_alive` (seconds, or null for
+// never; absent: 30 over TCP, never for `rtu://`).
+//
+// # Safety
+// As [`ciplink_logix_new`].
+enum CiplinkStatus ciplink_modbus_new(const char *path,
+                                      const char *options_json,
+                                      struct CiplinkDriver **out);
+
+// Reads the device identification (FC43 / MEI 14) of `unit` (negative for the path's unit) as a JSON object:
+// `{"vendor_name": str, "product_code": str, "revision": str, "vendor_url": str|null, "product_name":
+// str|null, "model_name": str|null, "user_application_name": str|null}`. A device without it answers with an
+// exception: [`CiplinkStatus::Response`].
+//
+// # Safety
+// `handle` is NULL or a live handle; `out_json` is writable.
+enum CiplinkStatus ciplink_modbus_device_info(const struct CiplinkDriver *handle,
+                                              int32_t unit,
+                                              char **out_json);
+
+// The map file's tags as a JSON array of rows in file order (empty without a map): `{"name", "area"
+// ("coil", "discrete", "holding", "input"), "address" (0-based), "bit" (int|null), "type" (the map type, e.g.
+// "float32"), "cip_type" (the type name reads report, e.g. "REAL", "LREAL" when scaled), "count", "order"
+// (str|null), "unit" (int|null), "scale" (number|null), "offset" (number|null), "units", "description",
+// "writable"}`. No I/O.
+//
+// # Safety
+// `handle` is NULL or a live handle; `out_json` is writable.
+enum CiplinkStatus ciplink_modbus_tags(const struct CiplinkDriver *handle,
+                                       char **out_json);
+
+// Sends one raw PDU (function code and data) to `unit` (negative for the path's unit) and returns the reply PDU
+// in `*out` / `*out_len`; free it with [`ciplink_bytes_free`]. An exception reply is
+// [`CiplinkStatus::Response`]. For functions the driver does not wrap (FC23, file records, ...).
+//
+// # Safety
+// `handle` is NULL or a live handle; `pdu` points to `len` readable bytes; `out` and `out_len` are writable.
+enum CiplinkStatus ciplink_modbus_send_pdu(const struct CiplinkDriver *handle,
+                                           int32_t unit,
+                                           const uint8_t *pdu,
+                                           size_t len,
+                                           uint8_t **out,
+                                           size_t *out_len);
+
 // Queues a read of `count` tags (as [`ciplink_read`]) and returns at once. Reads queued together, by any thread
 // or subscription, go out as one read.
 //
@@ -785,9 +841,10 @@ void ciplink_subscription_free(struct CiplinkSubscription *subscription);
 // `callback`. Once this returns the old callback is not running and will not be called again (unless this is
 // called from the callback thread), so its `user` can be freed. Unsupported for a plain CIP driver.
 //
-// A Logix or SLC driver reconnects by itself after an open link is lost (option `reconnect`, default true): the
-// events are `disconnected`, then `reconnecting` before each attempt (100 ms, then doubling up to 10 s), then
-// `connected`. [`ciplink_close`] stops it. Neither [`ciplink_close`] nor a failed [`ciplink_open`] sends an event.
+// A Logix, SLC or Modbus driver reconnects by itself after an open link is lost (option `reconnect`, default
+// true): the events are `disconnected`, then `reconnecting` before each attempt (100 ms, then doubling up to
+// 10 s), then `connected`. [`ciplink_close`] stops it. Neither [`ciplink_close`] nor a failed [`ciplink_open`]
+// sends an event.
 //
 // # Safety
 // `handle` is NULL or a live handle; `callback` does not unwind and `user` is whatever it expects, usable from

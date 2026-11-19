@@ -1,0 +1,12 @@
+# Pump skid. Addresses are 0-based: holding register 40001 is "holding,0".
+name,area,address,type,count,order,unit,scale,offset,units,description,writable
+Pump1_Speed,holding,0,float32,,CDAB,,,,rpm,Pump 1 speed setpoint,
+Pump1_Run,coil,0,bool,,,,,,,Pump 1 run command,
+Pump1_Fault,discrete,3,bool,,,,,,,"Pump 1 fault, any cause",
+Tank_Level,input,10,int16,,,,0.1,,%,Tank level (0.1 % per count),
+Tank_Temp,input,11,int16,,,,0.1,-40,degC,Tank temperature,
+Totals,holding,100,uint32,4,,,,,m3,Daily totals of the last 4 days,
+Recipe,holding,200,string,16,,,,,,Active recipe name,
+Drive_Status,holding,300,uint16,,,,,,,Drive status word,false
+Horn,holding,301.4,bool,,,,,,,Horn bit in the control word,
+Valve2_Open,coil,10,bool,,,2,,,,Valve on gateway unit 2,

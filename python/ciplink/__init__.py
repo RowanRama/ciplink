@@ -34,6 +34,7 @@ from .logix_auth import LogixMetadataCredentials
 from .logix_driver import *
 from .trend import Trend, TrendPen, TrendSample
 from .slc_driver import *
+from .modbus_driver import *
 from .subscription import Subscription, ConnectionEvent
 from .adapter import Adapter
 

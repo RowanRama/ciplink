@@ -8,6 +8,9 @@ read AOI local tags).  Run it from the repo root with pytest and the package und
 
 ``--reference`` (and any pytest options) go after the script name.  test_demo_plc.py is not run: it checks the demo
 PLC's I/O modules and task, which the L5X export does not hold, and UDP discovery of the real network.
+
+Then it runs the Modbus tests (crates/ciplink-py/tests/test_modbus.py) against ``ciplink-sim`` loaded with
+tools/sim/example_modbus.json, over Modbus TCP and RTU over TCP.
 """
 
 import json
@@ -56,8 +59,14 @@ def main():
         if len(options) < len(sys.argv[1:]):  # the reference registered as ciplink before pytest imports the tests
             pytest = ["-c", "import sys, pytest; sys.path.insert(0, 'tools/reference'); import reference; "
                             "reference.load(); sys.exit(pytest.main(sys.argv[1:]))"]
-        return subprocess.run([sys.executable, *pytest, "-q", "-p", "no:cacheprovider", *tests, *options],
+        code = subprocess.run([sys.executable, *pytest, "-q", "-p", "no:cacheprovider", *tests, *options],
                               cwd=ROOT, env=env).returncode
+        if len(options) < len(sys.argv[1:]):  # the reference has no Modbus driver
+            return code
+        # Modbus: the package against the Modbus simulator in both framings (the test starts its own simulator)
+        modbus = os.path.join("crates", "ciplink-py", "tests", "test_modbus.py")
+        return code or subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", modbus,
+                                       *options], cwd=ROOT).returncode
     finally:
         sim.stdin.close()
         sim.wait(10)

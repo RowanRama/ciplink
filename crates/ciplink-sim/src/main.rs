@@ -1,7 +1,8 @@
 //! `ciplink-sim`: serves a simulated controller over TCP for tests in any language.
 //!
 //! ```text
-//! ciplink-sim [--config controller.json] [--host 127.0.0.1] [--port 44818] [--udp 127.0.0.1:44818] [--exit-on-eof]
+//! ciplink-sim [--config controller.json] [--host 127.0.0.1] [--port 44818] [--udp 127.0.0.1:44818]
+//!             [--framing mbap|rtu] [--exit-on-eof]
 //! ```
 //!
 //! Prints `listening on HOST:PORT` once ready (with `--port 0` the port is a free one), then serves until killed.
@@ -29,15 +30,33 @@
 //! {"cmd": "requests"}                                      requests received so far
 //! ```
 //!
+//! A config whose `"kind"` is `"modbus"` serves a Modbus device instead (port 502 when `--port` is not given):
+//! `--framing mbap` (default, Modbus TCP) or `--framing rtu` (RTU frames over TCP, as a serial gateway). Its
+//! commands:
+//!
+//! ```text
+//! {"cmd": "registers", "unit": 1, "area": "holding", "address": 0, "count": 2}   [59769, 17142]
+//! {"cmd": "set_registers", "unit": 1, "area": "holding", "address": 0, "values": [1, 2]}
+//! {"cmd": "bits", "unit": 1, "area": "coil", "address": 0, "count": 3}           [true, false, true]
+//! {"cmd": "set_bits", "unit": 1, "area": "coil", "address": 0, "values": [true]}
+//! {"cmd": "fault", "fault": {...}}   {"drop_replies": n}, {"delay_ms": n}, {"refuse_connections": true},
+//!                                    {"close_connections": true}, {"no_reply": unit},
+//!                                    {"exception": {"unit", "function", "code"}}, {"bad_crc": n}
+//! {"cmd": "clear_faults"}
+//! {"cmd": "requests"}
+//! ```
+//!
 //! With `--exit-on-eof` it exits when standard input closes, else it keeps serving.
 
-use ciplink_sim::{Fault, LogixConfig, Simulator, TagConfig, TypeConfig};
+use ciplink_sim::{
+    Fault, Framing, LogixConfig, ModbusFault, ModbusSim, Simulator, TagConfig, TypeConfig,
+};
 use serde_json::{Value as Json, json};
 use std::io::{BufRead, Write};
 use std::time::Duration;
 
-const USAGE: &str =
-    "usage: ciplink-sim [--config FILE] [--host HOST] [--port PORT] [--udp ADDR] [--exit-on-eof]";
+const USAGE: &str = "usage: ciplink-sim [--config FILE] [--host HOST] [--port PORT] [--udp ADDR] \
+                     [--framing mbap|rtu] [--exit-on-eof]";
 
 fn main() {
     if let Err(message) = run() {
@@ -49,7 +68,8 @@ fn main() {
 fn run() -> Result<(), String> {
     let mut config = None;
     let mut host = "127.0.0.1".to_owned();
-    let mut port = "44818".to_owned();
+    let mut port = None;
+    let mut framing = Framing::Mbap;
     let mut udp = None;
     let mut exit_on_eof = false;
     let mut args = std::env::args().skip(1);
@@ -61,7 +81,14 @@ fn run() -> Result<(), String> {
         match arg.as_str() {
             "--config" => config = Some(value()?),
             "--host" => host = value()?,
-            "--port" => port = value()?,
+            "--port" => port = Some(value()?),
+            "--framing" => {
+                framing = match value()?.as_str() {
+                    "mbap" => Framing::Mbap,
+                    "rtu" => Framing::Rtu,
+                    other => return Err(format!("unknown framing {other} (mbap, rtu)")),
+                }
+            }
             "--udp" => udp = Some(value()?),
             "--exit-on-eof" => exit_on_eof = true,
             "-h" | "--help" => {
@@ -71,8 +98,28 @@ fn run() -> Result<(), String> {
             other => return Err(format!("unknown argument {other}\n{USAGE}")),
         }
     }
-    let sim = match &config {
-        Some(path) => Simulator::from_file(path),
+    let text = match &config {
+        Some(path) => {
+            Some(std::fs::read_to_string(path).map_err(|e| format!("cannot read {path}: {e}"))?)
+        }
+        None => None,
+    };
+    let kind = text
+        .as_deref()
+        .and_then(|text| serde_json::from_str::<Json>(text).ok())
+        .and_then(|json| json.get("kind").and_then(Json::as_str).map(str::to_owned));
+    if kind.as_deref() == Some("modbus") {
+        let sim = ModbusSim::from_json(text.as_deref().unwrap_or_default()).map_err(|e| e.0)?;
+        let port = port.unwrap_or_else(|| "502".to_owned());
+        let server = sim
+            .serve(&format!("{host}:{port}"), framing)
+            .map_err(|e| format!("cannot listen on {host}:{port}: {e}"))?;
+        println!("listening on {}", server.addr());
+        return serve_stdin(exit_on_eof, |line| modbus_command(&sim, line));
+    }
+    let port = port.unwrap_or_else(|| "44818".to_owned());
+    let sim = match &text {
+        Some(text) => Simulator::from_json(text),
         None => Simulator::new(LogixConfig::default()),
     }
     .map_err(|e| e.to_string())?;
@@ -89,15 +136,23 @@ fn run() -> Result<(), String> {
         },
         None => None,
     };
+    println!("listening on {}", server.addr());
+    serve_stdin(exit_on_eof, |line| command(&sim, line))
+}
+
+/// Answers one JSON command per line of standard input until it closes, then exits or keeps serving.
+fn serve_stdin(
+    exit_on_eof: bool,
+    mut command: impl FnMut(&str) -> Result<Json, String>,
+) -> Result<(), String> {
     let mut out = std::io::stdout();
-    let _ = writeln!(out, "listening on {}", server.addr());
     let _ = out.flush();
     for line in std::io::stdin().lock().lines() {
         let Ok(line) = line else { break };
         if line.trim().is_empty() {
             continue;
         }
-        let answer = match command(&sim, &line) {
+        let answer = match command(&line) {
             Ok(result) => json!({ "ok": result }),
             Err(message) => json!({ "error": message }),
         };
@@ -213,6 +268,89 @@ fn fault(spec: &Json) -> Result<Fault, String> {
             status,
             ext,
         });
+    }
+    Err(format!("unknown fault {spec}"))
+}
+
+fn modbus_command(sim: &ModbusSim, line: &str) -> Result<Json, String> {
+    let request: Json = serde_json::from_str(line).map_err(|e| format!("invalid JSON: {e}"))?;
+    let cmd: String = field(&request, "cmd")?;
+    let at = || -> Result<(u8, String, u16), String> {
+        Ok((
+            field(&request, "unit")?,
+            field(&request, "area")?,
+            field(&request, "address")?,
+        ))
+    };
+    match cmd.as_str() {
+        "registers" => {
+            let (unit, area, address) = at()?;
+            sim.registers(unit, &area, address, field(&request, "count")?)
+                .map(|v| json!(v))
+                .map_err(|e| e.0)
+        }
+        "set_registers" => {
+            let (unit, area, address) = at()?;
+            let values: Vec<u16> = field(&request, "values")?;
+            sim.set_registers(unit, &area, address, &values)
+                .map(|()| Json::Null)
+                .map_err(|e| e.0)
+        }
+        "bits" => {
+            let (unit, area, address) = at()?;
+            sim.bits(unit, &area, address, field(&request, "count")?)
+                .map(|v| json!(v))
+                .map_err(|e| e.0)
+        }
+        "set_bits" => {
+            let (unit, area, address) = at()?;
+            let values: Vec<bool> = field(&request, "values")?;
+            sim.set_bits(unit, &area, address, &values)
+                .map(|()| Json::Null)
+                .map_err(|e| e.0)
+        }
+        "fault" => {
+            sim.inject(modbus_fault(request.get("fault").unwrap_or(&Json::Null))?);
+            Ok(Json::Null)
+        }
+        "clear_faults" => {
+            sim.clear_faults();
+            Ok(Json::Null)
+        }
+        "requests" => Ok(Json::from(sim.requests())),
+        other => Err(format!("unknown command {other:?}")),
+    }
+}
+
+fn modbus_fault(spec: &Json) -> Result<ModbusFault, String> {
+    if spec.get("drop_replies").is_some() {
+        return Ok(ModbusFault::DropReplies(field(spec, "drop_replies")?));
+    }
+    if spec.get("delay_ms").is_some() {
+        return Ok(ModbusFault::Delay(Duration::from_millis(field(
+            spec, "delay_ms",
+        )?)));
+    }
+    if spec.get("refuse_connections").is_some() {
+        return Ok(ModbusFault::RefuseConnections);
+    }
+    if spec.get("close_connections").is_some() {
+        return Ok(ModbusFault::CloseConnections);
+    }
+    if spec.get("no_reply").is_some() {
+        return Ok(ModbusFault::NoReply {
+            unit: field(spec, "no_reply")?,
+        });
+    }
+    if let Some(e) = spec.get("exception") {
+        return Ok(ModbusFault::Exception {
+            unit: field(e, "unit")?,
+            function: field(e, "function")?,
+            code: field(e, "code")?,
+        });
+    }
+    if spec.get("bad_crc").is_some() {
+        return Ok(ModbusFault::BadCrc(field(spec, "bad_crc")?));
     }
     Err(format!("unknown fault {spec}"))
 }

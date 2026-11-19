@@ -1,7 +1,8 @@
 # Header-only C++ wrapper over the ciplink C library.
 #
 #   cmake -S bindings/cpp -B build -DCIPLINK_LIB_DIR=<dir with the ciplink shared library and its import library>
-#   cmake --build build && ctest --test-dir build   (tests need CIPLINK_TEST_PORTS="<logix port>;<slc port>")
+#   cmake --build build && ctest --test-dir build   (tests need CIPLINK_TEST_PORTS="<logix port>;<slc port>";
+#   CIPLINK_TEST_MODBUS_PORTS="<modbus tcp port>;<modbus rtu port>" adds the Modbus tests)
 #
 # bindings/cpp/build_and_test.sh with BUILD=cmake does all of this, simulators included.
 #
@@ -40,6 +41,10 @@ endif()
 
 if(DEFINED ENV{CIPLINK_TEST_PORTS})
     enable_testing()
+    set(CIPLINK_MODBUS_ARGS "")
+    if(DEFINED ENV{CIPLINK_TEST_MODBUS_PORTS})
+        set(CIPLINK_MODBUS_ARGS $ENV{CIPLINK_TEST_MODBUS_PORTS} "${CIPLINK_REPO}/tools/sim/example_modbus_map.csv")
+    endif()
     add_test(NAME test_ciplink COMMAND test_ciplink $ENV{CIPLINK_TEST_PORTS}
-        "${CIPLINK_REPO}/crates/ciplink/tests/fixtures/logix_descriptions.json")
+        "${CIPLINK_REPO}/crates/ciplink/tests/fixtures/logix_descriptions.json" ${CIPLINK_MODBUS_ARGS})
 endif()

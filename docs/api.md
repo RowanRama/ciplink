@@ -18,6 +18,7 @@ API is documented and how its calls map to the others.
 | `LogixDriver(path, **options)` | `LogixDriver::new(path, LogixOptions)` | `new LogixDriver(path, LogixOptions)` | `ciplink::Logix(path, options_json)` | `ciplink_logix_new` |
 | `SLCDriver` | `SlcDriver` | `SlcDriver` | `ciplink::Slc` | `ciplink_slc_new` |
 | `CIPDriver` | `CipDriver` | `CipDriver` | `ciplink::Cip` | `ciplink_cip_new` |
+| `ModbusDriver(path, map_file)` | `ModbusDriver::new(path, ModbusOptions)` | `new ModbusDriver(path, ModbusOptions)` | `ciplink::Modbus(path, options_json)` | `ciplink_modbus_new` (see [Modbus](#modbus-c-c-and-c)) |
 | `open()`, `close()` | `open()`, `close()` | `Open()`, `Close()` | `open()`, `close()` | `ciplink_open`, `ciplink_close` |
 | `read(*tags)` | `read(&[tags])` | `Read(params tags)` | `read({tags})`, `read_tag` | `ciplink_read` |
 | `write(*(tag, value))` | `write(&[(tag, Value)])` | `Write(params (tag, value))` | `write({{tag, value}})`, `write_tag` | `ciplink_write` |
@@ -181,4 +182,113 @@ using Subscription sub = plc.Subscribe(new[] { "Counter", "Level" }, TimeSpan.Fr
 await foreach (IReadOnlyList<Tag> changed in sub)
     foreach (Tag t in changed)
         Console.WriteLine(t.IsOk ? $"{t.Name} = {t.Value}" : $"{t.Name}: {t.Error}");
+```
+
+## Modbus (C, C++ and C#)
+
+A Modbus driver is one more driver handle. It takes the same read, write, async, subscription and connection calls
+as a Logix driver, with the same queue, reconnect and callback rules as above. The CIP calls (generic messages,
+identity, browsing, connection size, ...) return `CIPLINK_STATUS_UNSUPPORTED` (C++ `ciplink::Error`, C#
+`CiplinkException` with `Unsupported`).
+
+**Paths.** `tcp://host[:port][?unit=N]` is Modbus TCP. `rtu://PORT[?baud=..&parity=..&data=..&stop=..&unit=N]` is
+RTU on a serial port, e.g. `rtu://COM3?baud=19200&parity=E` or `rtu:///dev/ttyUSB0?baud=9600`.
+`rtu+tcp://host[:port][?unit=N]` is RTU frames over TCP, for serial-to-Ethernet gateways in transparent mode. The
+port is 502 and the unit 1 unless given.
+
+**Names.** A map file gives the tags their names, types and descriptions. Anything not in it is a plain address,
+`area offset ["." bit] [":" type [":" order]] ["{" count "}"] ["@" unit]`, with the area `co` (coils), `di`
+(discrete inputs), `hr` (holding registers) or `ir` (input registers). Addresses are **0-based protocol
+addresses**: Modicon holding register 40001 is `hr0`. Examples: `hr100:float32`, `hr100:float32:cdab`,
+`hr200:int16{10}`, `hr300:string{20}`, `hr10.4` (bit 4 of holding register 10), `co0{16}`, `di7@3` (unit 3).
+
+**Map file.** CSV with a header row, one row per tag. Only `name`, `area`, `address` and `type` are required; an
+empty cell takes the default.
+
+```text
+# Pump skid. Addresses are 0-based: holding register 40001 is "holding,0".
+name,area,address,type,count,order,unit,scale,offset,units,description,writable
+Pump1_Speed,holding,0,float32,,CDAB,,,,rpm,Pump 1 speed setpoint,
+Pump1_Run,coil,0,bool,,,,,,,Pump 1 run command,
+Pump1_Fault,discrete,3,bool,,,,,,,"Pump 1 fault, any cause",
+Tank_Level,input,10,int16,,,,0.1,,%,Tank level (0.1 % per count),
+Totals,holding,100,uint32,4,,,,,m3,Daily totals of the last 4 days,
+Recipe,holding,200,string,16,,,,,,Active recipe name,
+Drive_Status,holding,300,uint16,,,,,,,Drive status word,false
+Horn,holding,301.4,bool,,,,,,,Horn bit in the control word,
+Valve2_Open,coil,10,bool,,,2,,,,Valve on gateway unit 2,
+```
+
+| Column | Meaning |
+|---|---|
+| `area` | `coil`, `discrete`, `holding` or `input` |
+| `address` | 0-based; `301.4` is bit 4 of a holding or input register |
+| `type` | `bool`, `int16`, `uint16`, `int32`, `uint32`, `int64`, `uint64`, `float32`, `float64`, `string` |
+| `count` | array elements, or a string's length in characters |
+| `order` | `ABCD` (Modbus standard, big-endian), `CDAB` (word swap), `BADC` (byte swap), `DCBA`; empty: the driver's `word_order` |
+| `unit` | unit id of this tag; empty: the path's |
+| `scale`, `offset` | read value = raw x scale + offset (reported as LREAL); writes divide it back out |
+| `writable` | `false` makes the tag read-only (discrete inputs and input registers always are) |
+
+Reads queued together are merged into the fewest requests: tags of the same unit and area whose gap is at most
+`max_gap` registers or bits go in one request, up to `max_registers` (125) or `max_bits` (2000). Writes use FC05 and
+FC06 for one coil or register, FC15 and FC16 for more (always with `write_multiple`), and FC22 (mask write) for a
+bit of a holding register. A Modbus exception is the tag's error; the reply timeout is 1 s by default. The keep-alive
+(30 s over TCP, off on a serial port) sends FC08, or reads `keep_alive_address` for devices that ignore FC08.
+
+| Option (C key) | C# `ModbusOptions` | Default |
+|---|---|---|
+| `map_file` (or `map_csv`, the CSV text) | `MapFile` | none: plain addresses only |
+| `socket_timeout` | `SocketTimeout` | 1 s |
+| `max_registers`, `max_bits` | `MaxRegisters`, `MaxBits` | 125, 2000 |
+| `max_gap` | `MaxGap` | 8 |
+| `word_order` | `WordOrder` | `"ABCD"` |
+| `write_multiple` | `WriteMultiple` | false |
+| `keep_alive_address` | `KeepAliveAddress` | none (FC08) |
+| `keep_alive` | `KeepAlive` (null: the scheme's default, `TimeSpan.Zero`: off) | 30 s over TCP, off for `rtu://` |
+| `reconnect`, `reconnect_min`, `reconnect_max` | `Reconnect`, `ReconnectMin`, `ReconnectMax` | as above |
+
+| C | C++ `ciplink::Modbus` | C# `ModbusDriver` | What it does |
+|---|---|---|---|
+| `ciplink_modbus_device_info(h, unit, &json)` | `device_info(unit)` | `DeviceInfo(unit)` | Read Device Identification (FC43/14): vendor_name, product_code, revision, ... |
+| `ciplink_modbus_tags(h, &json)` | `tags()` | `Tags` | the map's rows: name, area, address, bit, type, cip_type, count, order, unit, scale, offset, units, description, writable |
+| `ciplink_modbus_send_pdu(h, unit, pdu, len, &out, &out_len)` | `send_pdu(pdu, unit)` | `SendPdu(pdu, unit)` | one raw PDU (function code and data) for functions the driver does not wrap |
+
+A negative `unit` in C (C++ and C#: no unit) means the path's unit.
+
+```c
+CiplinkDriver *mb = NULL;
+ciplink_modbus_new("tcp://10.0.0.9?unit=1", "{\"map_file\": \"skid.csv\"}", &mb);
+ciplink_open(mb);
+const char *tags[] = {"Pump1_Speed", "Tank_Level", "hr40:uint16"};
+char *json = NULL;
+if (ciplink_read(mb, tags, 3, &json) == CIPLINK_STATUS_OK) {
+    /* [{"tag":"Pump1_Speed","value":123.456,"type":"REAL","error":null}, ...] */
+    ciplink_string_free(json);
+}
+ciplink_write(mb, "[[\"Pump1_Run\", true], [\"Horn\", true]]", &json);
+ciplink_string_free(json);
+ciplink_driver_free(mb);
+```
+
+```cpp
+ciplink::Modbus mb("rtu+tcp://10.0.0.20:4001?unit=3", R"({"map_file": "skid.csv", "word_order": "CDAB"})");
+mb.open();
+ciplink::Tag speed = mb.read_tag("Pump1_Speed");
+mb.write_tag("Pump1_Run", true);
+ciplink::Value info = mb.device_info();          // {"vendor_name": ..., "product_code": ..., ...}
+for (auto& row : mb.tags().as_array())
+    std::cout << row["name"].as_string() << ": " << row["description"].as_string() << "\n";
+auto sub = mb.subscribe({"Tank_Level", "Pump1_Fault"}, [](const std::vector<ciplink::Tag>& changed) { /* ... */ }, 0.5);
+```
+
+```csharp
+using var mb = new ModbusDriver("tcp://10.0.0.9", new ModbusOptions { MapFile = "skid.csv", MaxGap = 0 });
+mb.ConnectionChanged += (_, e) => Console.WriteLine(e);
+mb.Open();
+IReadOnlyList<Tag> r = await mb.ReadAsync("Pump1_Speed", "Totals", "ir0:int16{4}");
+await mb.WriteAsync(("Pump1_Speed", 1450.0f), ("Valve2_Open", true));
+JsonObject info = mb.DeviceInfo();
+foreach (JsonNode? row in mb.Tags)
+    Console.WriteLine($"{row!["name"]} ({row["units"]}): {row["description"]}");
 ```

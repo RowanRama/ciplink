@@ -129,6 +129,31 @@ secret = "change-me"
 write = ["PLC1/Line1.*.SpeedSP", "PLC1/Program:Station1.Door*"]
 ```
 
+**Modbus devices** (TCP, RTU on a serial port, or RTU over TCP gateways) take `protocol = "modbus"` and a map
+file, the CSV that names the device's registers (see [Modbus TCP and RTU](modbus.md#map-file) for its columns):
+
+```toml
+[plc.Skid]
+protocol = "modbus"                  # "logix" (the default) or "modbus"
+path = "tcp://10.0.0.9?unit=1"       # or "rtu://COM3?baud=19200&parity=E", "rtu+tcp://10.0.0.20:4001"
+map_file = "maps/skid.csv"           # required for Modbus
+[plc.Skid.modbus]                    # optional driver options
+max_gap = 0                          # most unrequested registers between two tags merged into one read (8)
+word_order = "CDAB"                  # for rows without an order (ABCD)
+socket_timeout = 2.0                 # reply timeout in seconds (1)
+max_registers = 60                   # most registers per read, for picky devices (125); max_bits (2000)
+write_multiple = false               # always FC15/FC16
+keep_alive = 30                      # seconds idle before a keep-alive, 0 for none (30 over TCP, none on rtu://)
+keep_alive_address = "hr0"           # keep-alive reads this instead of sending FC08
+```
+
+The server serves the map's tags with their types (`REAL`, `INT`, ...; `LREAL` for a scaled row, `STRING` for a
+string) and their `description` column as the tag info's description (a rule's description wins). Element runs
+the planner merges are read as elements, which the driver merges into the fewest Modbus requests. Writes follow
+the usual checks (a rule must say `writable = true`), and a row with `writable = false` is also refused by the
+driver (`access`); a bit of a holding register (`Horn`, `Status.5`) is written with FC22. `dump-tags` works
+for Modbus PLCs too (it writes the map's tags).
+
 Relative file paths are relative to the config file. A complete example is
 the Test Bench example of [ciplink-tagserver](https://github.com/RowanRama/ciplink-tagserver/tree/main/examples/bench).
 

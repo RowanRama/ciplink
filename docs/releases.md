@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- :sparkles: Modbus: `ModbusDriver` for Modbus TCP, RTU on a serial port and RTU over TCP, on the session core
+  (merged reads, async, subscriptions, reconnect), in every binding. Tag names, types and descriptions come from a
+  CSV map file; plain addresses such as `hr100:float32` work without one. `ciplink-server` serves Modbus devices
+  (`protocol = "modbus"`), and `ciplink-sim` simulates one.  See [Modbus TCP and RTU](modbus.md).
 - :sparkles: Logix and SLC drivers run on a session: one thread per driver does its I/O and packs the reads that
   callers queue together into one read (a caller alone sends the same bytes as before). New in every binding:
   `read_async` / `write_async` (a `Handle` future in Rust, asyncio in Python, `std::future` in C++, real
