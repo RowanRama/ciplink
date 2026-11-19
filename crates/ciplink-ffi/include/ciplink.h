@@ -46,7 +46,7 @@ typedef enum CiplinkConnectionState {
 // the calling thread: [`ciplink_last_error`](super::ciplink_last_error) with NULL.
 typedef struct CiplinkAdapter CiplinkAdapter;
 
-// A driver handle: a Logix, SLC, plain CIP or Modbus driver.
+// A driver handle: a Logix, SLC, plain CIP, Modbus or S7comm-plus driver.
 typedef struct CiplinkDriver CiplinkDriver;
 
 // A read or write queued by [`ciplink_read_async`] or [`ciplink_write_async`]: poll it with
@@ -752,6 +752,44 @@ enum CiplinkStatus ciplink_modbus_send_pdu(const struct CiplinkDriver *handle,
                                            size_t len,
                                            uint8_t **out,
                                            size_t *out_len);
+
+// Creates an S7comm-plus driver for a Siemens S7-1500 / S7-1200 CPU with secure PG/HMI communication (TLS,
+// firmware 2.9 and later) at `path` (`host` or `host:port`, default port 102). Not connected until
+// [`ciplink_open`]; a refused COTP connection is a [`CiplinkStatus::Comm`] error there.
+//
+// `options_json` may be NULL or `{}`; keys (all optional): `socket_timeout` (seconds, null to block forever,
+// default 10), `init_tags` (browse on open, true), `tls_fingerprint` (SHA-256 of the PLC certificate to require,
+// hex with or without `:`; null accepts any, the default), and `reconnect`, `reconnect_min`, `reconnect_max`,
+// `keep_alive` as [`ciplink_logix_new`] (`keep_alive` default 15). A malformed fingerprint is a
+// [`CiplinkStatus::Request`] error.
+//
+// Tag names are TIA style (`Line1.Conveyor.Speed`, `Line1.Items[3]`, PLC tags by their bare name). Besides
+// the session calls (read, write, async, subscribe, connection events, socket timeout) the generic calls
+// [`ciplink_tags`] (top-level tags), [`ciplink_data_types`], [`ciplink_tag_list`] (the flat symbol list; its
+// program, cache and filter arguments are ignored), [`ciplink_tag_info`], [`ciplink_get_plc_name`],
+// [`ciplink_get_plc_info`] (CPU information) and [`ciplink_info`] (CPU information plus `fingerprint`) work on
+// it; the CIP-only calls return [`CiplinkStatus::Unsupported`].
+//
+// # Safety
+// As [`ciplink_logix_new`].
+enum CiplinkStatus ciplink_s7plus_new(const char *path,
+                                      const char *options_json,
+                                      struct CiplinkDriver **out);
+
+// The SHA-256 fingerprint (`"AB:CD:..."`) of the certificate the PLC presented at the latest TLS handshake, as a
+// JSON string, or JSON `null` before one. A handshake refused by the `tls_fingerprint` pin still sets it.
+//
+// # Safety
+// `handle` is NULL or a live handle; `out_json` is writable.
+enum CiplinkStatus ciplink_s7plus_fingerprint(const struct CiplinkDriver *handle,
+                                              char **out_json);
+
+// Browses the PLC's symbol table again; `*out_changed` is true if the tags or types changed.
+//
+// # Safety
+// `handle` is NULL or a live handle; `out_changed` is writable.
+enum CiplinkStatus ciplink_s7plus_refresh_tags(const struct CiplinkDriver *handle,
+                                               bool *out_changed);
 
 // Queues a read of `count` tags (as [`ciplink_read`]) and returns at once. Reads queued together, by any thread
 // or subscription, go out as one read.

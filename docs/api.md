@@ -19,6 +19,7 @@ API is documented and how its calls map to the others.
 | `SLCDriver` | `SlcDriver` | `SlcDriver` | `ciplink::Slc` | `ciplink_slc_new` |
 | `CIPDriver` | `CipDriver` | `CipDriver` | `ciplink::Cip` | `ciplink_cip_new` |
 | `ModbusDriver(path, map_file)` | `ModbusDriver::new(path, ModbusOptions)` | `new ModbusDriver(path, ModbusOptions)` | `ciplink::Modbus(path, options_json)` | `ciplink_modbus_new` (see [Modbus](#modbus-c-c-and-c)) |
+| `S7PlusDriver(path, **options)` | `S7PlusDriver::new(path, S7PlusOptions)` | `new S7PlusDriver(path, S7PlusOptions)` | `ciplink::S7Plus(path, options_json)` | `ciplink_s7plus_new` (see [S7comm-plus](#s7comm-plus-c-c-and-c)) |
 | `open()`, `close()` | `open()`, `close()` | `Open()`, `Close()` | `open()`, `close()` | `ciplink_open`, `ciplink_close` |
 | `read(*tags)` | `read(&[tags])` | `Read(params tags)` | `read({tags})`, `read_tag` | `ciplink_read` |
 | `write(*(tag, value))` | `write(&[(tag, Value)])` | `Write(params (tag, value))` | `write({{tag, value}})`, `write_tag` | `ciplink_write` |
@@ -291,4 +292,62 @@ await mb.WriteAsync(("Pump1_Speed", 1450.0f), ("Valve2_Open", true));
 JsonObject info = mb.DeviceInfo();
 foreach (JsonNode? row in mb.Tags)
     Console.WriteLine($"{row!["name"]} ({row["units"]}): {row["description"]}");
+```
+
+## S7comm-plus (C, C++ and C#)
+
+Siemens S7-1500 and S7-1200 CPUs with secure PG/HMI communication (TLS, firmware 2.9 and later) have a driver of
+their own: `ciplink_s7plus_new` in C, `ciplink::S7Plus` in C++ and `S7PlusDriver` in C#. It runs on the same
+session core as the Logix driver, so everything above applies: one handle shared by threads, merged reads (at most
+the PLC's limit, usually 100 items, per request), async calls, subscriptions, connection events, reconnect and
+keep-alive (every 15 s by default). Tag names are TIA style: `Line1.Conveyor.Speed`, `Line1.Items[3]`, and PLC
+tags of the I, Q and M areas by their bare name (`StartButton`). Tag comments are not read, and the CIP-only calls
+(generic messages, device browsing, trends, PLC time, connection size) return `CIPLINK_STATUS_UNSUPPORTED`.
+
+Options (C keys; C# properties of `S7PlusOptions` in brackets):
+
+| Key | Default | Meaning |
+|---|---|---|
+| `socket_timeout` (`SocketTimeout`) | `10` | seconds per connect, read and write; `null` blocks forever |
+| `init_tags` (`InitTags`) | `true` | browse the symbol table on open; else on the first request that needs it |
+| `tls_fingerprint` (`TlsFingerprint`) | `null` | SHA-256 of the PLC certificate to require, hex with or without `:`; a mismatch fails open with `CIPLINK_STATUS_COMM` |
+| `keep_alive` (`KeepAlive`) | `15` | seconds without traffic before a keep-alive request; `null` for never |
+| `reconnect`, `reconnect_min`, `reconnect_max` | as Logix | see the table above |
+
+The certificate is not checked by default. To pin it, connect once, read the fingerprint, and pass it as
+`tls_fingerprint` from then on.
+
+| C | C++ | C# | What it does |
+|---|---|---|---|
+| `ciplink_tags` | `tags()` | `Tags()` | data blocks and I/Q/M tags by name (type, kind, dims, HMI flags); no I/O |
+| `ciplink_data_types` | `data_types()` | `DataTypes()` | structure types by name, with their members |
+| `ciplink_tag_list` (other arguments ignored) | `tag_list()` | `TagList()` | every symbol, flat: name, type, dims, access, crc, HMI flags |
+| `ciplink_tag_info` | `tag_info(name)` | `TagInfo(name)` | one name resolved; an unknown name is `CIPLINK_STATUS_REQUEST` |
+| `ciplink_get_plc_info` | `plc_info()` | `GetPlcInfo()` | name, order and serial number, firmware, TIA version, project, protection level, read/write limits |
+| `ciplink_info` | | | `ciplink_get_plc_info` plus `fingerprint` |
+| `ciplink_s7plus_fingerprint` | `fingerprint()` | `CertificateFingerprint` | `"AB:CD:..."` of the latest handshake, null before one |
+| `ciplink_s7plus_refresh_tags` | `refresh_tags()` | `RefreshTags()` | browse again; true if the tags or types changed |
+
+Values follow [Values and results](values.md): BYTE, WORD, DWORD and LWORD are unsigned integers, TIME and S5TIME
+milliseconds, LTIME nanoseconds, the date and time types (DATE, TOD, DT, DTL, LDT) ISO 8601 strings, structures
+objects and arrays arrays. A result's `type` is the S7 type name (`"WORD"`, `"DTL"`, `"REAL[50]"`).
+
+```cpp
+ciplink::S7Plus plc("192.168.0.10", "{\"tls_fingerprint\": \"AB:CD:...\"}");
+plc.open();
+auto r = plc.read({"Line1.Conveyor.Speed", "Line1.Items[3]", "StartButton"});
+plc.write_tag("Line1.Recipe.Name", "Batch7");
+auto sub = plc.subscribe({"Line1.Count"}, [](const std::vector<ciplink::Tag>& changed) {
+    for (auto& t : changed) std::cout << t.tag << " = " << ciplink::to_json(t.value) << "\n";
+}, 0.5);
+```
+
+```csharp
+using var plc = new S7PlusDriver("192.168.0.10", new S7PlusOptions { InitTags = true });
+plc.Open();
+Console.WriteLine(plc.CertificateFingerprint);   // pin it with TlsFingerprint next time
+IReadOnlyList<Tag> r = await plc.ReadAsync("Line1.Conveyor.Speed", "Line1.Stamp");
+plc.Write(("Line1.Count", 42), ("Line1.Recipe.Speed", 2.5));
+foreach (JsonNode? s in plc.TagList())
+    Console.WriteLine($"{s!["name"]} {s["type"]}");
 ```

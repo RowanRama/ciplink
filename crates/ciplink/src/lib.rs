@@ -13,6 +13,7 @@ pub mod logix;
 pub mod modbus;
 pub mod packets;
 pub mod reader;
+pub mod s7plus;
 pub mod session;
 pub mod slc;
 pub mod status;

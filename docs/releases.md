@@ -6,6 +6,11 @@
   (merged reads, async, subscriptions, reconnect), in every binding. Tag names, types and descriptions come from a
   CSV map file; plain addresses such as `hr100:float32` work without one. `ciplink-server` serves Modbus devices
   (`protocol = "modbus"`), and `ciplink-sim` simulates one.  See [Modbus TCP and RTU](modbus.md).
+- :sparkles: Siemens S7-1500 / S7-1200 over S7comm-plus with TLS (firmware 2.9 and later) in every binding:
+  `S7PlusDriver` browses the symbol table (types, arrays, structures, HMI flags), reads in batches of the PLC's
+  item limit, writes, reads CPU information and runs on the same session (async, subscriptions, keep-alive,
+  reconnect); the PLC certificate's SHA-256 fingerprint is exposed and can be pinned. `ciplink-server` serves it
+  with `protocol = "s7plus"`, and the simulator plays one.  See [Siemens S7-1500 and S7-1200](s7plus.md).
 - :sparkles: Logix and SLC drivers run on a session: one thread per driver does its I/O and packs the reads that
   callers queue together into one read (a caller alone sends the same bytes as before). New in every binding:
   `read_async` / `write_async` (a `Handle` future in Rust, asyncio in Python, `std::future` in C++, real

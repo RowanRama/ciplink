@@ -99,6 +99,8 @@ using ciplink::Value;
 
 }  // namespace
 
+#include "s7plus_tests.inc"
+
 int main(int argc, char** argv) {
     if (argc < 3) {
         std::cerr << "usage: test_ciplink <logix port> <slc port>\n";
@@ -762,6 +764,7 @@ int main(int argc, char** argv) {
             expect_error(CIPLINK_STATUS_REQUEST, [] { ciplink::Modbus("udp://127.0.0.1"); });
         });
     }
+    run_s7plus_tests();
 
     std::cout << checks << " checks, " << failures << " failures\n";
     return failures == 0 ? 0 : 1;

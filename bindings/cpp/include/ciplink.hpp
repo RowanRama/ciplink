@@ -1074,6 +1074,64 @@ public:
     }
 };
 
+/// A Siemens S7-1500 / S7-1200 driver over S7comm-plus with TLS (secure PG/HMI communication, firmware 2.9 and
+/// later). Tag names are TIA style ("Line1.Conveyor.Speed", "Line1.Items[3]", PLC tags by their bare name). The
+/// CIP calls inherited from Driver (generic_message, get_identity, connection_size, ...) throw ciplink::Error
+/// (Unsupported).
+class S7Plus : public Driver {
+public:
+    /// `path` like "192.168.0.10" or "192.168.0.10:102"; `options_json` see ciplink_s7plus_new, e.g.
+    /// {"tls_fingerprint": "AB:CD:...", "init_tags": false}.
+    explicit S7Plus(const std::string& path, const std::string& options_json = "")
+        : Driver(ciplink_s7plus_new, path, options_json) {}
+
+    std::vector<Tag> read(const std::vector<std::string>& tags) { return read_(tags); }
+    Tag read_tag(const std::string& tag) { return read_({tag}).at(0); }
+    std::vector<Tag> write(const std::vector<std::pair<std::string, Value>>& items) { return write_(items); }
+    Tag write_tag(const std::string& tag, const Value& value) { return write_({{tag, value}}).at(0); }
+
+    /// As Logix::read_async, write_async and subscribe; reads queued together are merged, at most the PLC's limit
+    /// (usually 100) items per request.
+    std::future<std::vector<Tag>> read_async(const std::vector<std::string>& tags) { return read_async_(tags); }
+    std::future<std::vector<Tag>> write_async(const std::vector<std::pair<std::string, Value>>& items) {
+        return write_async_(items);
+    }
+    Subscription subscribe(const std::vector<std::string>& tags, Subscription::Fn on_changes, double interval_s = 1.0,
+                           std::optional<double> deadband = std::nullopt) {
+        return subscribe_(tags, std::move(on_changes), interval_s, deadband);
+    }
+
+    /// Top-level tags (data blocks and I/Q/M PLC tags) by name: {name, type, kind, softdatatype, dims,
+    /// lower_bounds, string_length, lid, member_crc, hmi_visible, hmi_accessible, hmi_read_only}. No I/O.
+    Value tags() { return parse_json(json_call([&](char** o) { return ciplink_tags(h(), o); })); }
+    /// Structure types by name: {name, rid, interface_timestamp, members}. No I/O.
+    Value data_types() { return parse_json(json_call([&](char** o) { return ciplink_data_types(h(), o); })); }
+    /// Every symbol, flat: an array of {name, type, dims, access, crc, hmi_visible, hmi_accessible,
+    /// hmi_read_only}. Browses first if needed.
+    Value tag_list() {
+        return parse_json(json_call([&](char** o) { return ciplink_tag_list(h(), nullptr, false, nullptr, o); }));
+    }
+    /// One name resolved, as a tag_list() entry; an unknown name throws (Request).
+    Value tag_info(const std::string& name) {
+        return parse_json(json_call([&](char** o) { return ciplink_tag_info(h(), name.c_str(), o); }));
+    }
+    /// CPU information: {name, order_number, serial_number, hardware_version, firmware, engineering_version,
+    /// project, protection_level, max_read, max_write}.
+    Value plc_info() { return parse_json(json_call([&](char** o) { return ciplink_get_plc_info(h(), o); })); }
+    /// "AB:CD:..." (SHA-256) of the certificate presented at the latest TLS handshake, nullopt before one. Pin it
+    /// with the "tls_fingerprint" option.
+    std::optional<std::string> fingerprint() {
+        Value v = parse_json(json_call([&](char** o) { return ciplink_s7plus_fingerprint(h(), o); }));
+        return v.is_null() ? std::nullopt : std::optional<std::string>(v.as_string());
+    }
+    /// Browses the symbol table again; true if the tags or types changed.
+    bool refresh_tags() {
+        bool changed = false;
+        detail::check(ciplink_s7plus_refresh_tags(h(), &changed));
+        return changed;
+    }
+};
+
 /// The ListIdentity reply of the device at `path`, or null if it refused.
 inline Value list_identity(const std::string& path) {
     char* o = nullptr;

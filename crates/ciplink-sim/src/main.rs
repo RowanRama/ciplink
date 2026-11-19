@@ -46,8 +46,13 @@
 //! {"cmd": "requests"}
 //! ```
 //!
+//! A config with a top-level `"s7plus"` key serves a Siemens S7-1500 / S7-1200 over S7comm-plus with TLS instead
+//! (port 102 when `--port` is not given). After `listening on`, it prints `fingerprint XX:XX:...`, the SHA-256 of
+//! its self-signed certificate, for a client to pin.
+//!
 //! With `--exit-on-eof` it exits when standard input closes, else it keeps serving.
 
+use ciplink_sim::s7plus::S7PlusSimulator;
 use ciplink_sim::{
     Fault, Framing, LogixConfig, ModbusFault, ModbusSim, Simulator, TagConfig, TypeConfig,
 };
@@ -104,9 +109,11 @@ fn run() -> Result<(), String> {
         }
         None => None,
     };
-    let kind = text
+    let json = text
         .as_deref()
-        .and_then(|text| serde_json::from_str::<Json>(text).ok())
+        .and_then(|text| serde_json::from_str::<Json>(text).ok());
+    let kind = json
+        .as_ref()
         .and_then(|json| json.get("kind").and_then(Json::as_str).map(str::to_owned));
     if kind.as_deref() == Some("modbus") {
         let sim = ModbusSim::from_json(text.as_deref().unwrap_or_default()).map_err(|e| e.0)?;
@@ -116,6 +123,25 @@ fn run() -> Result<(), String> {
             .map_err(|e| format!("cannot listen on {host}:{port}: {e}"))?;
         println!("listening on {}", server.addr());
         return serve_stdin(exit_on_eof, |line| modbus_command(&sim, line));
+    }
+    if json
+        .as_ref()
+        .is_some_and(|json| json.get("s7plus").is_some())
+    {
+        let sim = S7PlusSimulator::from_json(text.as_deref().unwrap_or_default())
+            .map_err(|e| e.to_string())?;
+        let port = port.unwrap_or_else(|| "102".to_owned());
+        let addr = format!("{host}:{port}");
+        let server = sim
+            .serve(&addr)
+            .map_err(|e| format!("cannot listen on {addr}: {e}"))?;
+        println!("listening on {}", server.addr());
+        println!("fingerprint {}", sim.fingerprint());
+        return serve_stdin(exit_on_eof, |line| {
+            let request: Json =
+                serde_json::from_str(line).map_err(|e| format!("invalid JSON: {e}"))?;
+            sim.command(&request)
+        });
     }
     let port = port.unwrap_or_else(|| "44818".to_owned());
     let sim = match &text {

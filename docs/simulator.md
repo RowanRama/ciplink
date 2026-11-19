@@ -114,3 +114,26 @@ Connect with `ModbusDriver("tcp://127.0.0.1:5020", "tools/sim/example_modbus_map
 | `{"cmd": "fault", "fault": {"no_reply": 2}}` | injects a fault: `drop_replies`, `delay_ms`, `refuse_connections`, `close_connections`, `no_reply` (a silent unit), `exception` (`{"unit", "function", "code"}`), `bad_crc` |
 | `{"cmd": "clear_faults"}` | clears them |
 | `{"cmd": "requests"}` | the requests received so far |
+
+## S7comm-plus
+
+A config whose top-level key is `"s7plus"` makes the simulator a Siemens S7-1500 over S7comm-plus with TLS (port 102
+unless `--port` is given). It makes a self-signed certificate at start and prints its SHA-256 as
+`fingerprint XX:XX:...` after `listening on`, so a test can pin it.
+
+```sh
+cargo run -p ciplink-sim -- --config tools/sim/example_s7plus.json --port 1102
+```
+
+Connect with `S7PlusDriver("127.0.0.1:1102")`. See [Siemens S7-1500 and S7-1200](s7plus.md). Its standard input
+commands:
+
+| Command | Does |
+|---|---|
+| `{"cmd": "value", "path": "Line1.Conveyor.Speed"}` | returns a tag's value |
+| `{"cmd": "set", "path": "Line1.Count", "value": 5}` | sets it |
+| `{"cmd": "fault", "fault": {"drop_replies": 1}}` | injects a fault: `delay_ms`, `drop_replies`, `close_connections`, `refuse_connections`, `item_error` (`{"tag", "code"}`), `error_pdu`, `system_event`, `negative_item_errors` |
+| `{"cmd": "clear_faults"}` | clears them |
+| `{"cmd": "change_program"}` | changes the program, as a download would |
+| `{"cmd": "requests"}` | the requests received so far |
+| `{"cmd": "fingerprint"}` | the certificate's SHA-256 |

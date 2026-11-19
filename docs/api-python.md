@@ -67,6 +67,38 @@ port; `keep_alive_address="hr0"` reads that address instead, for devices that do
 
 ::: ciplink.ModbusDriver
 
+## Siemens S7-1500 / S7-1200 (S7comm-plus)
+
+`S7PlusDriver` talks S7comm-plus over TLS to CPUs with secure PG/HMI communication (firmware 2.9 and later). It
+runs on the same session as `LogixDriver`: `read_async`, `write_async`, `subscribe`, `on_connection`,
+`reconnect` and `keep_alive` (15 s by default) work as described below.
+
+```python
+from ciplink import S7PlusDriver
+
+with S7PlusDriver("10.20.30.40") as plc:
+    print(plc.name, plc.certificate_fingerprint)      # "AB:CD:..." of the PLC certificate
+    speed = plc.read("Line1.Conveyor.Speed")         # TIA names: DB.member, arrays by index
+    tags = plc.read("Line1.Items[3]", '"Line1".Count', "StartButton")   # PLC tags (I/Q/M) by bare name
+    plc.write("Line1.Conveyor.Speed", 2.5)
+    plc.write(("Line1.Recipe.Name", "Mix2"), ("Mode", 3))
+    print(plc.read("Line1.Stamp").value)              # DTL: "2026-11-18T16:34:46.100000000"
+    symbols = plc.tag_list()                          # flat list: name, type, dims, access, crc, HMI flags
+    print(plc.get_tag_info("Line1.Items"), plc.get_plc_info())
+```
+
+- Reads are batched by the PLC's item limit (100 items per request on most CPUs); a tag that fails has its
+  `error` set and the others are unaffected.
+- `tags` holds the data blocks and the I, Q and M PLC tags; `data_types` the structure types they use.
+  Descriptions (tag comments) are not read.
+- The certificate is not verified by default. To pin it, pass the fingerprint seen once:
+  `S7PlusDriver("10.20.30.40", tls_fingerprint="AB:CD:...")`; another certificate fails `open` with a
+  `CommError`.
+- Whole structures (except DTL) and whole BOOL arrays cannot be written; write their members. Elements of
+  multi-dimensional arrays are refused (read or write the whole array).
+
+::: ciplink.S7PlusDriver
+
 ## Async, subscriptions and connection events
 
 `LogixDriver` and `SLCDriver` do all their I/O on one session thread per driver. The sync methods (`read`,

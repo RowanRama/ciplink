@@ -856,7 +856,9 @@ impl Shared {
         tags: &[String],
         start: f64,
     ) -> Result<(HashMap<String, TagResult>, usize), String> {
-        let parts: Arc<Vec<Vec<Read>>> = if self.options.planner {
+        // S7comm-plus: the core batches by item count, the planner's byte budget is CIP's
+        let planner = self.options.planner && self.cfg.protocol != "s7plus";
+        let parts: Arc<Vec<Vec<Read>>> = if planner {
             let structure = Arc::clone(
                 &self
                     .structure

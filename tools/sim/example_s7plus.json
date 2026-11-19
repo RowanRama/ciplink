@@ -1,0 +1,20 @@
+{"s7plus": {
+  "name": "PLC_Line1",
+  "types": {"Recipe": {"members": {"Speed": "REAL", "Count": "DINT", "Name": "STRING[10]", "Flag": "BOOL"}}},
+  "dbs": [
+    {"name": "Line1", "number": 5, "members": {
+      "Conveyor": {"type": "STRUCT", "members": {
+        "Speed": {"type": "REAL", "value": 1.5}, "Running": {"type": "BOOL", "value": true}}},
+      "Count": {"type": "DINT", "value": -300},
+      "Status": {"type": "WORD", "value": 4660},
+      "Items": "ARRAY[1..300] OF UINT",
+      "Flags": "ARRAY[0..15] OF BOOL",
+      "Recipe": {"type": "Recipe", "members": {"Speed": {"type": "REAL", "value": 2.5}}},
+      "Label": {"type": "STRING[20]", "value": "Mix1"},
+      "Stamp": {"type": "DTL", "value": "2026-11-18T16:34:46.1"},
+      "Delay": "IEC_TIMER",
+      "Hidden": {"type": "INT", "hmi_accessible": false}}}
+  ],
+  "areas": {"I": {"StartButton": {"type": "BOOL", "value": true}}, "Q": {"Motor": "BOOL"},
+            "M": {"Mode": {"type": "INT", "value": 3}}}
+}}

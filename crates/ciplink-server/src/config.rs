@@ -14,6 +14,11 @@ pub struct PlcConfig {
     pub name: String,
     /// A ciplink path, e.g. `"10.0.0.5"` or `"10.0.0.5/1/3"`.
     pub path: String,
+    /// The driver: `"logix"` (the default), `"modbus"` (Modbus TCP or RTU) or `"s7plus"` (Siemens S7-1500 /
+    /// S7-1200 over TLS).
+    pub protocol: String,
+    /// `"s7plus"`: the SHA-256 fingerprint of the PLC certificate to require; None accepts any.
+    pub tls_fingerprint: Option<String>,
     /// Optional tag cache file for fast restarts.
     pub tag_cache_file: Option<PathBuf>,
     /// Optional mock tags file, used only with `--mock`.
@@ -26,8 +31,6 @@ pub struct PlcConfig {
     pub udt: Map<String, Json>,
     /// `[plc.X.tags]`: tag path -> entry.
     pub tags: Map<String, Json>,
-    /// `"logix"` (the default) or `"modbus"`.
-    pub protocol: String,
     /// The Modbus map file (required for `protocol = "modbus"`).
     pub map_file: Option<PathBuf>,
     /// `[plc.X.modbus]`: Modbus driver options.
@@ -212,24 +215,29 @@ pub fn parse_config(data: &Json, base_dir: &Path) -> Result<Config, String> {
                 Some(_) => Err(format!("{where_}.{key} must be an array of tables")),
             }
         };
+        let protocol = plc
+            .get("protocol")
+            .and_then(Json::as_str)
+            .unwrap_or("logix");
+        if !matches!(protocol, "logix" | "modbus" | "s7plus") {
+            return Err(format!(
+                "{where_}.protocol must be \"logix\", \"modbus\" or \"s7plus\", not {protocol:?}"
+            ));
+        }
         let cfg = PlcConfig {
             name: name.clone(),
             path: path.to_owned(),
+            protocol: protocol.to_owned(),
+            tls_fingerprint: plc
+                .get("tls_fingerprint")
+                .and_then(Json::as_str)
+                .map(str::to_owned),
             tag_cache_file: resolve(plc.get("tag_cache_file")),
             mock_tags: resolve(plc.get("mock_tags")),
             rules: list("rule")?,
             groups: list("group")?,
             udt: object(plc.get("udt"), &format!("{where_}.udt"))?,
             tags: object(plc.get("tags"), &format!("{where_}.tags"))?,
-            protocol: match plc.get("protocol") {
-                None => "logix".to_owned(),
-                Some(Json::String(p)) if p == "logix" || p == "modbus" => p.clone(),
-                Some(other) => {
-                    return Err(format!(
-                        "{where_}.protocol must be \"logix\" or \"modbus\", not {other}"
-                    ));
-                }
-            },
             map_file: resolve(plc.get("map_file")),
             modbus: object(plc.get("modbus"), &format!("{where_}.modbus"))?,
         };
@@ -306,6 +314,21 @@ mod tests {
             &toml::from_str(text).map_err(|e| e.to_string())?,
             Path::new("base"),
         )
+    }
+
+    #[test]
+    fn protocol_and_tls_pin() {
+        let config = parse(
+            "[plc.A]\npath = \"1.2.3.4\"\n[plc.B]\nprotocol = \"s7plus\"\npath = \"1.2.3.5\"\n\
+             tls_fingerprint = \"AB:CD\"\n",
+        )
+        .unwrap();
+        assert_eq!(config.plcs["A"].protocol, "logix");
+        assert_eq!(config.plcs["A"].tls_fingerprint, None);
+        assert_eq!(config.plcs["B"].protocol, "s7plus");
+        assert_eq!(config.plcs["B"].tls_fingerprint.as_deref(), Some("AB:CD"));
+        let err = parse("[plc.A]\npath = \"x\"\nprotocol = \"profinet\"\n").unwrap_err();
+        assert!(err.contains("plc.A.protocol"), "{err}");
     }
 
     #[test]

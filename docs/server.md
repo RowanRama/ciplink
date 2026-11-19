@@ -115,6 +115,11 @@ path = "192.168.1.10"                # a ciplink/pycomm3 path, e.g. "10.0.0.5/1/
 tag_cache_file = "cache/PLC1.json"   # optional: fast restarts
 mock_tags = "PLC1_tags.json"         # optional: used only with --mock
 
+[plc.Line2]                          # a Siemens S7-1500 / S7-1200 (S7comm-plus over TLS)
+protocol = "s7plus"                  # "logix" (default), "modbus" or "s7plus"
+path = "192.168.1.20"
+tls_fingerprint = "AB:CD:EF:..."     # optional: require this PLC certificate (SHA-256)
+
 [decorator.setpoint]                 # see Decorators
 writable = true
 
@@ -134,7 +139,7 @@ file, the CSV that names the device's registers (see [Modbus TCP and RTU](modbus
 
 ```toml
 [plc.Skid]
-protocol = "modbus"                  # "logix" (the default) or "modbus"
+protocol = "modbus"                  # "logix" (the default), "modbus" or "s7plus"
 path = "tcp://10.0.0.9?unit=1"       # or "rtu://COM3?baud=19200&parity=E", "rtu+tcp://10.0.0.20:4001"
 map_file = "maps/skid.csv"           # required for Modbus
 [plc.Skid.modbus]                    # optional driver options
@@ -153,6 +158,9 @@ the planner merges are read as elements, which the driver merges into the fewest
 the usual checks (a rule must say `writable = true`), and a row with `writable = false` is also refused by the
 driver (`access`); a bit of a holding register (`Horn`, `Status.5`) is written with FC22. `dump-tags` works
 for Modbus PLCs too (it writes the map's tags).
+
+An `s7plus` PLC serves its data blocks and I/Q/M tags by their TIA names (`Line2/Line1.Conveyor.Speed`);
+tags have no descriptions, and the read planner is not used for it (reads are batched by the PLC's item limit).
 
 Relative file paths are relative to the config file. A complete example is
 the Test Bench example of [ciplink-tagserver](https://github.com/RowanRama/ciplink-tagserver/tree/main/examples/bench).

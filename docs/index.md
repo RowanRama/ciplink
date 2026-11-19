@@ -138,7 +138,7 @@ that tag's result rather than thrown, so one bad tag never fails a whole batch.
 
 | | |
 |---|---|
-| **Controllers** | ControlLogix, CompactLogix, GuardLogix and Micro800 with the Logix driver; SLC 500 and MicroLogix with the SLC driver; generic CIP messaging to any EtherNet/IP device with the CIP driver |
+| **Controllers** | ControlLogix, CompactLogix, GuardLogix and Micro800 with the Logix driver; SLC 500 and MicroLogix with the SLC driver; generic CIP messaging to any EtherNet/IP device with the CIP driver; Modbus TCP, RTU and RTU over TCP with the [Modbus driver](modbus.md); Siemens S7-1500 and S7-1200 over S7comm-plus with the [S7 driver](s7plus.md) |
 | **Tag types** | atomic types, arrays, strings, UDTs (whole or by member), AOIs, bits of integers, bit strings (BYTE, WORD, DWORD, LWORD) and BOOL arrays |
 | **Throughput** | many tags packed into each packet, with large values fragmented and chunked automatically |
 | **Tag discovery** | the tag list and UDT definitions are uploaded on connect, or loaded on first use with `lazy_tags`; a tag cache file makes restarts near-instant |

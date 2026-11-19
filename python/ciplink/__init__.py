@@ -35,6 +35,7 @@ from .logix_driver import *
 from .trend import Trend, TrendPen, TrendSample
 from .slc_driver import *
 from .modbus_driver import *
+from .s7plus_driver import *
 from .subscription import Subscription, ConnectionEvent
 from .adapter import Adapter
 

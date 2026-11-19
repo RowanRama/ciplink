@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds the ciplink library (crates/ciplink-ffi), regenerates ciplink.h if cbindgen is installed, compiles the C++
-# tests and example, and runs the tests against four ciplink-sim servers over TCP: Logix, SLC, and Modbus served
-# as Modbus TCP and as RTU over TCP.
+# tests and example, and runs the tests against five ciplink-sim servers over TCP: Logix, SLC, Modbus served as
+# Modbus TCP and as RTU over TCP, and S7comm-plus.
 #   bindings/cpp/build_and_test.sh                  debug build, compiled with $CXX (default g++)
 #   PROFILE=release bindings/cpp/build_and_test.sh
 #   BUILD=cmake bindings/cpp/build_and_test.sh      compiled through CMakeLists.txt (e.g. MSVC on Windows)
@@ -54,7 +54,8 @@ for sim in logix:example_controller.json slc:example_slc.json; do
     pids+=($!)
 done
 for framing in mbap rtu; do
-    "$target/ciplink-sim$exe" --config "$repo/tools/sim/example_modbus.json" --port 0 --framing "$framing"         >"$out/sim_modbus_$framing.log" 2>&1 &
+    "$target/ciplink-sim$exe" --config "$repo/tools/sim/example_modbus.json" --port 0 --framing "$framing" \
+        >"$out/sim_modbus_$framing.log" 2>&1 &
     pids+=($!)
 done
 port_of() {
@@ -70,8 +71,15 @@ port_of() {
     cat "$log" >&2
     exit 1
 }
+"$target/ciplink-sim$exe" --config "$repo/tools/sim/example_s7plus.json" --port 0 >"$out/sim_s7plus.log" 2>&1 &
+pids+=($!)
 logix_port="$(port_of logix)"
 slc_port="$(port_of slc)"
 mbap_port="$(port_of modbus_mbap)"
 rtu_port="$(port_of modbus_rtu)"
-"$test_exe" "$logix_port" "$slc_port" "$repo/crates/ciplink/tests/fixtures/logix_descriptions.json"     "$mbap_port" "$rtu_port" "$repo/tools/sim/example_modbus_map.csv"
+# the S7comm-plus tests (tests/s7plus_tests.inc) take their simulator from the environment
+export CIPLINK_TEST_S7PLUS="127.0.0.1:$(port_of s7plus)"
+for _ in $(seq 100); do grep -q "^fingerprint" "$out/sim_s7plus.log" && break; sleep 0.1; done
+export CIPLINK_TEST_S7PLUS_FINGERPRINT="$(sed -n 's/^fingerprint \([0-9A-F:]*\).*/\1/p' "$out/sim_s7plus.log")"
+"$test_exe" "$logix_port" "$slc_port" "$repo/crates/ciplink/tests/fixtures/logix_descriptions.json" \
+    "$mbap_port" "$rtu_port" "$repo/tools/sim/example_modbus_map.csv"

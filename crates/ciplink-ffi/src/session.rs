@@ -213,6 +213,7 @@ pub unsafe extern "C" fn ciplink_read_async(
             Driver::Slc(d) => d.read_async(&names),
             Driver::Cip(_) => return Err(FfiError::Unsupported("read_async")),
             Driver::Modbus(d) => d.read_async(&names),
+            Driver::S7Plus(d) => d.read_async(&names),
         };
         submit(pending, done, user, out_request);
         Ok(())
@@ -242,6 +243,7 @@ pub unsafe extern "C" fn ciplink_write_async(
             Driver::Slc(d) => d.write_async(&pairs),
             Driver::Cip(_) => return Err(FfiError::Unsupported("write_async")),
             Driver::Modbus(d) => d.write_async(&pairs),
+            Driver::S7Plus(d) => d.write_async(&pairs),
         };
         submit(pending, done, user, out_request);
         Ok(())
@@ -373,6 +375,7 @@ pub unsafe extern "C" fn ciplink_subscribe(
             Driver::Slc(d) => d.subscribe(&names, options)?,
             Driver::Cip(_) => return Err(FfiError::Unsupported("subscribe")),
             Driver::Modbus(d) => d.subscribe(&names, options)?,
+            Driver::S7Plus(d) => d.subscribe(&names, options)?,
         };
         let user = User(user);
         subscription.on_changes(move |changes| {
@@ -452,6 +455,7 @@ pub unsafe extern "C" fn ciplink_set_connection_callback(
             Driver::Slc(d) => d.set_connection_callback(callback),
             Driver::Cip(_) => return Err(FfiError::Unsupported("set_connection_callback")),
             Driver::Modbus(d) => d.set_connection_callback(callback),
+            Driver::S7Plus(d) => d.set_connection_callback(callback),
         }
         Ok(())
     })
@@ -476,6 +480,7 @@ pub unsafe extern "C" fn ciplink_connection_state(
         Driver::Cip(d) if d.connected() => ConnectionState::Connected,
         Driver::Cip(_) => ConnectionState::Closed,
         Driver::Modbus(d) => d.connection_state(),
+        Driver::S7Plus(d) => d.connection_state(),
     }))
     .unwrap_or(ConnectionState::Closed);
     match state {

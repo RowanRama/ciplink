@@ -23,11 +23,14 @@ log = "0.4"
 serialport = { version = "4", default-features = false }
 num-bigint = "0.4"
 num-traits = "0.2"
+ring = "0.17"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "logging"] }
 sha1 = "0.10"
 socket2 = "0.6"
 thiserror = "2"
 
 [dev-dependencies]
+rcgen = { version = "0.13", default-features = false, features = ["ring"] }
 serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
 
 [lints]

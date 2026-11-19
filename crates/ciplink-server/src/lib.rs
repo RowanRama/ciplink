@@ -14,6 +14,7 @@ pub mod modbus;
 pub mod planner;
 pub mod plc;
 pub mod rules;
+pub mod s7plus_plc;
 pub mod server;
 pub mod service;
 pub mod values;
@@ -27,7 +28,8 @@ mod testing;
 pub use config::{Config, load_config};
 pub use server::ServerHandle;
 
-/// The driver factory: simulated PLCs from their `mock_tags` files with `mock`, else real controllers.
+/// The driver factory: simulated PLCs from their `mock_tags` files with `mock`, else real controllers by their
+/// `protocol` (see [`real_plc`]).
 pub fn factory(mock: bool) -> plc::Factory {
     if mock {
         mock::factory().0
@@ -40,6 +42,7 @@ pub fn factory(mock: bool) -> plc::Factory {
 pub fn real_plc(cfg: &config::PlcConfig) -> Result<Box<dyn plc::Plc>, String> {
     match cfg.protocol.as_str() {
         "modbus" => Ok(Box::new(modbus::ModbusPlc::new(cfg)?)),
+        "s7plus" => Ok(Box::new(s7plus_plc::S7PlusPlc::new(cfg)?)),
         _ => Ok(Box::new(plc::LogixPlc::new(cfg)?)),
     }
 }

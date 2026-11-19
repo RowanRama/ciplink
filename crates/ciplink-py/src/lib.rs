@@ -7,6 +7,7 @@
 mod adapter;
 mod defs;
 mod modbus;
+mod s7plus;
 mod server;
 mod session;
 
@@ -1851,6 +1852,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyCipDriver>()?;
     m.add_class::<PySlcDriver>()?;
     m.add_class::<PyLogixDriver>()?;
+    m.add_class::<s7plus::PyS7PlusDriver>()?;
     m.add_class::<PyTrend>()?;
     m.add_class::<PySubscription>()?;
     m.add_class::<server::PyTagServer>()?;

@@ -17,6 +17,8 @@
 //! Faults ([`Fault`]) drop or delay replies, answer a tag or service with a status, or refuse connections, and
 //! [`Simulator::on_request`] edits the controller between two requests.
 //!
+//! [`s7plus::S7PlusSimulator`] is a separate device: an S7-1500 style CPU speaking S7comm-plus over TLS.
+//!
 //! ```
 //! use ciplink_sim::{LogixConfig, Simulator, TagConfig};
 //! use serde_json::json;
@@ -38,6 +40,7 @@ mod metadata;
 mod modbus;
 mod model;
 mod path;
+pub mod s7plus;
 mod scanner;
 mod server;
 mod slc;
