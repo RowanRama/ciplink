@@ -47,6 +47,11 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
         python: ["3.9", "3.13"]
+        # setup-python has no 3.9 for Ubuntu 26.04 (ubuntu-latest): run that one on 24.04
+        exclude:
+          - { os: ubuntu-latest, python: "3.9" }
+        include:
+          - { os: ubuntu-24.04, python: "3.9" }
     runs-on: ${{ matrix.os }}
     defaults:
       run:
